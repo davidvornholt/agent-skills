@@ -1,0 +1,7 @@
+interface:
+  display_name: "Design Init"
+  short_description: "Initialize a repository design system"
+  default_prompt: "Use $design-init to initialize this repository's design system from a style seed."
+
+policy:
+  allow_implicit_invocation: false
