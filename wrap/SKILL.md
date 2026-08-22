@@ -24,9 +24,11 @@ Default: today (`date +%F`). If the argument is `yesterday`, use yesterday; if i
 
 ## 1. Super Productivity — what was completed and where time went
 
-Newest backup:
+Newest local backup (SuperSync keeps application state current on each host;
+the backup files themselves are deliberately never synchronized):
 ```
-B="$HOME/.var/app/com.super_productivity.SuperProductivity/config/superProductivity/backups"
+B="$HOME/.config/superProductivity/backups"
+[[ -d "$B" ]] || B="$HOME/.var/app/com.super_productivity.SuperProductivity/config/superProductivity/backups"
 L=$(ls -t "$B"/*.json | head -1)
 ```
 Completed tasks land in `.archiveYoung.task.entities` (and eventually `.archiveOld.task.entities`), not just `.task.entities` — the recipes below check all three (archiveOld matters when wrapping an older date).
@@ -49,9 +51,16 @@ Super Productivity records what was *tracked*; this records what happened.
 safe to read straight into context:
 
 ```
-activity-digest <DAY>                            # today by default
+activity-digest <DAY> --all-hosts                # today by default
 activity-digest <DAY> --no-browser --no-shell    # window log only
 ```
+
+`--all-hosts` uses live evidence for the machine running `/wrap` and the
+latest privacy-filtered snapshots under
+`~/.local/share/activity-exchange/<HOST>/<DAY>/` for the other machine. The
+folder is synchronized bidirectionally, but each writer owns only its
+hostname subtree. Host totals are independent and may overlap when one device
+is used to control the other; never add them into a single screen-time total.
 
 It covers four things:
 
@@ -66,11 +75,15 @@ It covers four things:
   no task and no transcript behind.
 - **Shell commands** with their working directory and duration, from atuin.
 
-If a section is empty, the cause is upstream: the window log lives at
+If a local section is empty, the cause is upstream: the window log lives at
 `~/.local/state/activity/<DAY>.jsonl` and is written by
 `niri-activity-watch.service`, with idle and suspend markers from
 `niri-activity-afk.service`. No file means the watcher was not running that
 day — say so plainly rather than inferring screen time from other sources.
+For a remote section, inspect its `manifest.json`: absence means Syncthing or
+the publisher has not delivered that host/day; do not silently substitute the
+local machine. Raw browser/Atuin databases, Super Productivity backups, and
+Claude/Codex sessions are intentionally excluded from this exchange.
 
 Two cautions when reading it:
 
@@ -90,6 +103,11 @@ Two cautions when reading it:
 ## 3. AI sessions — delegate to a subagent (critical for context safety)
 
 Transcripts are enormous (a single day can be 100+ Codex files plus a dozen Claude Code sessions, some multi-MB). NEVER read them into this context directly. Launch ONE subagent (Explore or general-purpose) to sweep them and return only a compact per-session report. Instruct the subagent to:
+
+- Treat `david-z890-nixos` as the canonical, 24/7 transcript host. When `/wrap`
+  is running elsewhere, run the candidate-file and extraction commands through
+  `ssh -o BatchMode=yes david@david-z890-nixos`; never synchronize or copy
+  `~/.claude` or `~/.codex` to the client.
 
 - Find candidate files:
   - Claude Code: `find ~/.claude/projects -name '*.jsonl' -newermt "<DAY>" ! -newermt "<DAY+2>"` — the window deliberately extends one extra day because mtime is the *last* write: a session that started on <DAY> evening and ran past midnight has mtime <DAY+1> and a strict one-day filter would miss it. For files with mtime on <DAY+1>, cheaply check the first line's timestamp (each jsonl line has one) and keep the file only if it started on <DAY>.
