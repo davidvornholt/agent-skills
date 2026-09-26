@@ -42,11 +42,11 @@ Compute the ms window with `$(( $(date -d "<YYYY-MM-DD> 00:00:00" +%s) * 1000 ))
 
 ## 3. Mail — inbox scan
 
-Use `mcp__mail__search_mail` with `since: <yesterday>` across all accounts (omit `account`). There is no unread filter — judge relevance from content:
+Run `mailbox search --since <yesterday>`, which searches all accounts. There is no unread filter — judge relevance from content:
 
 - Surface first: human-written mail, anything deadline-bearing, replies the user is waiting on.
 - Compress automated noise (GitHub notifications, newsletters) to at most one line, and only if it matters (e.g. a repeatedly failing CI workflow).
-- Only call `read_message` if a subject line is ambiguous AND likely important (e.g. to extract a deadline).
+- Only run `mailbox read` if a subject line is ambiguous AND likely important (e.g. to extract a deadline).
 
 ## 4. GitHub — review requests and CI
 

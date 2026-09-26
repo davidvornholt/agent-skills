@@ -114,7 +114,7 @@ Keep `--limit 50`; heavy days exceed GitHub's default of 30. GitHub is the autho
 
 ## 5. Read sent mail
 
-Call `mcp__mail__search_mail` for each account with `scope: folder`, `folder: Sent`, and `since: <DAY>`. Global search excludes Sent. Some accounts use `INBOX.Sent`; try that or call `list_folders` if `Sent` fails. `since` sets only a lower bound. For a past day, discard messages sent after `<DAY>`. Include only mail written by a person. Note whom the user contacted and why.
+Run `mailbox search --account <email> --folder Sent --since <DAY>` for each account from `mailbox accounts`. Global search excludes Sent. Some accounts use `INBOX.Sent`; try that or run `mailbox folders --account <email>` if `Sent` fails. `since` sets only a lower bound. For a past day, discard messages sent after `<DAY>`. Include only mail written by a person. Note whom the user contacted and why.
 
 ## 6. Write the analysis
 
