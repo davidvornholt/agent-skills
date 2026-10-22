@@ -1,74 +1,56 @@
 ---
 name: brief
-description: Morning briefing — what happened yesterday in one line, today's scheduled tasks, inbox items needing attention, and a suggested focus if nothing is scheduled. Read-only; output stays in the session.
+description: Morning briefing in the session — yesterday in one line, today's planned tasks, the mail and GitHub items that need the user, and a suggested focus when nothing is planned. Read-only.
 disable-model-invocation: true
 ---
 
 # Morning brief
 
-Produce a short morning briefing (aim for under ~300 words) directly in the session. This is a read-only skill: never modify Super Productivity data, never write files, never touch drafts or send mail.
+Write a short briefing, under about 300 words, directly in the session. The brief should stay cheap, so read only what the sections below need. Transcripts and activity logs belong to `/wrap`.
 
-## 1. Establish dates
+The brief is read-only. Don't change Super Productivity, write files, touch drafts, or comment on, merge, close, or edit anything on GitHub. The `gh` token and the mailbox accounts can write, so this restraint is yours to keep: on GitHub, run only searches and GET requests.
 
-Run `date +%F` for today; compute yesterday from it.
+Get today's date with `date +%F` and derive yesterday from it.
 
-## 2. Super Productivity — tasks
+## Tasks
 
-Data source is the newest backup JSON (the live store is IndexedDB; backups are the readable mirror):
+Read Super Productivity through `sp`. The user runs the app on the X1, so the commands pass `--host david-x1-nixos`. Drop the flag when running on the X1 itself, which can't SSH to itself. Don't fall back to backup files. The z890's stopped in August, so they'd quietly describe the wrong period. If the app is unreachable, follow the super-productivity skill.
 
-```
-B="$HOME/.var/app/com.super_productivity.SuperProductivity/config/superProductivity/backups"
-L=$(ls -t "$B"/*.json | head -1)
-```
+Today's plan is `sp tasks list --host david-x1-nixos --today --brief`, and the open tasks for a suggestion are `sp tasks list --host david-x1-nixos --brief`. Resolve project ids with `sp projects list --host david-x1-nixos`.
 
-Mention the backup's timestamp in the briefing if it is older than ~18 hours (data may be stale; Super Productivity may not be running).
+For yesterday, take the tasks completed or tracked that day. `--brief` drops `doneOn`, so this query uses the full output:
 
-Structure notes: top-level keys include `task`, `archiveYoung`, `archiveOld`, `project`, `tag`. Entity maps live at `.<node>.entities` keyed by id. `doneOn` is epoch ms; `dueDay` is `YYYY-MM-DD`; `timeSpentOnDay` maps `YYYY-MM-DD` → ms; subtasks have `parentId`.
-
-Useful extractions (tested):
-
-```
-# project id → name
-jq -r '.project.entities[] | [.id, .title] | @tsv' "$L"
-# open tasks with due day and parent
-jq -r '.task.entities[] | select(.isDone|not) | [.title, (.projectId//"-"), (.dueDay//"-"), (.parentId//"-")] | @tsv' "$L"
-# tasks in the Today list, resolved to titles (entities are keyed by id)
-jq -r '.tag.entities.TODAY.taskIds[] as $id | (.task.entities[$id].title // empty)' "$L"
-# done yesterday (epoch-ms window; completed tasks migrate into the archives)
-jq -r --argjson s <start_ms> --argjson e <end_ms> '(.task.entities, (.archiveYoung.task.entities//{}))[] | select(.doneOn and .doneOn>=$s and .doneOn<$e) | .title' "$L"
+```sh
+Y=<yesterday>
+sp tasks list --host david-x1-nixos --include-done --source all | jq -r \
+  --arg d "$Y" --argjson s "$(date -d "$Y" +%s)000" --argjson e "$(date -d "$Y +1 day" +%s)000" \
+  '.[] | select((.doneOn // 0) >= $s and (.doneOn // 0) < $e or .timeSpentOnDay[$d]) | [.title, (if .doneOn then (.doneOn / 1000 | strflocaltime("%F")) else "open" end)] | @tsv'
 ```
 
-Compute the ms window with `$(( $(date -d "<YYYY-MM-DD> 00:00:00" +%s) * 1000 ))` (local time).
+Tracked time counts because the user sometimes logs a day's work afterwards. Those tasks get `doneOn` on the day they were marked done but keep their time on the day it was spent.
 
-## 3. Mail — inbox scan
+## Mail
 
-Run `mailbox search --since <yesterday>`, which searches all accounts. There is no unread filter — judge relevance from content:
+`mailbox search --since <yesterday>` searches every account's inbox. It has no unread filter, so judge relevance from content. Lead with mail a person wrote, anything carrying a deadline, and replies the user is waiting for. Automated mail such as GitHub notifications and newsletters gets one line at most, and only when it matters, like CI that keeps failing. Open a message with `mailbox read` only when its subject is ambiguous and it's likely important, for example to find a deadline.
 
-- Surface first: human-written mail, anything deadline-bearing, replies the user is waiting on.
-- Compress automated noise (GitHub notifications, newsletters) to at most one line, and only if it matters (e.g. a repeatedly failing CI workflow).
-- Only run `mailbox read` if a subject line is ambiguous AND likely important (e.g. to extract a deadline).
+## GitHub
 
-## 4. GitHub — review requests and CI
+Use the `davidvornholt` account and ignore any other. Besides the user's own pull requests, open pull requests by anyone in the `prosabridge` and `fes-kirchheim` (FESK) organizations count, because bot and teammate pull requests there wait on the user's decision.
 
-Authenticated `gh` is available (account: davidvornholt; ignore any other account). The orgs `prosabridge` and `fes-kirchheim` (FESK) matter beyond own authorship — bot and teammate PRs there count. The token has write scopes — this skill may only run read/search commands (`gh search`, `gh api` GETs); never comment, merge, close, or edit anything.
-
-```
+```sh
 gh search prs --review-requested=@me --state=open --json repository,title,updatedAt --limit 20
 gh search prs --author=@me --state=open --json repository,title,isDraft --limit 20
-# anything open in the orgs, any author (catches bot/teammate PRs awaiting a decision)
 gh search prs --owner=prosabridge --owner=fes-kirchheim --state=open --json repository,title,author --limit 20
 gh api notifications --jq '.[] | [.repository.full_name, .subject.type, .subject.title] | @tsv'
 ```
 
-Notifications are dominated by CheckSuite noise. Rule: a failing workflow on `main` or a production/deploy pipeline deserves one line (grouped per repo); feature-branch CI failures are noise — drop them. Surface real items: review requests, mentions, issues assigned.
+Notifications are mostly CheckSuite noise. A failing workflow on `main` or a deploy pipeline is worth one line per repository. CI failures on feature branches aren't. Keep review requests, mentions, and assigned issues.
 
-## 5. Compose the briefing
+## The briefing
 
-Format, in this order:
+Write these parts in order:
 
-1. **Yesterday, in one line** — from tasks completed yesterday (SP). Do NOT read session transcripts; that is /wrap's job, and the brief must stay cheap.
-2. **Scheduled for today** — tasks with `dueDay` = today plus the Today-tag list, with project names.
-3. **Inbox needing you** — mail and GitHub combined: human mail and deadlines first, then review requests and own PRs sitting open, then at most one line of CI-on-main trouble.
-4. **Suggestion** — only if nothing is scheduled for today: propose ONE task from the open list, with a one-sentence rationale (deadline proximity, momentum from yesterday's completions, or an inbox item that maps to an existing task). A deadline in the inbox may override the task list — say so if it does.
-
-Output goes in the session as markdown. Do not write it anywhere.
+1. Yesterday in one line, from the tasks above.
+2. Today's plan, with project names.
+3. What needs the user, mail and GitHub together: human mail and deadlines first, then review requests and the user's own open pull requests, then at most one line about CI trouble on `main`.
+4. A suggestion, only when nothing is planned for today: one open task and a sentence on why, such as a near deadline, momentum from yesterday, or an inbox item that maps to it. If a deadline in the inbox outranks the task list, say so.
