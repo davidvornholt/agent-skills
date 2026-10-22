@@ -1,6 +1,6 @@
 ---
 name: wrap
-description: Review one day of work for a personal journal. Combine Super Productivity, measured screen activity, AI sessions, GitHub, browsing, shell history, and sent mail. Explain what happened, compare tracking with reality, identify loose ends, and rate the day with a fixed rubric. Read-only; output stays in the session.
+description: Review one day of work for a personal journal. Combine Super Productivity, measured screen activity, AI sessions, GitHub, browsing, shell history, and sent mail. Explain what happened, compare tracking with reality, identify loose ends, and rate the day with a fixed rubric. Read-only, with output in the session.
 disable-model-invocation: true
 argument-hint: [yesterday | YYYY-MM-DD]
 ---
@@ -13,7 +13,7 @@ Review one day of the user's work and write the result in the session as journal
 
 Read the evidence with these facts in mind. They matter most for the rating.
 
-- The user works as a product manager and agent orchestrator. They specify work, dispatch agents, review results, decide, and integrate changes, while agents do most of the implementation. The result of that whole workflow is the user's output, whichever agent wrote the code, so don't favor manual implementation over delegation.
+- The user works as a product manager and agent orchestrator, and agents do most of the implementation. The result of that whole workflow is the user's output, whichever agent wrote the code, so don't favor manual implementation over delegation.
 - Super Productivity records only the time the user spent prompting and reviewing, so it's expected to fall well short of machine activity. Mention the difference only when the pattern breaks, such as SP claiming hours on work that appears nowhere in the timeline.
 - Moving between repositories, tools, and agent sessions is how the user manages a portfolio. Treat it as neutral unless the evidence shows that lost context caused rework, delayed a decision, or let a thread drop.
 - An agent may still be running when the wrap runs, so a transcript that ends without a final answer doesn't show that the work failed or stopped. Report the verified progress and call the outcome in progress or unknown. Pending results don't lower Output or Efficiency. If they cover much of the day, rate **n/e** or lower your confidence instead of guessing.
@@ -41,20 +41,20 @@ sp tasks list --host david-x1-nixos --include-done --source all | jq -r --arg d 
   '.[] | select((.doneOn // 0) >= $s and (.doneOn // 0) < $e or .timeSpentOnDay[$d]) | [.title, (.projectId // "-"), ((.timeSpentOnDay[$d] // 0) / 60000 | round), (if .doneOn then (.doneOn / 1000 | strflocaltime("%F")) else "open" end)] | @tsv'
 ```
 
-Resolve project ids with `sp projects list --host david-x1-nixos`. The user sometimes logs a day's work afterwards, so a task with time on the day and a later done date usually belongs to the day. The largest tracked items are good anchors for the narrative, but remember that they measure the user's time with agents, not the implementation.
+Resolve project ids with `sp projects list --host david-x1-nixos`. The user sometimes logs a day's work afterwards, so a task with time on the day and a later done date usually belongs to the day. The largest tracked items are good anchors for the narrative.
 
 ## Machine activity
 
-`activity-digest` reports what was on screen, which complements SP's tracked time:
+`activity-digest` reports what was on screen:
 
 ```sh
 activity-digest <DAY> --all-hosts
 activity-digest <DAY> --no-browser --no-shell
 ```
 
-`--all-hosts` reads live evidence from this machine and the latest privacy-filtered snapshots under `~/.local/share/activity-exchange/<HOST>/<DAY>/` for the other one. Host totals overlap when one machine controls the other, so never add them into one screen-time total.
+`--all-hosts` reads live evidence from this machine and the latest privacy-filtered snapshots under `~/.local/share/activity-exchange/<HOST>/<DAY>/` for the other one. Host totals overlap when one machine controls the other, so don't add them into one screen-time total.
 
-Screen time is already corrected for idle time and suspend, so a window left open overnight counts only the minutes worked. The workspace timeline (`Organization`, `Work 1` to `Work 3`, `Relax`) gives the order of the day and its turns. Browser activity across the Helium profiles and Firefox captures reading and research that leaves no commit, task, or transcript.
+Screen time is already corrected for idle time and suspend. The workspace timeline (`Organization`, `Work 1` to `Work 3`, `Relax`) gives the order of the day and its turns. Browser activity across the Helium profiles and Firefox captures reading and research.
 
 When a local section is empty, check `~/.local/state/activity/<DAY>.jsonl`, which `niri-activity-watch.service` writes and `niri-activity-afk.service` annotates with idle and suspend markers. If that file is missing, say the watcher didn't record the day rather than reconstructing screen time from other sources. When a remote section is empty, check its `manifest.json`. If the manifest is missing, say that Syncthing or the publisher hasn't delivered that host and day, and don't substitute this machine's data. The exchange deliberately leaves out raw browser and atuin databases, SP backups, and Claude and Codex sessions.
 
@@ -82,7 +82,7 @@ Pass along any days or sessions the user has marked as sensitive or off-limits.
 
 Use the `davidvornholt` account and ignore any other. Its token can write, so run only searches and GET requests.
 
-GitHub date filters default to UTC. Give the range the local offset from `date +%:z` so late-evening work lands on the right day:
+GitHub date filters default to UTC. Give the range the local offset from `date +%:z`:
 
 ```sh
 R="<DAY>T00:00:00+02:00..<DAY>T23:59:59+02:00"
@@ -93,7 +93,7 @@ gh search issues --author=davidvornholt --created="$R" --json repository,title -
 gh search prs --owner=prosabridge --owner=fes-kirchheim --merged-at="$R" --json repository,title,author --limit 50
 ```
 
-Busy days exceed GitHub's default of 30 results, hence `--limit 50`. GitHub is the authoritative record of pull requests and issues created and merged, but not the only record of useful output. Reconcile it with SP and the session report, and note a pull request with no matching task or session as a tracking gap.
+Reconcile GitHub with SP and the session report, and note a pull request with no matching task or session as a tracking gap.
 
 ## Sent mail
 
@@ -101,7 +101,7 @@ Run `mailbox search --account <email> --folder Sent --since <DAY>` for each acco
 
 ## The analysis
 
-Write it as an observant second-person review in five parts:
+Write it in five parts:
 
 1. The day in arcs. Group the work into two to four coherent periods and describe their order, turning points, and concrete results. Take the order from the workspace timeline rather than from artifact timestamps.
 2. Completed. Summarize the completed SP tasks and the largest tracked items. Where SP and measured activity cover the same work with different figures, give both.
@@ -111,9 +111,9 @@ Write it as an observant second-person review in five parts:
 
 The rubric stays fixed so scores remain comparable across days:
 
-- Output counts verified implementation, tests, review-ready changes, opened and merged pull requests, sent mail, verified deploys, and decisions with visible evidence. Agent work is the user's output, and implementation counts before it merges. Rate opaque knowledge work or a substantial still-running result **n/e** rather than low.
-- Focus judges the continuity and quality of the user's prompting, decisions, reviews, and follow-through. Working across projects or sessions isn't fragmentation by itself. Deduct only for evidence of disruptive unrelated activity, repeated reorientation, avoidable rework, delayed decisions, or dropped threads. If the timeline can't tell orchestration from distraction, rate **n/e**.
+- Output counts verified implementation, tests, review-ready changes, opened and merged pull requests, sent mail, verified deploys, and decisions with visible evidence. Implementation counts before it merges. Rate opaque knowledge work or a substantial still-running result **n/e** rather than low.
+- Focus judges the continuity and quality of the user's prompting, decisions, reviews, and follow-through. Deduct only for evidence of disruptive unrelated activity, repeated reorientation, avoidable rework, delayed decisions, or dropped threads. If the timeline can't tell orchestration from distraction, rate **n/e**.
 - Direction judges whether the work advanced goals the user was plausibly pursuing, using goals and loose ends from earlier wraps when they're available. SP coverage is not a proxy for direction.
 - Efficiency counts only unintended costs to the user: avoidable rework, a blocker the user held, a forgotten review, or abandoning the intended outcome. Judge the whole agent workflow rather than each child run. Agent runtime, background waits, recovered handoffs, speculative failed children, and work still running don't lower it by themselves.
 
-Back every sub-score with one sentence of evidence. The overall score is a judgment informed by the sub-scores, not their average. When the largest block of the day is opaque or still running, say so and lower your confidence in the overall score. If one or two answers from the user could change the score, ask them instead of guessing.
+Back every sub-score with one sentence of evidence. The overall score is a judgment informed by the sub-scores, not their average. If one or two answers from the user could change the score, ask them instead of guessing.
