@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Write a short briefing, under about 300 words, directly in the session. The brief should stay cheap, so read only what the sections below need. Transcripts and activity logs belong to `/wrap`.
 
-The brief is read-only. Don't change Super Productivity, write files, touch drafts, or comment on, merge, close, or edit anything on GitHub. The `gh` token and the mailbox accounts can write, so this restraint is yours to keep: on GitHub, run only searches and GET requests.
+The brief is read-only. The `gh` token and the mailbox accounts can write, so this restraint is yours to keep: on GitHub, run only searches and GET requests.
 
 Get today's date with `date +%F` and derive yesterday from it.
 
@@ -31,7 +31,7 @@ Tracked time counts because the user sometimes logs a day's work afterwards. Tho
 
 ## Mail
 
-`mailbox search --since <yesterday>` searches every account's inbox. It has no unread filter, so judge relevance from content. Lead with mail a person wrote, anything carrying a deadline, and replies the user is waiting for. Automated mail such as GitHub notifications and newsletters gets one line at most, and only when it matters, like CI that keeps failing. Open a message with `mailbox read` only when its subject is ambiguous and it's likely important, for example to find a deadline.
+`mailbox search --since <yesterday>` searches every account's inbox. It has no unread filter, so judge relevance from content. Lead with mail that needs the user. Automated mail gets one line at most, and only when it matters. Open a message with `mailbox read` only when its subject is ambiguous and it's likely important.
 
 ## GitHub
 
@@ -53,4 +53,4 @@ Write these parts in order:
 1. Yesterday in one line, from the tasks above.
 2. Today's plan, with project names.
 3. What needs the user, mail and GitHub together: human mail and deadlines first, then review requests and the user's own open pull requests, then at most one line about CI trouble on `main`.
-4. A suggestion, only when nothing is planned for today: one open task and a sentence on why, such as a near deadline, momentum from yesterday, or an inbox item that maps to it. If a deadline in the inbox outranks the task list, say so.
+4. A suggestion, only when nothing is planned for today: one open task and a sentence on why. If a deadline in the inbox outranks the task list, say so.
