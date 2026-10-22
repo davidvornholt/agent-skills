@@ -7,7 +7,7 @@ argument-hint: [yesterday | YYYY-MM-DD]
 
 # End-of-day wrap-up
 
-Review one day of the user's work and write the result in the session as journal-style prose they'll adapt in their own words. Address the user as "you", and don't write in the first person. The review is read-only: don't change Super Productivity, write files, touch drafts, or send mail.
+Review one day of the user's work and write the result in the session as journal-style prose they'll adapt in their own words. Address the user as "you", and don't write in the first person. The review is read-only.
 
 ## How the user works
 
@@ -74,7 +74,7 @@ Transcripts can run to hundreds of files and several multi-megabyte sessions, so
 - Don't read whole files. Extract user and assistant text with `jq` or `rg`, or look at the first and last 100 lines.
 - Collapse Codex review and fix subagent triplets into the underlying work, and drop failed child runs when another agent or the parent delivered the intended result.
 - A JSONL file may still be receiving events, so its last lines don't show the final state. Call work blocked, abandoned, or failed only when the transcript says so or later evidence confirms it. Otherwise report the result so far as in progress or unknown.
-- For each distinct session, return the project, tool, the user's intent, the concrete results so far, and the outcome the evidence supports: implemented, tested, review-ready, opened as a pull request, merged, blocked, waiting for the user, or still running.
+- For each distinct session, return the project, tool, the user's intent, the concrete results so far, and the outcome the evidence supports.
 
 Pass along any days or sessions the user has marked as sensitive or off-limits.
 
@@ -105,8 +105,8 @@ Write it as an observant second-person review in five parts:
 
 1. The day in arcs. Group the work into two to four coherent periods and describe their order, turning points, and concrete results. Take the order from the workspace timeline rather than from artifact timestamps.
 2. Completed. Summarize the completed SP tasks and the largest tracked items. Where SP and measured activity cover the same work with different figures, give both.
-3. Where tracking and reality diverged. Compare task labels with what the work became, such as a change of scope, a task that grew, or one agent taking over another's work. Plain SP-versus-activity differences, concurrent agents, and model comparisons are expected, so include this part only when the evidence shows a specific gap.
-4. Loose ends into tomorrow: open questions, deferred issues, unmerged pull requests, and blocked work. An agent that may still be running is in progress, not a loose end.
+3. Where tracking and reality diverged. Compare task labels with what the work became. Include this part only when the evidence shows a specific gap, not one of the expected differences described above.
+4. Loose ends into tomorrow. An agent that may still be running is in progress, not a loose end.
 5. Productivity rating: one overall score from 1 to 10, anchored in four sub-scores from 1 to 5, or **n/e** when the evidence can't support a number.
 
 The rubric stays fixed so scores remain comparable across days:
