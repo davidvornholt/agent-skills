@@ -1,12 +1,12 @@
 ---
 name: brief
-description: Morning briefing in the session — yesterday in one line, today's planned tasks, the mail and GitHub items that need the user, and a suggested focus when nothing is planned. Read-only.
+description: Morning briefing — yesterday in brief, today's planned tasks, the agent sessions, mail, and GitHub items that need the user, and a suggested focus when nothing is planned. Read-only.
 disable-model-invocation: true
 ---
 
 # Morning brief
 
-Write a short briefing, under about 300 words, directly in the session. The brief should stay cheap, so read only what the sections below need. Transcripts and activity logs belong to `/wrap`.
+Brief the user on yesterday, today's plan, and everything waiting on them. When the session can show an HTML page, as T3 Code can, present the brief as a visual report. Otherwise write it in the session.
 
 The brief is read-only. The `gh` token and the mailbox accounts can write, so this restraint is yours to keep: on GitHub, run only searches and GET requests.
 
@@ -29,6 +29,10 @@ sp tasks list --host david-x1-nixos --include-done --source all | jq -r \
 
 Tracked time counts because the user sometimes logs a day's work afterwards. Those tasks get `doneOn` on the day they were marked done but keep their time on the day it was spent.
 
+## Agent sessions
+
+Most of the user's work runs in Claude Code and Codex sessions. Their transcripts are the only record of a question an agent asked that the user never answered, a result waiting for the user's review, or work left half done. Transcripts are large, so start one subagent on them first and read the other sources while it runs. Have it take every session active since the start of yesterday, find and read them as the transcript section of `~/.agents/skills/wrap/SKILL.md` describes, and skip this session. It returns only what's unfinished or waiting on the user, one line per item with its project. A session that may still be running is in progress, not waiting.
+
 ## Mail
 
 `mailbox search --since <yesterday>` searches every account's inbox. It has no unread filter, so judge relevance from content. Lead with mail that needs the user. Automated mail gets one line at most, and only when it matters. Open a message with `mailbox read` only when its subject is ambiguous and it's likely important.
@@ -38,9 +42,9 @@ Tracked time counts because the user sometimes logs a day's work afterwards. Tho
 Use the `davidvornholt` account and ignore any other. Besides the user's own pull requests, open pull requests by anyone in the `prosabridge` and `fes-kirchheim` (FESK) organizations count, because bot and teammate pull requests there wait on the user's decision.
 
 ```sh
-gh search prs --review-requested=@me --state=open --json repository,title,updatedAt --limit 20
-gh search prs --author=@me --state=open --json repository,title,isDraft --limit 20
-gh search prs --owner=prosabridge --owner=fes-kirchheim --state=open --json repository,title,author --limit 20
+gh search prs --review-requested=@me --state=open --json repository,title,url,updatedAt --limit 20
+gh search prs --author=@me --state=open --json repository,title,url,isDraft --limit 20
+gh search prs --owner=prosabridge --owner=fes-kirchheim --state=open --json repository,title,url,author --limit 20
 gh api notifications --jq '.[] | [.repository.full_name, .subject.type, .subject.title] | @tsv'
 ```
 
@@ -50,7 +54,7 @@ Notifications are mostly CheckSuite noise. A failing workflow on `main` or a dep
 
 Write these parts in order:
 
-1. Yesterday in one line, from the tasks above.
+1. Yesterday in brief, from the tasks and sessions.
 2. Today's plan, with project names.
-3. What needs the user, mail and GitHub together: human mail and deadlines first, then review requests and the user's own open pull requests, then at most one line about CI trouble on `main`.
+3. What needs the user, from sessions, mail, and GitHub together: human mail, deadlines, and agents waiting on an answer first, then review requests and the user's own open pull requests, then at most one line about CI trouble on `main`. Merge items about the same pull request.
 4. A suggestion, only when nothing is planned for today: one open task and a sentence on why. If a deadline in the inbox outranks the task list, say so.
