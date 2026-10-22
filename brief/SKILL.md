@@ -8,13 +8,13 @@ disable-model-invocation: true
 
 Brief the user on yesterday, today's plan, and everything waiting on them. When the session can show an HTML page, as T3 Code can, present the brief as a visual report. Otherwise write it in the session.
 
-The brief is read-only. The `gh` token and the mailbox accounts can write, so this restraint is yours to keep: on GitHub, run only searches and GET requests.
+The brief is read-only, so on GitHub run only searches and GET requests.
 
 Get today's date with `date +%F` and derive yesterday from it.
 
 ## Tasks
 
-Read Super Productivity through `sp`. The user runs the app on the X1, so the commands pass `--host david-x1-nixos`. Drop the flag when running on the X1 itself, which can't SSH to itself. Don't fall back to backup files. The z890's stopped in August, so they'd quietly describe the wrong period. If the app is unreachable, follow the super-productivity skill.
+Read Super Productivity through `sp`. The user runs the app on the X1, so the commands pass `--host david-x1-nixos`. Drop the flag when running on the X1 itself. Don't fall back to backup files, because the z890's stopped updating in August. If the app is unreachable, follow the super-productivity skill.
 
 Today's plan is `sp tasks list --host david-x1-nixos --today --brief`, and the open tasks for a suggestion are `sp tasks list --host david-x1-nixos --brief`. Resolve project ids with `sp projects list --host david-x1-nixos`.
 
@@ -31,7 +31,7 @@ Tracked time counts because the user sometimes logs a day's work afterwards. Tho
 
 ## Agent sessions
 
-Most of the user's work runs in Claude Code and Codex sessions. Their transcripts are the only record of a question an agent asked that the user never answered, a result waiting for the user's review, or work left half done. Transcripts are large, so start one subagent on them first and read the other sources while it runs. Have it take every session active since the start of yesterday, find and read them as the transcript section of `~/.agents/skills/wrap/SKILL.md` describes, and skip this session. It returns only what's unfinished or waiting on the user, one line per item with its project. A session that may still be running is in progress, not waiting.
+Most of the user's work runs in Claude Code and Codex sessions, and their transcripts are the only record of what an agent left waiting on the user. Transcripts are large, so start one subagent on them first and read the other sources while it runs. Have it take every session active since the start of yesterday, find and read them as the transcript section of `~/.agents/skills/wrap/SKILL.md` describes, and skip this session. It returns only what's unfinished or waiting on the user, one line per item with its project. A session that may still be running is in progress, not waiting.
 
 ## Mail
 
