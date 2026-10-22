@@ -1,29 +1,27 @@
 ---
 name: grilling
-description: Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, or uses any 'grill' trigger phrases.
+description: Stress-test a plan, decision, or idea by questioning the user in rounds until no decision is left open. Use when the user asks to be grilled.
 disable-model-invocation: true
 ---
 
-Interview the user relentlessly until you reach a shared understanding. Map this as a **design tree**: every decision branches into the decisions that hang off it.
+# Grilling
 
-Work the tree in **rounds**. The **frontier** is every decision whose prerequisites are already settled: the questions you can ask _now_ without guessing at answers you haven't heard yet. Ask the whole frontier in one round: number each question and give your recommended answer. Then wait for the user's answers before the next round.
+Question the user until the two of you share a complete understanding of the plan and nothing is silently assumed. Be relentless: the point is to surface the decisions the user hasn't made yet, not to agree with them.
 
-Format a round like so:
+Treat the plan as a tree of decisions in which each decision opens the ones that depend on it. Ask in rounds. A round contains every open decision whose prerequisites are already settled, and nothing else, because a question that depends on another open question would have to be asked again once that one is answered. After each round of answers, work out which decisions have become askable and ask those next.
+
+Number the questions and recommend an answer to each, so the user can simply agree where you're right:
 
 ```
-❓ **Q1** - **<question title>**: <question body, might be multiple paragraphs, including multiple choices>
+❓ **Q1** - **<question title>**: <the question, with the options if there are several>
 
-➡️ <your recommended answer>
+➡️ <your recommendation and why>
 
 ---
 
-❓ **Q2** - **<question title>**: <question body, might be multiple paragraphs, including multiple choices>
-
-➡️ <your recommended answer>
+❓ **Q2** - **<question title>**: ...
 ```
 
-Each round the user answers reshapes the tree: settled decisions push the frontier outward and unblock questions that depended on them. Recompute the frontier and ask the next round. A question whose answer depends on another question still open in this round belongs to a _later_ round, not this one.
+Facts are your job and decisions are the user's. Don't ask anything you could find out from the code, the files, or your tools. When a question needs a fact, send a subagent to find it and ask the questions that don't depend on it in the meantime. The ones that do wait for a later round.
 
-Finding _facts_ is your job, never the user's. When a frontier question needs a fact from the environment (filesystem, tools, etc.), dispatch a sub-agent to find it; don't ask the user for anything you could look up yourself. Don't block on it: a running exploration is an unsettled prerequisite, so only the questions downstream of it wait for the sub-agent to report; ask the rest of the frontier now. The _decisions_ are the user's: put each to them and wait.
-
-The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed. Do not act on it until the user confirms you have reached a shared understanding.
+The grilling ends when no decision is left open. Summarize what was decided, and wait for the user to confirm the summary before acting on any of it.

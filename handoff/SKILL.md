@@ -1,16 +1,14 @@
 ---
 name: handoff
-description: Compact the current conversation into a handoff document for another agent to pick up.
+description: Write a handoff document that lets a fresh agent continue the work of the current conversation.
 argument-hint: "What will the next session be used for?"
 disable-model-invocation: true
 ---
 
-Write a handoff document summarising the current conversation so a fresh agent can continue the work. Save to the temporary directory of the user's OS - not the current workspace.
+# Handoff
 
-Include a "suggested skills" section in the document, naming which skills the next agent should call the Skill tool for.
+Write a document that lets a fresh agent, which has none of this conversation's context, continue the work. If the user passed arguments, they describe what the next session will focus on, so shape the document around that.
 
-Do not duplicate content already captured in other artifacts (specs, plans, ADRs, issues, commits, diffs). Reference them by path or URL instead.
+The next agent can read specs, plans, issues, pull requests, commits, and diffs itself, so link to them by path or URL instead of restating them. Spend the words on what exists only in this conversation: the decisions made and why, approaches that were tried and failed, open questions, and the next concrete step. End with the skills the next agent should load, by name.
 
-Redact any sensitive information, such as API keys, passwords, or personally identifiable information.
-
-If the user passed arguments, treat them as a description of what the next session will focus on and tailor the doc accordingly.
+Save the document in the system's temporary directory (`${TMPDIR:-/tmp}`), not in the workspace, so it can't end up in a commit, and tell the user its path. Leave out secrets and personal data such as API keys, passwords, and email addresses, because the document is meant to be passed along.
