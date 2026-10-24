@@ -14,6 +14,7 @@ Review one day of the user's work and write the result in the session as journal
 Read the evidence with these facts in mind. They matter most for the rating.
 
 - The user works as a product manager and agent orchestrator, and agents do most of the implementation. The result of that whole workflow is the user's output, whichever agent wrote the code, so don't favor manual implementation over delegation.
+- Pull requests go through the review-fix skill: reviewer lenses report findings, and the session fixes them before merge. Those findings and fixes are the review loop working, so don't count them as defects or rework, and don't credit them to the user's own review.
 - Super Productivity records only the time the user spent prompting and reviewing, so it's expected to fall well short of machine activity. Mention the difference only when the pattern breaks, such as SP claiming hours on work that appears nowhere in the timeline.
 - Moving between repositories, tools, and agent sessions is how the user manages a portfolio. Treat it as neutral unless the evidence shows that lost context caused rework, delayed a decision, or let a thread drop.
 - An agent may still be running when the wrap runs, so a transcript that ends without a final answer doesn't show that the work failed or stopped. Report the verified progress and call the outcome in progress or unknown. Pending results don't lower Output or Efficiency. If they cover much of the day, rate **n/e** or lower your confidence instead of guessing.
