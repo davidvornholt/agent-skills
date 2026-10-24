@@ -32,7 +32,7 @@ E=$(date -d "$DAY +1 day" +%s)000
 
 ## Super Productivity
 
-Read SP through `sp`. The user runs the app on the X1, so the command passes `--host david-x1-nixos`. Drop the flag when running on the X1 itself, which can't SSH to itself. Don't fall back to backup files: the z890's stopped in August and would quietly describe the wrong period. If the app is unreachable, follow the super-productivity skill before collecting the rest of the evidence.
+Read SP through `sp`. The user runs the app on the X1, so the command passes `--host david-x1-nixos`. Drop the flag when running on the X1 itself, which can't SSH to itself. Don't fall back to backup files, because the z890's backups stopped in August and would quietly describe the wrong period. If the app is unreachable, follow the super-productivity skill before collecting the rest of the evidence.
 
 This lists every task, archived ones included, that was completed or tracked on the day, with its project id, the minutes tracked that day, and the day it was marked done:
 
@@ -82,10 +82,11 @@ Pass along any days or sessions the user has marked as sensitive or off-limits.
 
 Use the `davidvornholt` account and ignore any other. Its token can write, so run only searches and GET requests.
 
-GitHub date filters default to UTC. Give the range the local offset from `date +%:z`:
+GitHub date filters default to UTC, so give the range the day's own local offset, which changes with daylight saving time:
 
 ```sh
-R="<DAY>T00:00:00+02:00..<DAY>T23:59:59+02:00"
+O=$(date -d "$DAY" +%:z)
+R="${DAY}T00:00:00$O..${DAY}T23:59:59$O"
 gh search prs --author=davidvornholt --created="$R" --json repository,title,state --limit 50
 gh search prs --author=davidvornholt --merged-at="$R" --json repository,title --limit 50
 gh search issues --author=davidvornholt --created="$R" --json repository,title --limit 50
@@ -97,7 +98,7 @@ Reconcile GitHub with SP and the session report, and note a pull request with no
 
 ## Sent mail
 
-Run `mailbox search --account <email> --folder Sent --since <DAY>` for each account from `mailbox accounts`, because the global search skips Sent. Some accounts call the folder `INBOX.Sent`; `mailbox folders --account <email>` shows the name. `--since` is only a lower bound, so for a past day drop anything sent after it. Keep only mail a person wrote, and note whom the user contacted and why.
+Run `mailbox search --account <email> --folder Sent --since <DAY>` for each account from `mailbox accounts`, because the global search skips Sent. Some accounts call the folder `INBOX.Sent`, and `mailbox folders --account <email>` shows the name. `--since` is only a lower bound, so for a past day drop anything sent after it. Keep only mail a person wrote, and note whom the user contacted and why.
 
 ## The analysis
 
