@@ -35,7 +35,7 @@ Most of the user's work runs in Claude Code and Codex sessions, and their transc
 
 ## Mail
 
-`mailbox search --since <yesterday>` searches every account's inbox. It has no unread filter, so judge relevance from content. Lead with mail that needs the user. Automated mail gets one line at most, and only when it matters. Open a message with `mailbox read` only when its subject is ambiguous and it's likely important.
+`pim mail search --folder INBOX --since <yesterday> --limit 100` searches every account's inbox. Without `--folder` it also returns sent and archived mail, and without `--limit` it stops at 20 hits across all accounts. It has no unread filter, so judge relevance from content. Lead with mail that needs the user. Automated mail gets one line at most, and only when it matters. Open a message with `pim mail read --account <account> --folder <folder> --uid <uid>`, taking the values from its search hit, only when its subject is ambiguous and it's likely important.
 
 ## GitHub
 

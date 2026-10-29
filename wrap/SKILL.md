@@ -99,7 +99,7 @@ Reconcile GitHub with SP and the session report, and note a pull request with no
 
 ## Sent mail
 
-Run `mailbox search --account <email> --folder Sent --since <DAY>` for each account from `mailbox accounts`, because the global search skips Sent. Some accounts call the folder `INBOX.Sent`, and `mailbox folders --account <email>` shows the name. `--since` is only a lower bound, so for a past day drop anything sent after it. Keep only mail a person wrote, and note whom the user contacted and why.
+Run `pim mail search --account <email> --folder Sent --since <DAY> --limit 200` for each account that `pim accounts` lists with a `mail` service, because a search without `--folder` mixes sent mail with received mail. Some accounts call the folder `INBOX.Sent`, and `pim mail folders --account <email>` shows the name. `--since` is only a lower bound and the search returns the newest hits first, so for a past day the limit has to cover everything sent since then; drop anything sent after the day. Keep only mail a person wrote, and note whom the user contacted and why.
 
 ## The analysis
 
