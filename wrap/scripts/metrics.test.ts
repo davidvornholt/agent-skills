@@ -1,0 +1,191 @@
+import { describe, expect, test } from "bun:test";
+import { computeDayMetrics, METRICS_VERSION, parseSummary } from "./metrics.ts";
+import type { Sources } from "./sources.ts";
+import { DAY, sources, summary, WINDOW } from "./testing/fixtures.ts";
+
+const metrics = (changes: Partial<Sources> = {}) => computeDayMetrics(WINDOW, { ...sources, ...changes });
+const unavailable = { ok: false, error: "unreachable" } as const;
+const coverageOf = (changes: Partial<Sources>, prefix: string) =>
+  metrics(changes).dayMetrics.coverage.filter((entry) => entry.source === prefix || entry.source.startsWith(`${prefix}:`));
+
+test("computes every metric of a day with all sources", () => {
+  expect(metrics()).toEqual({
+    dayMetrics: {
+      metricsVersion: METRICS_VERSION,
+      day: DAY,
+      activeMinutes: 330,
+      firstActivityAt: "2026-10-29T08:12:00+01:00",
+      lastActivityAt: "2026-10-29T23:40:00+01:00",
+      focusMinutes: 200,
+      scatteredMinutes: 130,
+      categories: [
+        { id: "code", label: "Code", minutes: 200 },
+        { id: "mail", label: "Mail", minutes: 80 },
+        { id: "admin", label: "Admin", minutes: 50 },
+      ],
+      offComputerMinutes: 70,
+      appointmentMinutes: 180,
+      appointmentOffScreenMinutes: 90,
+      landedPrs: 2,
+      sentMails: [
+        { mailbox: "a@example.com", count: null },
+        { mailbox: "b@example.com", count: 2 },
+        { mailbox: "c@example.com", count: 2 },
+      ],
+      coverage: [
+        { source: "activity:david-x1-nixos", status: "partial" },
+        { source: "activity:david-z890-nixos", status: "complete" },
+        { source: "sp", status: "complete" },
+        { source: "github", status: "complete" },
+        { source: "mail:a@example.com", status: "missing" },
+        { source: "mail:b@example.com", status: "complete" },
+        { source: "mail:c@example.com", status: "partial" },
+        { source: "calendar:me@example.com", status: "complete" },
+        { source: "calendar:work@example.com", status: "complete" },
+      ],
+    },
+    problems: ["Sent mail of a@example.com unavailable: login failed", "The sent-mail search of c@example.com hit its limit inside the day."],
+  });
+});
+
+test("gives the same output for the same input", () => {
+  expect(JSON.stringify(metrics())).toBe(JSON.stringify(metrics()));
+});
+
+test("unreachable sources become missing coverage and null numbers, never zero", () => {
+  const { dayMetrics, problems } = metrics({ summary: unavailable, sp: unavailable, github: unavailable, mail: unavailable, calendar: unavailable });
+  expect(dayMetrics).toMatchObject({
+    activeMinutes: null,
+    firstActivityAt: null,
+    focusMinutes: null,
+    scatteredMinutes: null,
+    categories: [],
+    offComputerMinutes: null,
+    appointmentMinutes: null,
+    appointmentOffScreenMinutes: null,
+    landedPrs: null,
+    sentMails: [],
+  });
+  expect(dayMetrics.coverage).toEqual(["activity", "sp", "github", "mail", "calendar"].map((source) => ({ source, status: "missing" })));
+  expect(problems).toHaveLength(5);
+});
+
+describe("activity", () => {
+  test("rejects a summary of another version or day instead of guessing", () => {
+    expect(() => parseSummary({ ...summary, summaryVersion: 2 }, DAY)).toThrow(/summaryVersion 2/);
+    expect(() => parseSummary(summary, "2026-10-28")).toThrow(/not 2026-10-28/);
+    const { dayMetrics, problems } = metrics({ summary: { ok: true, value: { ...summary, summaryVersion: 2 } } });
+    expect(dayMetrics.activeMinutes).toBeNull();
+    expect(dayMetrics.coverage[0]).toEqual({ source: "activity", status: "missing" });
+    expect(problems[0]).toStartWith("Activity summary unusable");
+  });
+
+  test("leaves the numbers null when every host is missing", () => {
+    const hosts = summary.hosts.map((host) => ({ ...host, status: "missing", activeMinutes: null }));
+    const { dayMetrics } = metrics({ summary: { ok: true, value: { ...summary, hosts } } });
+    expect(dayMetrics.activeMinutes).toBeNull();
+    expect(dayMetrics.categories).toEqual([]);
+    expect(dayMetrics.coverage.slice(0, 2)).toEqual([
+      { source: "activity:david-x1-nixos", status: "missing" },
+      { source: "activity:david-z890-nixos", status: "missing" },
+    ]);
+  });
+
+  test("leaves the off-screen appointment time null without active intervals", () => {
+    const { activeIntervals: _, ...withoutIntervals } = summary;
+    const { dayMetrics, problems } = metrics({ summary: { ok: true, value: withoutIntervals } });
+    expect(dayMetrics.appointmentMinutes).toBe(180);
+    expect(dayMetrics.appointmentOffScreenMinutes).toBeNull();
+    expect(dayMetrics.coverage).toContainEqual({ source: "activity:intervals", status: "missing" });
+    expect(problems).toContain("The activity summary has no activeIntervals, so off-screen appointment time is unknown.");
+  });
+});
+
+describe("off-computer time", () => {
+  test("is unknown, not zero, when the tag doesn't exist", () => {
+    if (!sources.sp.ok) throw new Error("fixture");
+    const sp = { ok: true as const, value: { ...sources.sp.value, tags: [{ id: "t-off", title: "outside" }] } };
+    const { dayMetrics, problems } = metrics({ sp });
+    expect(dayMetrics.offComputerMinutes).toBeNull();
+    expect(coverageOf({ sp }, "sp")).toEqual([{ source: "sp", status: "partial" }]);
+    expect(problems).toContain('Super Productivity has no tag named "off-computer", so off-computer time is unknown.');
+  });
+
+  test("matches the tag title regardless of case and spaces", () => {
+    if (!sources.sp.ok) throw new Error("fixture");
+    const sp = { ok: true as const, value: { ...sources.sp.value, tags: [{ id: "t-off", title: " Off-Computer " }] } };
+    expect(metrics({ sp }).dayMetrics.offComputerMinutes).toBe(70);
+  });
+});
+
+describe("landed PRs", () => {
+  test("marks an incomplete search as partial and keeps the count as a lower bound", () => {
+    if (!sources.github.ok) throw new Error("fixture");
+    const github = { ok: true as const, value: { ...sources.github.value, incomplete: true } };
+    expect(metrics({ github }).dayMetrics.landedPrs).toBe(2);
+    expect(coverageOf({ github }, "github")).toEqual([{ source: "github", status: "partial" }]);
+  });
+});
+
+describe("sent mail", () => {
+  test("counts a full page that reaches back before the day as complete", () => {
+    const mail = {
+      ok: true as const,
+      value: [
+        {
+          mailbox: "c@example.com",
+          reading: { ok: true as const, value: { sentAt: ["2026-10-29T20:00:00+01:00", "2026-10-28T19:00:00+01:00"], limitReached: true } },
+        },
+      ],
+    };
+    expect(metrics({ mail }).dayMetrics.sentMails).toEqual([{ mailbox: "c@example.com", count: 1 }]);
+    expect(coverageOf({ mail }, "mail")).toEqual([{ source: "mail:c@example.com", status: "complete" }]);
+  });
+
+  test("marks unreadable send dates as partial", () => {
+    const mail = {
+      ok: true as const,
+      value: [{ mailbox: "d@example.com", reading: { ok: true as const, value: { sentAt: ["", "2026-10-29T20:00:00+01:00"], limitReached: false } } }],
+    };
+    expect(metrics({ mail }).dayMetrics.sentMails).toEqual([{ mailbox: "d@example.com", count: 1 }]);
+    expect(coverageOf({ mail }, "mail")).toEqual([{ source: "mail:d@example.com", status: "partial" }]);
+  });
+});
+
+describe("appointments", () => {
+  const calendar = (accounts: NonNullable<Extract<Sources["calendar"], { ok: true }>["value"]>["accounts"], limitReached = false): Sources["calendar"] => ({
+    ok: true,
+    value: { accounts, limitReached },
+  });
+  const standup = { summary: "Standup", start: "2026-10-29T10:00:00+01:00", end: "2026-10-29T11:00:00+01:00", allDay: false };
+
+  test("ignore all-day events", () => {
+    const value = calendar([
+      { account: "me@example.com", failure: null, events: [standup, { summary: "Trip", start: "2026-10-28", end: "2026-10-30", allDay: true }] },
+    ]);
+    expect(metrics({ calendar: value }).dayMetrics.appointmentMinutes).toBe(60);
+  });
+
+  test("count an account that failed with some events as partial, and one that failed without any as missing", () => {
+    const value = calendar([
+      { account: "me@example.com", failure: "one event unreadable", events: [standup] },
+      { account: "work@example.com", failure: "timeout", events: [] },
+    ]);
+    expect(metrics({ calendar: value }).dayMetrics.appointmentMinutes).toBe(60);
+    expect(coverageOf({ calendar: value }, "calendar")).toEqual([
+      { source: "calendar:me@example.com", status: "partial" },
+      { source: "calendar:work@example.com", status: "missing" },
+    ]);
+  });
+
+  test("are unknown when no account answered", () => {
+    const value = calendar([{ account: "work@example.com", failure: "timeout", events: [] }]);
+    expect(metrics({ calendar: value }).dayMetrics.appointmentMinutes).toBeNull();
+    expect(metrics({ calendar: value }).dayMetrics.appointmentOffScreenMinutes).toBeNull();
+  });
+
+  test("mark every account partial when the event limit was reached", () => {
+    const value = calendar([{ account: "me@example.com", failure: null, events: [standup] }], true);
+    expect(coverageOf({ calendar: value }, "calendar")).toEqual([{ source: "calendar:me@example.com", status: "partial" }]);
+  });
+});
