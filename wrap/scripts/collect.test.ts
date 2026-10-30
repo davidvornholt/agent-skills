@@ -6,7 +6,7 @@ import type { Collected } from "./day-report.ts";
 import { DAY, spTasks, summary, WINDOW } from "./testing/fixtures.ts";
 
 const COMMANDS = ["activity-digest", "sp", "gh", "pim", "ssh"];
-const SECRETS = ["SECRET-SUBJECT", "secret-recipient@example.com", "SECRET-BODY"];
+const SECRETS = ["SECRET-SUBJECT", "secret-recipient@example.com", "SECRET-BODY", "SECRET-CALENDAR-LINE", "SECRET-SEARCH-ERROR", "SECRET-STDERR"];
 
 const directory = mkdtempSync(join(tmpdir(), "wrap-collect-"));
 const bin = join(directory, "bin");
@@ -30,6 +30,8 @@ const standup = {
 };
 const review = { ...standup, account: "work@example.com", uid: "2", summary: "Review", start: "2026-10-29T14:00:00+01:00", end: "2026-10-29T15:30:00+01:00" };
 // The work mailbox sends enough mail to fill the first page inside the day, so the search has to grow.
+// pim quotes the line it can't parse, so the flaky calendar's failure holds private text.
+const unparseable = { account: "flaky@example.com", errorTag: "CalendarDataError", message: "Invalid iCalendar line: DESCRIPTION:SECRET-CALENDAR-LINE" };
 const busyDay = Array.from({ length: 200 }, (_, index) => hit(new Date(Date.parse("2026-10-29T20:00:00+01:00") - index * 60_000).toISOString()));
 
 const fixtures = {
@@ -61,12 +63,20 @@ const fixtures = {
       { email: "me@example.com", name: "Me", mail: {}, dav: {} },
       { email: "work@example.com", name: "Work", mail: {}, graph: {} },
       { email: "broken@example.com", name: "Broken", mail: {} },
+      { email: "flaky@example.com", name: "Flaky", mail: {}, dav: {} },
     ],
   },
-  // The work calendar fails on the first call and answers on the retry.
+  // The work calendar fails on the first call and answers on the retry, and the flaky calendar fails both times.
   [calendarCall]: [
-    { stdout: { from: DAY, to: "2026-10-30", events: [standup], failures: [{ account: "work@example.com", errorTag: "Timeout", message: "timed out" }] } },
-    { stdout: { from: DAY, to: "2026-10-30", events: [standup, review], failures: [] } },
+    {
+      stdout: {
+        from: DAY,
+        to: "2026-10-30",
+        events: [standup],
+        failures: [{ account: "work@example.com", errorTag: "Timeout", message: "timed out" }, unparseable],
+      },
+    },
+    { stdout: { from: DAY, to: "2026-10-30", events: [standup, review], failures: [unparseable] } },
   ],
   [key("pim", "mail", "folders", "--account", "me@example.com")]: {
     stdout: [
@@ -75,8 +85,12 @@ const fixtures = {
     ],
   },
   [key("pim", "mail", "folders", "--account", "work@example.com")]: { stdout: [{ path: "Sent Items", name: "Sent Items", specialUse: "\\Sent" }] },
-  [key("pim", "mail", "folders", "--account", "broken@example.com")]: { stderr: "Authentication failed for broken@example.com\nstack trace", exitCode: 1 },
+  [key("pim", "mail", "folders", "--account", "broken@example.com")]: { stderr: "Could not read the message SECRET-STDERR\nstack trace", exitCode: 1 },
+  [key("pim", "mail", "folders", "--account", "flaky@example.com")]: { stdout: [{ path: "Sent", name: "Sent", specialUse: "\\Sent" }] },
   [sentSearch("me@example.com", "Sent", 200)]: { stdout: { hits: [hit("2026-10-29T09:00:00+01:00"), hit("2026-10-28T09:00:00+01:00")], failures: [] } },
+  [sentSearch("flaky@example.com", "Sent", 200)]: {
+    stdout: { hits: [], failures: [{ account: "flaky@example.com", errorTag: "MailDataError", message: "Unparseable message SECRET-SEARCH-ERROR" }] },
+  },
   [sentSearch("work@example.com", "Sent Items", 200)]: { stdout: { hits: busyDay, failures: [] } },
   [sentSearch("work@example.com", "Sent Items", 800)]: { stdout: { hits: [...busyDay, hit("2026-10-28T22:00:00+01:00")], failures: [] } },
   [key("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "david@david-z890-nixos", "bun ~/.claude/skills/wrap/scripts/wrap.ts t3-threads")]: {
@@ -121,6 +135,7 @@ test("reads every source into the metrics", () => {
     landedPrs: 1,
     sentMails: [
       { mailbox: "broken@example.com", count: null },
+      { mailbox: "flaky@example.com", count: null },
       { mailbox: "me@example.com", count: 1 },
       { mailbox: "work@example.com", count: 200 },
     ],
@@ -129,8 +144,10 @@ test("reads every source into the metrics", () => {
     { source: "sp", status: "complete" },
     { source: "github", status: "complete" },
     { source: "mail:broken@example.com", status: "missing" },
+    { source: "mail:flaky@example.com", status: "missing" },
     { source: "mail:me@example.com", status: "complete" },
     { source: "mail:work@example.com", status: "complete" },
+    { source: "calendar:flaky@example.com", status: "missing" },
     { source: "calendar:me@example.com", status: "complete" },
     { source: "calendar:work@example.com", status: "complete" },
   ]);
@@ -143,11 +160,18 @@ test("turns a command that doesn't exist into missing coverage", () => {
   expect(collected.problems.some((problem) => problem.startsWith("Kontor status unavailable: kontor could not run"))).toBe(true);
 });
 
-test("reports only the first line of a failing command's error", () => {
-  expect(collected.problems).toContain("Sent mail of broken@example.com unavailable: pim exited with 1: Authentication failed for broken@example.com");
+test("says where pim failed but withholds its error text", () => {
+  const withheld = "its message is withheld because it can quote mail or calendar text";
+  expect(collected.problems).toEqual(
+    expect.arrayContaining([
+      `Sent mail of broken@example.com unavailable: pim exited with 1; ${withheld}`,
+      `Sent mail of flaky@example.com unavailable: pim reported an error; ${withheld}`,
+      `Calendar of flaky@example.com unavailable: pim reported an error; ${withheld}`,
+    ]),
+  );
 });
 
-test("never passes on mail subjects, recipients, or notes", () => {
+test("never passes on mail subjects, recipients, notes, or pim's error text", () => {
   const output = JSON.stringify(collected);
   for (const secret of SECRETS) expect(output).not.toContain(secret);
 });

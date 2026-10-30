@@ -15,6 +15,9 @@ const CALENDAR_LIMIT = 1000;
 const FIRST_MAIL_LIMIT = 200;
 const MAX_MAIL_LIMIT = 3200;
 const T3_CONCURRENCY = 6;
+// pim's error text can quote mail or calendar text, so only these fixed diagnostics stand in for it.
+const PIM_WITHHELD = "its message is withheld because it can quote mail or calendar text";
+const PIM_FAILURE = `pim reported an error; ${PIM_WITHHELD}`;
 
 const ok = <T>(value: T): Reading<T> => ({ ok: true, value });
 const failed = <T>(error: string): Reading<T> => ({ ok: false, error });
@@ -23,12 +26,15 @@ const messageOf = (error: unknown): string => (error instanceof Error ? error.me
 
 const firstLine = (text: string): string => text.trim().split("\n")[0]?.slice(0, 300) ?? "";
 
-/** Runs a command and parses its stdout as JSON. Its stdout never appears in an error, because it may hold mail details. */
+/** Runs a command and parses its stdout as JSON. Its stdout never appears in an error, because it may hold mail details, and neither does pim's stderr. */
 export const runJson = async (command: readonly string[]): Promise<Reading<unknown>> => {
   try {
     const child = Bun.spawn([...command], { stdin: "ignore", stdout: "pipe", stderr: "pipe", timeout: COMMAND_TIMEOUT_MS });
     const [stdout, stderr, exitCode] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
-    if (exitCode !== 0) return failed(`${command[0]} exited with ${exitCode}${child.signalCode ? ` (${child.signalCode})` : ""}: ${firstLine(stderr)}`);
+    if (exitCode !== 0) {
+      const detail = command[0] === "pim" ? `; ${PIM_WITHHELD}` : `: ${firstLine(stderr)}`;
+      return failed(`${command[0]} exited with ${exitCode}${child.signalCode ? ` (${child.signalCode})` : ""}${detail}`);
+    }
     try {
       return ok(JSON.parse(stdout));
     } catch {
@@ -124,11 +130,6 @@ const readPimAccounts = async (): Promise<Reading<PimAccount[]>> =>
     return { email: item.email, mail: isRecord(item.mail), calendar: isRecord(item.dav) || isRecord(item.graph) };
   });
 
-const failureText = (failures: unknown): string | null => {
-  if (!Array.isArray(failures) || failures.length === 0) return null;
-  return failures.map((failure) => (isRecord(failure) ? stringOr(failure.message, "unknown failure") : "unknown failure")).join("; ");
-};
-
 const readSentMail = async (email: string, window: DayWindow): Promise<Reading<SentMailData>> => {
   const folders = await runJson(["pim", "mail", "folders", "--account", email]);
   if (!folders.ok) return folders;
@@ -152,8 +153,7 @@ const readSentMail = async (email: string, window: DayWindow): Promise<Reading<S
     ]);
     if (!result.ok) return result;
     if (!isRecord(result.value) || !Array.isArray(result.value.hits)) return failed("pim mail search returned no hits");
-    const failure = failureText(result.value.failures);
-    if (failure !== null) return failed(failure);
+    if (Array.isArray(result.value.failures) && result.value.failures.length > 0) return failed(PIM_FAILURE);
     const sentAt = result.value.hits.map((hit) => (isRecord(hit) ? stringOr(hit.date, "") : ""));
     const limitReached = sentAt.length >= limit;
     const oldest = Math.min(...sentAt.map((date) => Date.parse(date)).filter((ms) => !Number.isNaN(ms)));
@@ -182,10 +182,7 @@ const callCalendar = async (window: DayWindow): Promise<Reading<CalendarCall>> =
   }
   const failures = new Map<string, string>();
   for (const failure of Array.isArray(body.failures) ? body.failures : []) {
-    if (!isRecord(failure)) continue;
-    const account = stringOr(failure.account, "unknown account");
-    const message = stringOr(failure.message, "unknown failure");
-    failures.set(account, failures.has(account) ? `${failures.get(account)}; ${message}` : message);
+    if (isRecord(failure)) failures.set(stringOr(failure.account, "unknown account"), PIM_FAILURE);
   }
   return ok({ events, failures, limitReached: events.length >= CALENDAR_LIMIT });
 };
