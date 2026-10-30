@@ -25,7 +25,7 @@ test("computes every metric of a day with all sources", () => {
       ],
       offComputerMinutes: 70,
       appointmentMinutes: 180,
-      appointmentOffScreenMinutes: 90,
+      appointmentOffScreenMinutes: null,
       landedPrs: 2,
       sentMails: [
         { mailbox: "a@example.com", count: null },
@@ -44,7 +44,11 @@ test("computes every metric of a day with all sources", () => {
         { source: "calendar:work@example.com", status: "complete" },
       ],
     },
-    problems: ["Sent mail of a@example.com unavailable: login failed", "The sent-mail search of c@example.com hit its limit inside the day."],
+    problems: [
+      "Some activity hosts were not complete, so off-screen appointment time is unknown.",
+      "Sent mail of a@example.com unavailable: login failed",
+      "The sent-mail search of c@example.com hit its limit inside the day.",
+    ],
   });
 });
 
@@ -98,6 +102,20 @@ describe("activity", () => {
     expect(dayMetrics.appointmentOffScreenMinutes).toBeNull();
     expect(dayMetrics.coverage).toContainEqual({ source: "activity:intervals", status: "missing" });
     expect(problems).toContain("The activity summary has no activeIntervals, so off-screen appointment time is unknown.");
+  });
+
+  test("leaves the off-screen appointment time null unless every host is complete", () => {
+    const withLaptop = (status: string) => ({
+      ok: true as const,
+      value: { ...summary, hosts: summary.hosts.map((host) => (host.host === "david-x1-nixos" ? { ...host, status } : host)) },
+    });
+    expect(metrics({ summary: withLaptop("complete") }).dayMetrics.appointmentOffScreenMinutes).toBe(90);
+    for (const status of ["partial", "missing"]) {
+      const { dayMetrics, problems } = metrics({ summary: withLaptop(status) });
+      expect(dayMetrics.appointmentMinutes).toBe(180);
+      expect(dayMetrics.appointmentOffScreenMinutes).toBeNull();
+      expect(problems).toContain("Some activity hosts were not complete, so off-screen appointment time is unknown.");
+    }
   });
 });
 

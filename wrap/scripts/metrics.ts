@@ -11,7 +11,7 @@
 // - Activity numbers and categories are copied from the activity summary (Contract 1). They are null when the summary is unavailable or every host is missing.
 // - offComputerMinutes: time tracked in Super Productivity on the day on tasks tagged OFF_COMPUTER_TAG, or whose parent task carries the tag. Only tasks without subtasks count, because a parent's tracked time is the sum of its subtasks'. SP files time under its own date keys, which follow its "start of next day" setting rather than the 04:00 journal boundary.
 // - appointmentMinutes: the union of all timed calendar events, clipped to the journal day, so overlapping events count once. All-day events don't count.
-// - appointmentOffScreenMinutes: the part of that union outside the active screen intervals of both hosts. It needs `activeIntervals` in the activity summary.
+// - appointmentOffScreenMinutes: the part of that union outside the active screen intervals of both hosts. It needs `activeIntervals` in the activity summary and every host complete, because screen time on a host that wasn't fully read would count as off screen.
 // - landedPrs: pull requests authored by the davidvornholt account and merged during the journal day, in any repository.
 // - sentMails: messages in each mailbox's Sent folder dated within the journal day.
 
@@ -130,12 +130,15 @@ const activityPart = (reading: Reading<unknown>, day: string): Part<Summary | nu
     .toSorted((a, b) => compareText(a.source, b.source));
   if (coverage.length === 0) coverage.push({ source: "activity", status: "missing" });
   const problems: string[] = [];
+  const allComplete = summary.hosts.every((host) => host.status === "complete");
   if (summary.activeIntervals === null) {
     coverage.push({ source: "activity:intervals", status: "missing" });
     problems.push("The activity summary has no activeIntervals, so off-screen appointment time is unknown.");
+  } else if (!allComplete) {
+    problems.push("Some activity hosts were not complete, so off-screen appointment time is unknown.");
   }
   const anyHost = summary.hosts.some((host) => host.status !== "missing");
-  return { value: anyHost ? summary : null, coverage, problems };
+  return { value: anyHost ? { ...summary, activeIntervals: allComplete ? summary.activeIntervals : null } : null, coverage, problems };
 };
 
 const offComputerMinutes = (sp: SpData, day: string): Part<number | null> => {
