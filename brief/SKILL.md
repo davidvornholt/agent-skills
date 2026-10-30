@@ -14,7 +14,7 @@ Get today's date with `date +%F` and derive yesterday from it.
 
 ## Tasks
 
-Read Super Productivity through `sp`. The X1 and the z890 each run a copy that syncs through SuperSync, so use the local one. If it is unreachable, retry once with `--host` set to the other machine, `david-x1-nixos` or `david-z890-nixos`, and then follow the super-productivity skill. Don't read the app's data or backup files instead, because they can be stale.
+Read Super Productivity through `sp`. The X1 and the z890 each run a copy that syncs through SuperSync, so use the local one. If the local read reports `AppUnreachable` or `TokenUnavailable`, retry once with `--host` set to the other machine, `david-x1-nixos` or `david-z890-nixos`. If it succeeds, use that host for the remaining reads; otherwise follow the super-productivity skill's connection guidance. Don't read the app's data or backup files instead, because they can be stale.
 
 Today's plan is `sp tasks list --today --brief`, and the open tasks are `sp tasks list --brief`. Open tasks with a deadline in the next seven days need the user. Resolve project ids with `sp projects list`.
 
@@ -54,5 +54,5 @@ Write these parts in order:
 
 1. Yesterday in brief, from the tasks and sessions.
 2. Today's plan, with project names.
-3. What needs the user, from sessions, mail, and GitHub together: human mail, deadlines, and agents waiting on an answer first, then review requests and the user's own open pull requests, then at most one line about CI trouble on `main`. Merge items about the same pull request.
+3. What needs the user, from tasks, sessions, mail, and GitHub together: human mail, deadlines, and agents waiting on an answer first, then review requests and the user's own open pull requests, then at most one line about CI trouble on `main`. Merge items about the same pull request.
 4. A suggestion, only when nothing is planned for today: one open task and a sentence on why. If a deadline in the inbox outranks the task list, say so.
