@@ -14,20 +14,18 @@ Get today's date with `date +%F` and derive yesterday from it.
 
 ## Tasks
 
-Read Super Productivity through `sp`. The user runs the app on the X1, so the commands pass `--host david-x1-nixos`. Drop the flag when running on the X1 itself. Don't fall back to backup files, because the z890's stopped updating in August. If the app is unreachable, follow the super-productivity skill.
+Read Super Productivity through `sp`. The X1 and the z890 each run a copy that syncs through SuperSync, so use the local one. If the local read reports `AppUnreachable` or `TokenUnavailable`, retry once with `--host` set to the other machine, `david-x1-nixos` or `david-z890-nixos`. If it succeeds, use that host for the remaining reads; otherwise follow the super-productivity skill's connection guidance. Don't read the app's data or backup files instead, because they can be stale.
 
-Today's plan is `sp tasks list --host david-x1-nixos --today --brief`, and the open tasks for a suggestion are `sp tasks list --host david-x1-nixos --brief`. Resolve project ids with `sp projects list --host david-x1-nixos`.
+Today's plan is `sp tasks list --today --brief`, and the open tasks are `sp tasks list --brief`. Open tasks with a deadline in the next seven days need the user. Resolve project ids with `sp projects list`.
 
-For yesterday, take the tasks completed or tracked that day. `--brief` drops `doneOn`, so this query uses the full output:
+For yesterday, take the tasks checked off that day and those with time tracked that day. A checked-off task is out of the user's hands, often handed to an agent session, so the sessions say whether its work is finished. Tracked time is work away from the computer. `--brief` drops `doneOn`, so this query uses the full output:
 
 ```sh
 Y=<yesterday>
-sp tasks list --host david-x1-nixos --include-done --source all | jq -r \
+sp tasks list --include-done --source all | jq -r \
   --arg d "$Y" --argjson s "$(date -d "$Y" +%s)000" --argjson e "$(date -d "$Y +1 day" +%s)000" \
   '.[] | select((.doneOn // 0) >= $s and (.doneOn // 0) < $e or .timeSpentOnDay[$d]) | [.title, (if .doneOn then (.doneOn / 1000 | strflocaltime("%F")) else "open" end)] | @tsv'
 ```
-
-Tracked time counts because the user sometimes logs a day's work afterwards. Those tasks get `doneOn` on the day they were marked done but keep their time on the day it was spent.
 
 ## Agent sessions
 
@@ -56,5 +54,5 @@ Write these parts in order:
 
 1. Yesterday in brief, from the tasks and sessions.
 2. Today's plan, with project names.
-3. What needs the user, from sessions, mail, and GitHub together: human mail, deadlines, and agents waiting on an answer first, then review requests and the user's own open pull requests, then at most one line about CI trouble on `main`. Merge items about the same pull request.
+3. What needs the user, from tasks, sessions, mail, and GitHub together: human mail, deadlines, and agents waiting on an answer first, then review requests and the user's own open pull requests, then at most one line about CI trouble on `main`. Merge items about the same pull request.
 4. A suggestion, only when nothing is planned for today: one open task and a sentence on why. If a deadline in the inbox outranks the task list, say so.
