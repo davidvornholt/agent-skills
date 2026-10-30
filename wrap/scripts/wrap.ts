@@ -1,5 +1,4 @@
 #!/usr/bin/env bun
-// The /wrap command line. Run with no arguments for usage.
 
 import { hostname } from "node:os";
 import { readLocalT3, readSources } from "./collect.ts";

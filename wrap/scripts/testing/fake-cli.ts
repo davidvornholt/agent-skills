@@ -1,5 +1,3 @@
-// Stands in for a command line tool in collect.test.ts. Each call is answered from the fixture file and logged, and a key with several answers gives the next one on each call.
-
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 

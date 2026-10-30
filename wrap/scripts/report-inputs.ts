@@ -1,5 +1,3 @@
-// Builds the lists the report shows next to the metrics. Pure and deterministic, like metrics.ts.
-
 import { compareText } from "./compare.ts";
 import { type DayWindow, toBerlinClock, toBerlinDate } from "./day.ts";
 import type { CalendarEvent, Sources } from "./sources.ts";

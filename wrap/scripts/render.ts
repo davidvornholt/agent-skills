@@ -1,4 +1,4 @@
-// Fills the report template with the agent's summary and the day's lists. The HTML carries no numbers of its own: the template reads them from Postlude's message (PLAN.md Contract 5).
+// The HTML carries no numbers of its own: the template reads them from Postlude's message (PLAN.md Contract 5).
 
 import type { Collected } from "./day-report.ts";
 import { METRICS_VERSION } from "./metrics.ts";

@@ -1,5 +1,3 @@
-// Computes the day metrics (PLAN.md Contract 4) from the source readings. Pure and deterministic: the same readings give the same output.
-//
 // Bump METRICS_VERSION whenever any definition below changes, even when the shape stays, because Postlude only compares days with the same version.
 //
 // Coverage statuses:
@@ -73,7 +71,6 @@ const instantOrNull = (value: unknown, path: string): string | null => {
   throw new Error(`${path} is not a timestamp`);
 };
 
-/** Checks the fields of the activity summary that the metrics use. */
 export const parseSummary = (raw: unknown, day: string): Summary => {
   if (!isRecord(raw)) throw new Error("the activity summary is not a JSON object");
   if (raw.summaryVersion !== SUMMARY_VERSION) {

@@ -10,7 +10,7 @@
   document.documentElement.dataset.theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 </script>
 <style>
-  /* Surfaces and ink match Postlude's theme. Chart colors are validated with the dataviz palette validator against these surfaces. */
+  /* Surfaces and ink match Postlude's theme. */
   :root {
     color-scheme: light;
     --surface: #f6f1e7;
@@ -197,7 +197,6 @@
     if (text === null) showUnmeasured(node);
     else node.textContent = text;
   };
-  // data-metric names the dayMetrics key an element shows; data-view says how, when it isn't the plain value.
   const each = (key, view, fill) => {
     const selector = view ? `[data-metric="${key}"][data-view="${view}"]` : `[data-metric="${key}"]:not([data-view])`;
     for (const node of document.querySelectorAll(selector)) fill(node);

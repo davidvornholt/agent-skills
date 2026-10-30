@@ -1,4 +1,4 @@
-// Reads every source for one journal day. Each reader catches its own failures and returns a failed reading, so one unreachable source never stops the others. Everything here only reads.
+// Every command here must only read: the same tools and credentials can change the user's real accounts.
 
 import { Database } from "bun:sqlite";
 import { homedir } from "node:os";
@@ -26,7 +26,7 @@ const messageOf = (error: unknown): string => (error instanceof Error ? error.me
 
 const firstLine = (text: string): string => text.trim().split("\n")[0]?.slice(0, 300) ?? "";
 
-/** Runs a command and parses its stdout as JSON. Its stdout never appears in an error, because it may hold mail details, and neither does pim's stderr. */
+/** The command's stdout never appears in an error, because it may hold mail details. */
 export const runJson = async (command: readonly string[]): Promise<Reading<unknown>> => {
   try {
     const child = Bun.spawn([...command], { stdin: "ignore", stdout: "pipe", stderr: "pipe", timeout: COMMAND_TIMEOUT_MS });
@@ -283,7 +283,6 @@ export const readLocalT3 = async (): Promise<Reading<T3Thread[]>> => {
 
 const readT3 = async (host: string): Promise<Reading<readonly T3Thread[]>> => {
   if (host === T3_HOST) return readLocalT3();
-  // Elsewhere, the same reader runs on the z890 from its own checkout of this skill.
   return parseList(
     await runJson(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", `david@${T3_HOST}`, "bun ~/.claude/skills/wrap/scripts/wrap.ts t3-threads"]),
     "T3 threads from the z890",
@@ -293,7 +292,6 @@ const readT3 = async (host: string): Promise<Reading<readonly T3Thread[]>> => {
 
 const readKontor = (): Promise<Reading<unknown>> => runJson(["kontor", "status", "--json"]);
 
-/** `host` is this machine's name, which decides how Super Productivity and T3 Code are reached. */
 export const readSources = async (window: DayWindow, host: string): Promise<Sources> => {
   const [summary, sp, github, pim, t3, kontor] = await Promise.all([
     readSummary(window.day),

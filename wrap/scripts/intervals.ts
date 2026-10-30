@@ -21,7 +21,6 @@ export const clip = (intervals: readonly Interval[], window: Interval): Interval
     .map((interval) => ({ start: Math.max(interval.start, window.start), end: Math.min(interval.end, window.end) }))
     .filter((interval) => interval.end > interval.start);
 
-/** The parts of `from` that no interval in `remove` covers. */
 export const subtract = (from: readonly Interval[], remove: readonly Interval[]): Interval[] => {
   const removals = union(remove);
   const result: Interval[] = [];

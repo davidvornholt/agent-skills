@@ -1,5 +1,3 @@
-// What `wrap.ts collect` prints: the day metrics, the report lists, and the reasons for any gaps.
-
 import type { DayWindow } from "./day.ts";
 import { computeDayMetrics, type DayMetrics } from "./metrics.ts";
 import { buildReportInputs, type ReportInputs } from "./report-inputs.ts";

@@ -73,13 +73,11 @@ const berlinWallTimeToMs = (day: string, hour: number): number => {
   return asUtc - offsetMs(localParts(firstGuess).offset);
 };
 
-/** An instant as Berlin local time with its offset, such as 2026-10-30T04:00:00+01:00. */
 export const toBerlinIso = (ms: number): string => {
   const parts = localParts(ms);
   return `${formatDate(parts.year, parts.month, parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}:${pad(parts.second)}${parts.offset}`;
 };
 
-/** Berlin local clock time, such as 09:30. */
 export const toBerlinClock = (ms: number): string => {
   const parts = localParts(ms);
   return `${pad(parts.hour)}:${pad(parts.minute)}`;
@@ -97,7 +95,6 @@ export const dayWindow = (day: string): DayWindow => {
   return { day, start: toBerlinIso(startMs), end: toBerlinIso(endMs), startMs, endMs };
 };
 
-/** The journal day an instant belongs to: before 04:00 it still belongs to the previous date. */
 export const journalDayAt = (ms: number): string => {
   const parts = localParts(ms);
   const date = formatDate(parts.year, parts.month, parts.day);

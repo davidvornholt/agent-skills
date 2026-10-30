@@ -7,9 +7,9 @@ argument-hint: [yesterday | YYYY-MM-DD]
 
 # End-of-day wrap
 
-/wrap stores one journal day's metrics and report in Postlude's agent area. A journal day runs from 04:00 to 04:00 Europe/Berlin. Postlude keeps the user's journal text, scripture, and rating in their own area, which this skill never writes.
+A journal day runs from 04:00 to 04:00 Europe/Berlin. Postlude keeps the user's journal text, scripture, and rating in their own area, which this skill never writes.
 
-The scripts own every number and list. `collect` reads the sources without changing them and computes the day metrics, and `render` fills the report template. You write only the summary. Don't compute, estimate, or correct numbers yourself, because Postlude compares days only when the same script version produced them.
+You write only the summary. Don't compute, estimate, or correct numbers yourself, because the scripts produce every number and Postlude compares days only when the same script version produced them.
 
 ## Run it
 
@@ -33,14 +33,8 @@ The scripts own every number and list. `collect` reads the sources without chang
 
 6. Check with `postlude agent-area get "$DAY"`, then tell the user the report is in Postlude and which sources were missing.
 
-## Sources
-
-`collect` reaches Super Productivity on the X1 with `--host david-x1-nixos` unless `SP_HOST` is set or it runs on the X1, and it reads T3 Code threads from the z890 over SSH when it runs elsewhere.
-
-Off-computer time is the time tracked in Super Productivity on tasks tagged `off-computer`, or on subtasks of a task with that tag. Without the tag, the metric is null and `sp` coverage is partial.
-
 ## Changing the metrics or report
 
 The definitions are in `scripts/metrics.ts`. Bump `METRICS_VERSION` with any change to a definition, even when the output shape stays the same, because Postlude doesn't compare days of different versions.
 
-`report/template.html` follows Postlude's report contract: one self-contained file with no network access, whose numbers appear only in `data-metric` elements filled from Postlude's `postlude:day-metrics` message. Run `bun run check` from the repository root after any change.
+Run `bun run check` from the repository root after any change.

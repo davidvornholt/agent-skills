@@ -1,5 +1,3 @@
-// A day with every source answering, used as the base that tests change one source at a time.
-
 import { dayWindow } from "../day.ts";
 import type { Sources, SpTask } from "../sources.ts";
 
@@ -47,7 +45,6 @@ const task = (fields: Partial<SpTask> & Pick<SpTask, "id" | "title">): SpTask =>
 });
 
 export const spTasks: SpTask[] = [
-  // The parent carries the tag, so both subtasks count, and its own total (their sum) doesn't count again.
   task({ id: "garden", title: "Garden", tagIds: ["t-off"], subTaskIds: ["dig", "plant"], timeSpentOnDay: { [DAY]: minutes(45) } }),
   task({
     id: "dig",
@@ -131,7 +128,6 @@ export const sources: Sources = {
         {
           account: "work@example.com",
           failure: null,
-          // The same meeting in a second calendar counts once.
           events: [{ summary: "Standup", start: "2026-10-29T10:00:00+01:00", end: "2026-10-29T11:00:00+01:00", allDay: false }],
         },
       ],

@@ -8,7 +8,6 @@ const template = await loadTemplate();
 const collected = buildCollected(WINDOW, sources);
 const SUMMARY = "A quiet day of reviews and garden work.";
 
-/** The text a reader sees, without scripts, styles, and tags. */
 const visibleText = (html: string): string =>
   html
     .replace(/<script[\s\S]*?<\/script>/g, "")

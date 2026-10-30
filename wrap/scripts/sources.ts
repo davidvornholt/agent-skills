@@ -1,5 +1,3 @@
-// What the readers in collect.ts hand to the pure computations. Every source is a reading that either succeeded or failed with a reason, so a missing source becomes coverage instead of a substitute.
-
 export type Reading<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: string };
 
 export type SpTask = {
