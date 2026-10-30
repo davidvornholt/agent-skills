@@ -1,0 +1,15 @@
+{
+  "name": "agent-skills",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "biome check --error-on-warnings . && tsc --noEmit && bun test",
+    "lint:fix": "biome check --write --error-on-warnings ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/bun": "1.4.4",
+    "typescript": "7.0.2"
+  },
+  "packageManager": "bun@1.4.4"
+}
