@@ -117,7 +117,7 @@ test("reads every source into the metrics", () => {
     activeMinutes: 330,
     offComputerMinutes: 70,
     appointmentMinutes: 150,
-    appointmentOffScreenMinutes: 0,
+    appointmentOffScreenMinutes: null,
     landedPrs: 1,
     sentMails: [
       { mailbox: "broken@example.com", count: null },
