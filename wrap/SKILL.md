@@ -1,6 +1,6 @@
 ---
 name: wrap
-description: End-of-day review for the user's journal. Combines tasks, screen activity, AI sessions, GitHub, browsing, shell history, and sent mail to explain the day, compare tracking with reality, find loose ends, and rate the day with a fixed rubric. Read-only.
+description: Review one day of work for a personal journal. Combine Super Productivity, measured screen activity, AI sessions, GitHub, browsing, shell history, and sent mail. Explain what happened, compare tracking with reality, identify loose ends, and rate the day with a fixed rubric. Read-only, with output in the session.
 disable-model-invocation: true
 argument-hint: [yesterday | YYYY-MM-DD]
 ---
@@ -13,12 +13,12 @@ Review one day of the user's work and write the result in the session as journal
 
 Read the evidence with these facts in mind. They matter most for the rating.
 
-- The user works as a product manager and agent orchestrator, and agents do most of the implementation. The result of that whole workflow is the user's output, so don't favor manual implementation over delegation.
-- Pull requests go through the review-fix skill: reviewers report findings, and the session fixes them before merge. That's the review loop working, so don't count the findings as defects or rework, and don't credit them to the user's own review.
+- The user works as a product manager and agent orchestrator, and agents do most of the implementation. The result of that whole workflow is the user's output, whichever agent wrote the code, so don't favor manual implementation over delegation.
+- Pull requests go through the review-fix skill: reviewer lenses report findings, and the session fixes them before merge. Those findings and fixes are the review loop working, so don't count them as defects or rework, and don't credit them to the user's own review.
 - Super Productivity records only the time the user spent prompting and reviewing, so it's expected to fall well short of machine activity. Mention the difference only when the pattern breaks, such as SP claiming hours on work that appears nowhere in the timeline.
 - Moving between repositories, tools, and agent sessions is how the user manages a portfolio. Treat it as neutral unless the evidence shows that lost context caused rework, delayed a decision, or let a thread drop.
-- An agent may still be running when the wrap runs, so a transcript that ends without a final answer doesn't show that the work failed or stopped. Report the verified progress and call the outcome in progress or unknown, not a loose end. Pending results don't lower Output or Efficiency. If they cover much of the day, rate **n/e** or lower your confidence instead of guessing.
-- Parallel sessions on one task are deliberate benchmarking across models and tools unless the transcripts say otherwise.
+- An agent may still be running when the wrap runs, so a transcript that ends without a final answer doesn't show that the work failed or stopped. Report the verified progress and call the outcome in progress or unknown. Pending results don't lower Output or Efficiency. If they cover much of the day, rate **n/e** or lower your confidence instead of guessing.
+- The user deliberately runs the same task across several models and tools. Treat parallel sessions on one task as benchmarking unless the transcripts say otherwise.
 - Browser history shows only titles and times for ChatGPT, claude.ai, and Gemini. A long research session there may have produced decisions nothing else records, so call it unassessed rather than unproductive.
 
 ## Choose the day
@@ -33,7 +33,7 @@ E=$(date -d "$DAY +1 day" +%s)000
 
 ## Super Productivity
 
-Read SP through `sp`. The app runs on the X1, so pass `--host david-x1-nixos` unless you're on the X1. Don't fall back to backup files, because the z890's stopped in August and would quietly describe the wrong period. If the app is unreachable, follow the super-productivity skill before collecting the rest of the evidence.
+Read SP through `sp`. The user runs the app on the X1, so the command passes `--host david-x1-nixos`. Drop the flag when running on the X1 itself, which can't SSH to itself. Don't fall back to backup files, because the z890's backups stopped in August and would quietly describe the wrong period. If the app is unreachable, follow the super-productivity skill before collecting the rest of the evidence.
 
 This lists every task, archived ones included, that was completed or tracked on the day, with its project id, the minutes tracked that day, and the day it was marked done:
 
@@ -42,7 +42,7 @@ sp tasks list --host david-x1-nixos --include-done --source all | jq -r --arg d 
   '.[] | select((.doneOn // 0) >= $s and (.doneOn // 0) < $e or .timeSpentOnDay[$d]) | [.title, (.projectId // "-"), ((.timeSpentOnDay[$d] // 0) / 60000 | round), (if .doneOn then (.doneOn / 1000 | strflocaltime("%F")) else "open" end)] | @tsv'
 ```
 
-The user sometimes logs a day's work afterwards, so a task with time on the day and a later done date usually belongs to the day.
+Resolve project ids with `sp projects list --host david-x1-nixos`. The user sometimes logs a day's work afterwards, so a task with time on the day and a later done date usually belongs to the day. The largest tracked items are good anchors for the narrative.
 
 ## Machine activity
 
@@ -53,9 +53,11 @@ activity-digest <DAY> --all-hosts
 activity-digest <DAY> --no-browser --no-shell
 ```
 
-`--all-hosts` adds the latest privacy-filtered snapshots of the other machine from `~/.local/share/activity-exchange/<HOST>/<DAY>/`. Host totals overlap when one machine controls the other, so don't add them into one screen-time total. Screen time is already corrected for idle time and suspend.
+`--all-hosts` reads live evidence from this machine and the latest privacy-filtered snapshots under `~/.local/share/activity-exchange/<HOST>/<DAY>/` for the other one. Host totals overlap when one machine controls the other, so don't add them into one screen-time total.
 
-When a local section is empty, check `~/.local/state/activity/<DAY>.jsonl`, which `niri-activity-watch.service` writes. If that file is missing, say the watcher didn't record the day rather than reconstructing screen time from other sources. When a remote section is empty, check its `manifest.json`. If the manifest is missing, say that Syncthing or the publisher hasn't delivered that host and day, and don't substitute this machine's data.
+Screen time is already corrected for idle time and suspend. The workspace timeline (`Organization`, `Work 1` to `Work 3`, `Relax`) gives the order of the day and its turns. Browser activity across the Helium profiles and Firefox captures reading and research.
+
+When a local section is empty, check `~/.local/state/activity/<DAY>.jsonl`, which `niri-activity-watch.service` writes and `niri-activity-afk.service` annotates with idle and suspend markers. If that file is missing, say the watcher didn't record the day rather than reconstructing screen time from other sources. When a remote section is empty, check its `manifest.json`. If the manifest is missing, say that Syncthing or the publisher hasn't delivered that host and day, and don't substitute this machine's data. The exchange deliberately leaves out raw browser and atuin databases, SP backups, and Claude and Codex sessions.
 
 Three quirks affect how to read the digest:
 
@@ -68,18 +70,20 @@ Three quirks affect how to read the digest:
 Transcripts can run to hundreds of files and several multi-megabyte sessions, so keep them out of your own context. Have one Explore or general-purpose subagent inspect them and return a compact report, and give it these instructions:
 
 - The z890 (`david-z890-nixos`) is the always-on transcript host. When the wrap runs elsewhere, run the searches and extraction there through `ssh -o BatchMode=yes david@david-z890-nixos`. Never copy or sync `~/.claude` or `~/.codex` to the client.
-- Claude Code candidates: `find ~/.claude/projects -name '*.jsonl' -newermt "<DAY>" ! -newermt "<DAY+2>"`. The extra day catches sessions that ran past midnight. Keep a file last modified on `<DAY+1>` only if its first line's timestamp falls on the day.
+- Claude Code candidates: `find ~/.claude/projects -name '*.jsonl' -newermt "<DAY>" ! -newermt "<DAY+2>"`. The extra day catches sessions that started on the day and ran past midnight. For a file last modified on `<DAY+1>`, keep it only if its first line's timestamp falls on the day.
 - Codex candidates: `find ~/.codex/sessions/<YYYY>/<MM>/<DD> -type f`, since Codex files sessions under their start date.
 - Don't read whole files. Extract user and assistant text with `jq` or `rg`, or look at the first and last 100 lines.
 - Collapse Codex review and fix subagent triplets into the underlying work, and drop failed child runs when another agent or the parent delivered the intended result.
-- A file may still be receiving events, so its last lines don't show the final state. Call work blocked, abandoned, or failed only when the transcript says so or later evidence confirms it. Otherwise report the result so far as in progress or unknown.
+- A JSONL file may still be receiving events, so its last lines don't show the final state. Call work blocked, abandoned, or failed only when the transcript says so or later evidence confirms it. Otherwise report the result so far as in progress or unknown.
 - For each distinct session, return the project, tool, the user's intent, the concrete results so far, and the outcome the evidence supports.
 
 Pass along any days or sessions the user has marked as sensitive or off-limits.
 
 ## GitHub
 
-Use the `davidvornholt` account and ignore any other. Its token can write, so run only searches and GET requests. GitHub date filters default to UTC, so give the range the day's own local offset:
+Use the `davidvornholt` account and ignore any other. Its token can write, so run only searches and GET requests.
+
+GitHub date filters default to UTC, so give the range the day's own local offset, which changes with daylight saving time:
 
 ```sh
 O=$(date -d "$DAY" +%:z)
@@ -95,16 +99,16 @@ Reconcile GitHub with SP and the session report, and note a pull request with no
 
 ## Sent mail
 
-For each account that `pim accounts` lists with a `mail` service, run `pim mail search --account <email> --folder Sent --since <DAY> --limit 200`, with a higher limit for a day long past, and drop anything sent after the day. Some accounts call the folder `INBOX.Sent`, and `pim mail folders --account <email>` shows the name. Keep only mail a person wrote, and note whom the user contacted and why.
+Run `pim mail search --account <email> --folder Sent --since <DAY> --limit 200` for each account that `pim accounts` lists with a `mail` service, because a search without `--folder` mixes sent mail with received mail. Some accounts call the folder `INBOX.Sent`, and `pim mail folders --account <email>` shows the name. `--since` is only a lower bound and the search returns the newest hits first, so for a past day the limit has to cover everything sent since then; drop anything sent after the day. Keep only mail a person wrote, and note whom the user contacted and why.
 
 ## The analysis
 
 Write it in five parts:
 
-1. The day in arcs. Group the work into two to four coherent periods and describe their order, turning points, and concrete results. Take the order from the digest's workspace timeline rather than from artifact timestamps.
+1. The day in arcs. Group the work into two to four coherent periods and describe their order, turning points, and concrete results. Take the order from the workspace timeline rather than from artifact timestamps.
 2. Completed. Summarize the completed SP tasks and the largest tracked items. Where SP and measured activity cover the same work with different figures, give both.
 3. Where tracking and reality diverged. Compare task labels with what the work became. Include this part only when the evidence shows a specific gap, not one of the expected differences described above.
-4. Loose ends into tomorrow.
+4. Loose ends into tomorrow. An agent that may still be running is in progress, not a loose end.
 5. Productivity rating: one overall score from 1 to 10, anchored in four sub-scores from 1 to 5, or **n/e** when the evidence can't support a number.
 
 The rubric stays fixed so scores remain comparable across days:
