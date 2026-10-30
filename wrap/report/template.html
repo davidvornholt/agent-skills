@@ -86,7 +86,7 @@
   ul.items li { padding: 6px 0; border-bottom: 1px solid var(--line); }
   ul.items li:last-child { border-bottom: none; }
   .meta { color: var(--ink-muted); font-size: 13px; }
-  .time { display: inline-block; min-width: 7.5em; padding-right: 12px; color: var(--ink-secondary); font-variant-numeric: tabular-nums; }
+  .time { padding-right: 12px; color: var(--ink-secondary); }
   .empty { margin: 0; color: var(--ink-muted); font-size: 13px; }
   .tooltip { position: fixed; z-index: 1; pointer-events: none; padding: 4px 8px; border-radius: 6px; background: var(--tooltip-surface); color: var(--tooltip-ink); font-size: 12px; white-space: nowrap; }
   @media (forced-colors: active) {
@@ -315,7 +315,7 @@
     const notice = document.querySelector("[data-version-notice]");
     const version = metrics.metricsVersion ?? metricsVersion;
     notice.hidden = version === METRICS_VERSION;
-    notice.textContent = `These numbers use metrics version ${version}, but this report was built for version ${METRICS_VERSION}, so some may be missing. Running /wrap again for this day rebuilds it.`;
+    notice.textContent = "These numbers come from a different metrics version than this report was built for, so some may be missing. Running /wrap again for this day rebuilds it.";
     each("day", null, (node) => {
       const ms = Date.parse(`${metrics.day}T12:00:00Z`);
       if (!Number.isNaN(ms)) node.textContent = longDate.format(ms);

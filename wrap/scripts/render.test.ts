@@ -45,15 +45,13 @@ describe("renderReport", () => {
   });
 
   test("shows no number that doesn't come from the day metrics", () => {
-    const quiet = { ...collected.reportInputs, handedOffTasks: { status: "complete" as const, items: [{ title: "Water plants", project: "Home" }] } };
-    const text = visibleText(
-      renderReport(
-        template,
-        { ...collected, reportInputs: { ...quiet, appointments: { status: "missing", items: [] }, openThreads: { status: "missing", items: [] } } },
-        SUMMARY,
-      ),
-    );
+    const text = visibleText(html);
+    expect(text).toContain("Standup");
+    expect(text).toContain("Long open");
     expect(text).not.toMatch(/\p{Nd}/u);
+    const notice = html.match(/notice\.textContent = (.+);/)?.[1];
+    expect(notice).toBeDefined();
+    expect(notice).not.toMatch(/\$\{|\p{Nd}/u);
   });
 
   test("escapes titles from the sources", () => {
@@ -67,9 +65,9 @@ describe("renderReport", () => {
   });
 
   test("lists each section and explains missing and partial lists", () => {
-    expect(html).toContain('<span class="time">All day</span>Holiday');
+    expect(html).toContain('<li><span class="time">All day</span>Holiday</li><li>Standup</li><li>Review</li>');
     expect(html).toContain('Garden › Dig <span class="meta">· Home</span>');
-    expect(html).toContain('Long open <span class="meta">· dev, open since 25 October</span>');
+    expect(html).toContain('<li>Long open <span class="meta">· dev</span></li>');
     expect(html).toContain("Kontor's bank status was not available.");
     const gaps = renderReport(
       template,

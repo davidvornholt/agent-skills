@@ -1,4 +1,4 @@
-// Fills the report template with the agent's summary and the day's lists. Measured numbers never enter the HTML: the template reads them from Postlude's message (PLAN.md Contract 5).
+// Fills the report template with the agent's summary and the day's lists. The HTML carries no numbers of its own: the template reads them from Postlude's message (PLAN.md Contract 5).
 
 import type { Collected } from "./day-report.ts";
 import { METRICS_VERSION } from "./metrics.ts";
@@ -21,8 +21,6 @@ export const checkSummary = (text: string): string => {
   return summary;
 };
 
-const longDate = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "long" });
-
 const listSection = <T>(title: string, list: List<T>, empty: string, item: (entry: T) => string): string => {
   const body =
     list.status === "missing"
@@ -39,17 +37,14 @@ const withMeta = (title: string, meta: string | null): string =>
 
 const renderLists = (inputs: ReportInputs): string =>
   [
-    listSection(
-      "Appointments",
-      inputs.appointments,
-      "No appointments.",
-      (event) => `<span class="time">${escapeHtml(event.time ?? "All day")}</span>${escapeHtml(event.title)}`,
+    listSection("Appointments", inputs.appointments, "No appointments.", (event) =>
+      event.time === null ? `<span class="time">All day</span>${escapeHtml(event.title)}` : escapeHtml(event.title),
     ),
     listSection("Tasks checked off", inputs.handedOffTasks, "No tasks checked off.", (task) => withMeta(task.title, task.project)),
     listSection("Threads settled", inputs.settledThreads, "No threads settled.", (thread) => withMeta(thread.title, thread.project)),
     listSection("Pull requests landed", inputs.landedPrs, "No pull requests landed.", (pr) => withMeta(pr.title, pr.repository)),
     listSection("Threads open for several days", inputs.openThreads, "No thread has been open for several days.", (thread) =>
-      withMeta(thread.title, `${thread.project}, open since ${longDate.format(Date.parse(`${thread.openSince}T12:00:00Z`))}`),
+      withMeta(thread.title, thread.project),
     ),
   ].join("\n  ");
 
