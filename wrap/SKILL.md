@@ -1,121 +1,46 @@
 ---
 name: wrap
-description: Review one day of work for a personal journal. Combine Super Productivity, measured screen activity, AI sessions, GitHub, browsing, shell history, and sent mail. Explain what happened, compare tracking with reality, identify loose ends, and rate the day with a fixed rubric. Read-only, with output in the session.
+description: Close one journal day by storing its metrics and a visual day report in Postlude's agent area. A versioned script computes every number, and the agent writes only a short neutral summary. Never touches journal text or ratings.
 disable-model-invocation: true
 argument-hint: [yesterday | YYYY-MM-DD]
 ---
 
-# End-of-day wrap-up
+# End-of-day wrap
 
-Review one day of the user's work and write the result in the session as journal-style prose they'll adapt in their own words. Address the user as "you", and don't write in the first person. The review is read-only.
+/wrap stores one journal day's metrics and report in Postlude's agent area. A journal day runs from 04:00 to 04:00 Europe/Berlin. Postlude keeps the user's journal text, scripture, and rating in their own area, which this skill never writes.
 
-## How the user works
+The scripts own every number and list. `collect` reads the sources without changing them and computes the day metrics, and `render` fills the report template. You write only the summary. Don't compute, estimate, or correct numbers yourself, because Postlude compares days only when the same script version produced them.
 
-Read the evidence with these facts in mind. They matter most for the rating.
+## Run it
 
-- The user works as a product manager and agent orchestrator, and agents do most of the implementation. The result of that whole workflow is the user's output, whichever agent wrote the code, so don't favor manual implementation over delegation.
-- Pull requests go through the review-fix skill: reviewer lenses report findings, and the session fixes them before merge. Those findings and fixes are the review loop working, so don't count them as defects or rework, and don't credit them to the user's own review.
-- Super Productivity records only the time the user spent prompting and reviewing, so it's expected to fall well short of machine activity. Mention the difference only when the pattern breaks, such as SP claiming hours on work that appears nowhere in the timeline.
-- Moving between repositories, tools, and agent sessions is how the user manages a portfolio. Treat it as neutral unless the evidence shows that lost context caused rework, delayed a decision, or let a thread drop.
-- An agent may still be running when the wrap runs, so a transcript that ends without a final answer doesn't show that the work failed or stopped. Report the verified progress and call the outcome in progress or unknown. Pending results don't lower Output or Efficiency. If they cover much of the day, rate **n/e** or lower your confidence instead of guessing.
-- The user deliberately runs the same task across several models and tools. Treat parallel sessions on one task as benchmarking unless the transcripts say otherwise.
-- Browser history shows only titles and times for ChatGPT, claude.ai, and Gemini. A long research session there may have produced decisions nothing else records, so call it unassessed rather than unproductive.
+1. Pick the day: the current journal day, the one before it for `yesterday`, or the given date. Before 04:00 the current journal day is still the previous date.
+2. Collect. Missing sources don't fail the command: they appear in `dayMetrics.coverage` and are explained in `problems`.
 
-## Choose the day
+   ```sh
+   DAY=<YYYY-MM-DD>
+   bun ~/.claude/skills/wrap/scripts/wrap.ts collect "$DAY" > "/tmp/wrap-$DAY.json"
+   ```
 
-The day is today (`date +%F`) unless the argument says `yesterday` or gives a `YYYY-MM-DD` date. Several steps need its local epoch-ms window:
+3. Read `reportInputs` and `problems`. If the user can fix a missing source now, such as Super Productivity not running on the X1, say so and offer to collect again. Otherwise continue, because the report shows a missing source as a gap rather than as zero.
+4. Write two to four plain sentences that describe what the day held, based on the lists. Don't rate, judge, or advise, and don't use digits: `render` rejects them, because the report takes its numbers only from the metrics.
+5. Render and store. Re-running for a day replaces only the agent area, so it's safe after fixing a source.
 
-```sh
-DAY=<YYYY-MM-DD>
-S=$(date -d "$DAY" +%s)000
-E=$(date -d "$DAY +1 day" +%s)000
-```
+   ```sh
+   bun ~/.claude/skills/wrap/scripts/wrap.ts render "/tmp/wrap-$DAY.json" --model <your model id> <<'EOF' | postlude agent-area put "$DAY"
+   <summary>
+   EOF
+   ```
 
-## Super Productivity
+6. Check with `postlude agent-area get "$DAY"`, then tell the user the report is in Postlude and which sources were missing.
 
-Read SP through `sp`. The user runs the app on the X1, so the command passes `--host david-x1-nixos`. Drop the flag when running on the X1 itself, which can't SSH to itself. Don't fall back to backup files, because the z890's backups stopped in August and would quietly describe the wrong period. If the app is unreachable, follow the super-productivity skill before collecting the rest of the evidence.
+## Sources
 
-This lists every task, archived ones included, that was completed or tracked on the day, with its project id, the minutes tracked that day, and the day it was marked done:
+`collect` reaches Super Productivity on the X1 with `--host david-x1-nixos` unless `SP_HOST` is set or it runs on the X1, and it reads T3 Code threads from the z890 over SSH when it runs elsewhere.
 
-```sh
-sp tasks list --host david-x1-nixos --include-done --source all | jq -r --arg d "$DAY" --argjson s "$S" --argjson e "$E" \
-  '.[] | select((.doneOn // 0) >= $s and (.doneOn // 0) < $e or .timeSpentOnDay[$d]) | [.title, (.projectId // "-"), ((.timeSpentOnDay[$d] // 0) / 60000 | round), (if .doneOn then (.doneOn / 1000 | strflocaltime("%F")) else "open" end)] | @tsv'
-```
+Off-computer time is the time tracked in Super Productivity on tasks tagged `off-computer`, or on subtasks of a task with that tag. Without the tag, the metric is null and `sp` coverage is partial.
 
-Resolve project ids with `sp projects list --host david-x1-nixos`. The user sometimes logs a day's work afterwards, so a task with time on the day and a later done date usually belongs to the day. The largest tracked items are good anchors for the narrative.
+## Changing the metrics or report
 
-## Machine activity
+The definitions are in `scripts/metrics.ts`. Bump `METRICS_VERSION` with any change to a definition, even when the output shape stays the same, because Postlude doesn't compare days of different versions.
 
-`activity-digest` reports what was on screen:
-
-```sh
-activity-digest <DAY> --all-hosts
-activity-digest <DAY> --no-browser --no-shell
-```
-
-`--all-hosts` reads live evidence from this machine and the latest privacy-filtered snapshots under `~/.local/share/activity-exchange/<HOST>/<DAY>/` for the other one. Host totals overlap when one machine controls the other, so don't add them into one screen-time total.
-
-Screen time is already corrected for idle time and suspend. The workspace timeline (`Organization`, `Work 1` to `Work 3`, `Relax`) gives the order of the day and its turns. Browser activity across the Helium profiles and Firefox captures reading and research.
-
-When a local section is empty, check `~/.local/state/activity/<DAY>.jsonl`, which `niri-activity-watch.service` writes and `niri-activity-afk.service` annotates with idle and suspend markers. If that file is missing, say the watcher didn't record the day rather than reconstructing screen time from other sources. When a remote section is empty, check its `manifest.json`. If the manifest is missing, say that Syncthing or the publisher hasn't delivered that host and day, and don't substitute this machine's data. The exchange deliberately leaves out raw browser and atuin databases, SP backups, and Claude and Codex sessions.
-
-Three quirks affect how to read the digest:
-
-- `<redacted>` marks an entry that matched `~/.config/activity/exclude`. Count its time, but don't guess the subject or mention the redaction in the draft.
-- Chromium dwell time keeps growing in background tabs. Use the window log for browser focus time and dwell time only to rank pages.
-- The browser list holds roughly the 200 strongest pages by dwell and visits, so brief but useful pages can be missing. On a research-heavy day with an apparent gap, run `activity-browser-history <DAY> --limit 500`.
-
-## AI transcripts
-
-Transcripts can run to hundreds of files and several multi-megabyte sessions, so keep them out of your own context. Have one Explore or general-purpose subagent inspect them and return a compact report, and give it these instructions:
-
-- The z890 (`david-z890-nixos`) is the always-on transcript host. When the wrap runs elsewhere, run the searches and extraction there through `ssh -o BatchMode=yes david@david-z890-nixos`. Never copy or sync `~/.claude` or `~/.codex` to the client.
-- Claude Code candidates: `find ~/.claude/projects -name '*.jsonl' -newermt "<DAY>" ! -newermt "<DAY+2>"`. The extra day catches sessions that started on the day and ran past midnight. For a file last modified on `<DAY+1>`, keep it only if its first line's timestamp falls on the day.
-- Codex candidates: `find ~/.codex/sessions/<YYYY>/<MM>/<DD> -type f`, since Codex files sessions under their start date.
-- Don't read whole files. Extract user and assistant text with `jq` or `rg`, or look at the first and last 100 lines.
-- Collapse Codex review and fix subagent triplets into the underlying work, and drop failed child runs when another agent or the parent delivered the intended result.
-- A JSONL file may still be receiving events, so its last lines don't show the final state. Call work blocked, abandoned, or failed only when the transcript says so or later evidence confirms it. Otherwise report the result so far as in progress or unknown.
-- For each distinct session, return the project, tool, the user's intent, the concrete results so far, and the outcome the evidence supports.
-
-Pass along any days or sessions the user has marked as sensitive or off-limits.
-
-## GitHub
-
-Use the `davidvornholt` account and ignore any other. Its token can write, so run only searches and GET requests.
-
-GitHub date filters default to UTC, so give the range the day's own local offset, which changes with daylight saving time:
-
-```sh
-O=$(date -d "$DAY" +%:z)
-R="${DAY}T00:00:00$O..${DAY}T23:59:59$O"
-gh search prs --author=davidvornholt --created="$R" --json repository,title,state --limit 50
-gh search prs --author=davidvornholt --merged-at="$R" --json repository,title --limit 50
-gh search issues --author=davidvornholt --created="$R" --json repository,title --limit 50
-# Bot pull requests and older pull requests merged that day in either organization
-gh search prs --owner=prosabridge --owner=fes-kirchheim --merged-at="$R" --json repository,title,author --limit 50
-```
-
-Reconcile GitHub with SP and the session report, and note a pull request with no matching task or session as a tracking gap.
-
-## Sent mail
-
-Run `pim mail search --account <email> --folder Sent --since <DAY> --limit 200` for each account that `pim accounts` lists with a `mail` service, because a search without `--folder` mixes sent mail with received mail. Some accounts call the folder `INBOX.Sent`, and `pim mail folders --account <email>` shows the name. `--since` is only a lower bound and the search returns the newest hits first, so for a past day the limit has to cover everything sent since then; drop anything sent after the day. Keep only mail a person wrote, and note whom the user contacted and why.
-
-## The analysis
-
-Write it in five parts:
-
-1. The day in arcs. Group the work into two to four coherent periods and describe their order, turning points, and concrete results. Take the order from the workspace timeline rather than from artifact timestamps.
-2. Completed. Summarize the completed SP tasks and the largest tracked items. Where SP and measured activity cover the same work with different figures, give both.
-3. Where tracking and reality diverged. Compare task labels with what the work became. Include this part only when the evidence shows a specific gap, not one of the expected differences described above.
-4. Loose ends into tomorrow. An agent that may still be running is in progress, not a loose end.
-5. Productivity rating: one overall score from 1 to 10, anchored in four sub-scores from 1 to 5, or **n/e** when the evidence can't support a number.
-
-The rubric stays fixed so scores remain comparable across days:
-
-- Output counts verified implementation, tests, review-ready changes, opened and merged pull requests, sent mail, verified deploys, and decisions with visible evidence. Implementation counts before it merges. Rate opaque knowledge work or a substantial still-running result **n/e** rather than low.
-- Focus judges the continuity and quality of the user's prompting, decisions, reviews, and follow-through. Deduct only for evidence of disruptive unrelated activity, repeated reorientation, avoidable rework, delayed decisions, or dropped threads. If the timeline can't tell orchestration from distraction, rate **n/e**.
-- Direction judges whether the work advanced goals the user was plausibly pursuing, using goals and loose ends from earlier wraps when they're available. SP coverage is not a proxy for direction.
-- Efficiency counts only unintended costs to the user: avoidable rework, a blocker the user held, a forgotten review, or abandoning the intended outcome. Judge the whole agent workflow rather than each child run. Agent runtime, background waits, recovered handoffs, speculative failed children, and work still running don't lower it by themselves.
-
-Back every sub-score with one sentence of evidence. The overall score is a judgment informed by the sub-scores, not their average. If one or two answers from the user could change the score, ask them instead of guessing.
+`report/template.html` follows Postlude's report contract: one self-contained file with no network access, whose numbers appear only in `data-metric` elements filled from Postlude's `postlude:day-metrics` message. Run `bun run check` from the repository root after any change.
