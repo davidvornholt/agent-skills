@@ -18,8 +18,8 @@ import type { DayWindow } from "./day.ts";
 import { clip, type Interval, subtract, totalMinutes, union } from "./intervals.ts";
 import type { CalendarEvent, Reading, SentMailData, Sources, SpData } from "./sources.ts";
 
-export const METRICS_VERSION = 2;
-export const SUMMARY_VERSION = 3;
+export const METRICS_VERSION = 3;
+export const SUMMARY_VERSION = 4;
 export const OFF_COMPUTER_TAG = "off-computer";
 
 export type CoverageStatus = "complete" | "partial" | "missing";
