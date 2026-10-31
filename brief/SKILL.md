@@ -29,7 +29,13 @@ sp tasks list --include-done --source all | jq -r \
 
 ## Agent sessions
 
-Most of the user's work runs in Claude Code and Codex sessions, and their transcripts are the only record of what an agent left waiting on the user. Transcripts are large, so start one subagent on them first and read the other sources while it runs. Have it take every session active since the start of yesterday, find and read them as the transcript section of `~/.agents/skills/wrap/SKILL.md` describes, and skip this session. It returns only what's unfinished or waiting on the user, one line per item with its project. A session that may still be running is in progress, not waiting.
+Most of the user's work runs in Claude Code and Codex sessions, and their transcripts are the only record of what an agent left waiting on the user. Transcripts are large, so start one subagent on them first and read the other sources while it runs. Give it these instructions:
+
+- The z890 (`david-z890-nixos`) holds the transcripts. Elsewhere, run every search there through `ssh -o BatchMode=yes david@david-z890-nixos`, and never copy `~/.claude` or `~/.codex` to this machine.
+- Take every session active since the start of yesterday, from `find ~/.claude/projects -name '*.jsonl' -newermt <yesterday>` and `find ~/.codex/sessions -type f -newermt <yesterday>`, and skip this session.
+- Don't read whole files. Extract user and assistant text with `jq` or `rg`, or read the first and last 100 lines. Fold Codex review and fix subagent runs into the work they served.
+- A file may still be receiving events, so a session that may still be running is in progress, not waiting.
+- Return only what's unfinished or waiting on the user, one line per item with its project, and leave out days or sessions the user has marked as off-limits.
 
 ## Mail
 

@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day report</title>
+<script>
+  // Until Postlude sends its theme, follow the system setting so the report doesn't flash.
+  document.documentElement.dataset.theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+</script>
+<style>
+  /* Surfaces and ink match Postlude's theme. */
+  :root {
+    color-scheme: light;
+    --surface: #f6f1e7;
+    --surface-sunken: #ece7dd;
+    --ink: #2a1f19;
+    --ink-secondary: #5f524b;
+    --ink-muted: #6c615a;
+    --line: #d3cdc3;
+    --focus: #2e8b57;
+    --scattered: #a49d94;
+    --warning: #fab219;
+    --warning-ink: #0b0b0b;
+    --tooltip-surface: #2a1f19;
+    --tooltip-ink: #f6f1e7;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface: #241b15;
+    --surface-sunken: #1b1410;
+    --ink: #ece7dd;
+    --ink-secondary: #b3ada3;
+    --ink-muted: #a49d94;
+    --line: #453b33;
+    --focus: #2fae78;
+    --scattered: #7d726a;
+    --warning: #fab219;
+    --warning-ink: #0b0b0b;
+    --tooltip-surface: #ece7dd;
+    --tooltip-ink: #241b15;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--surface); color: var(--ink); }
+  body { font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 20px 32px; }
+  h1 { font-size: 22px; line-height: 1.25; font-weight: 600; margin: 0; }
+  h2 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
+  .eyebrow { margin: 0 0 4px; font-size: 13px; color: var(--ink-muted); }
+  .summary { margin: 12px 0 0; color: var(--ink-secondary); max-width: 62ch; }
+  .notice { margin: 12px 0 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; color: var(--ink-secondary); }
+  .alert { display: flex; gap: 10px; align-items: center; margin: 16px 0 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+  .alert p { margin: 0; }
+  .alert-icon { flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--warning); color: var(--warning-ink); font-weight: 700; font-size: 13px; line-height: 20px; text-align: center; }
+  section { margin-top: 28px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+  .tile { padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; }
+  .tile-label { margin: 0; font-size: 13px; color: var(--ink-secondary); }
+  .tile-value { margin: 2px 0 0; font-size: 22px; font-weight: 600; line-height: 1.3; }
+  .tile-note { margin: 4px 0 0; font-size: 12px; color: var(--ink-muted); }
+  .unmeasured { color: var(--ink-muted); font-weight: 400; font-size: 15px; }
+  .tile-note .unmeasured { font-size: inherit; }
+  .estimate { margin-left: 6px; font-size: 12px; font-weight: 400; color: var(--ink-muted); }
+  .split { display: flex; gap: 2px; height: 24px; }
+  .split > div { min-width: 2px; }
+  .split > div:first-child { border-radius: 4px 0 0 4px; }
+  .split > div:last-child { border-radius: 0 4px 4px 0; }
+  .split > div:only-child { border-radius: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink-secondary); }
+  .legend li { display: flex; align-items: center; gap: 6px; }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .bars { display: grid; grid-template-columns: minmax(96px, 180px) 1fr auto; gap: 6px 10px; align-items: center; font-size: 13px; }
+  .bar-label { color: var(--ink-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-track { position: relative; height: 16px; border-left: 1px solid var(--line); }
+  .bar { height: 16px; background: var(--focus); border-radius: 0 4px 4px 0; min-width: 2px; }
+  .bar-value { color: var(--ink-secondary); text-align: right; white-space: nowrap; }
+  [data-tip] { cursor: default; }
+  [data-tip]:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  details { margin-top: 10px; font-size: 13px; color: var(--ink-secondary); }
+  summary { cursor: pointer; }
+  table { border-collapse: collapse; margin-top: 6px; }
+  th, td { padding: 3px 16px 3px 0; text-align: left; border-bottom: 1px solid var(--line); font-weight: 400; }
+  td.number { text-align: right; padding-right: 0; }
+  ul.items { margin: 0; padding: 0; list-style: none; }
+  ul.items li { padding: 6px 0; border-bottom: 1px solid var(--line); }
+  ul.items li:last-child { border-bottom: none; }
+  .meta { color: var(--ink-muted); font-size: 13px; }
+  .time { padding-right: 12px; color: var(--ink-secondary); }
+  .empty { margin: 0; color: var(--ink-muted); font-size: 13px; }
+  .tooltip { position: fixed; z-index: 1; pointer-events: none; padding: 4px 8px; border-radius: 6px; background: var(--tooltip-surface); color: var(--tooltip-ink); font-size: 12px; white-space: nowrap; }
+  @media (forced-colors: active) {
+    .bar, .split > div, .swatch { forced-color-adjust: none; border: 1px solid CanvasText; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">Day report</p>
+    <h1 data-metric="day">Waiting for the day's numbers</h1>
+    <!--wrap:summary-->
+    <p class="notice" data-version-notice hidden></p>
+    <!--wrap:alerts-->
+  </header>
+
+  <section aria-label="The day in numbers" class="tiles">
+    <div class="tile">
+      <p class="tile-label">Screen time</p>
+      <p class="tile-value" data-metric="activeMinutes"></p>
+      <p class="tile-note">From <span data-metric="firstActivityAt"></span> to <span data-metric="lastActivityAt"></span></p>
+    </div>
+    <div class="tile">
+      <p class="tile-label">Focus</p>
+      <p class="tile-value" data-metric="focusMinutes"></p>
+      <p class="tile-note">Scattered: <span data-metric="scatteredMinutes"></span></p>
+    </div>
+    <div class="tile">
+      <p class="tile-label">Off the computer</p>
+      <p class="tile-value" data-metric="offComputerMinutes"></p>
+      <p class="tile-note">Tracked in Super Productivity</p>
+    </div>
+    <div class="tile">
+      <p class="tile-label">Appointments</p>
+      <p class="tile-value" data-metric="appointmentMinutes"></p>
+      <p class="tile-note">Away from the screen: <span data-metric="appointmentOffScreenMinutes"></span></p>
+    </div>
+    <div class="tile">
+      <p class="tile-label">Landed pull requests</p>
+      <p class="tile-value" data-metric="landedPrs"></p>
+    </div>
+    <div class="tile">
+      <p class="tile-label">Sent mail</p>
+      <p class="tile-value" data-metric="sentMails" data-view="total"></p>
+      <p class="tile-note" data-metric="sentMails" data-view="note"></p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Focus and scattered time</h2>
+    <div class="split" data-metric="focusMinutes" data-view="split"></div>
+    <ul class="legend">
+      <li><span class="swatch" style="background: var(--focus)"></span>Focus <span data-metric="focusMinutes"></span></li>
+      <li><span class="swatch" style="background: var(--scattered)"></span>Scattered <span data-metric="scatteredMinutes"></span></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Time by category <span class="estimate">estimates</span></h2>
+    <div class="bars" data-metric="categories" data-view="bars"></div>
+    <details>
+      <summary>Show as a table</summary>
+      <table>
+        <thead><tr><th scope="col">Category</th><th scope="col">Time</th></tr></thead>
+        <tbody data-metric="categories" data-view="table"></tbody>
+      </table>
+    </details>
+  </section>
+
+  <section>
+    <h2>Sent mail by mailbox</h2>
+    <ul class="items" data-metric="sentMails" data-view="list"></ul>
+  </section>
+
+  <!--wrap:lists-->
+
+  <section>
+    <h2>Sources</h2>
+    <ul class="items" data-metric="coverage" data-view="list"></ul>
+    <!--wrap:notes-->
+  </section>
+</main>
+<div class="tooltip" role="tooltip" hidden></div>
+<script>
+  const METRICS_VERSION = __METRICS_VERSION__;
+  const clock = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const longDate = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const sourceNames = { activity: "Screen activity", sp: "Super Productivity", github: "GitHub", mail: "Mail", calendar: "Calendar" };
+  const statusNames = { partial: "partly available", missing: "not available" };
+
+  const minutesText = (minutes) => {
+    const whole = Math.round(minutes);
+    const hours = Math.floor(whole / 60);
+    const rest = whole % 60;
+    if (hours === 0) return `${rest} min`;
+    return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
+  };
+  const isNumber = (value) => typeof value === "number" && Number.isFinite(value);
+  const element = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+  const showUnmeasured = (node) => node.replaceChildren(element("span", "unmeasured", "Not measured"));
+  const show = (node, text) => {
+    if (text === null) showUnmeasured(node);
+    else node.textContent = text;
+  };
+  const each = (key, view, fill) => {
+    const selector = view ? `[data-metric="${key}"][data-view="${view}"]` : `[data-metric="${key}"]:not([data-view])`;
+    for (const node of document.querySelectorAll(selector)) fill(node);
+  };
+  const tip = (node, text) => {
+    node.dataset.tip = text;
+    node.tabIndex = 0;
+    node.setAttribute("aria-label", text);
+  };
+
+  const fillMinutes = (metrics, key) =>
+    each(key, null, (node) => show(node, isNumber(metrics[key]) ? minutesText(metrics[key]) : null));
+  const fillClock = (metrics, key) =>
+    each(key, null, (node) => {
+      const ms = typeof metrics[key] === "string" ? Date.parse(metrics[key]) : Number.NaN;
+      node.textContent = Number.isNaN(ms) ? "–" : clock.format(ms);
+    });
+  const fillCount = (metrics, key) =>
+    each(key, null, (node) => show(node, isNumber(metrics[key]) ? String(metrics[key]) : null));
+
+  const fillSplit = (metrics) =>
+    each("focusMinutes", "split", (node) => {
+      node.replaceChildren();
+      const { focusMinutes: focus, scatteredMinutes: scattered } = metrics;
+      if (!isNumber(focus) || !isNumber(scattered) || focus + scattered === 0) {
+        node.append(element("p", "empty", isNumber(focus) && isNumber(scattered) ? "No screen time." : "Not measured."));
+        return;
+      }
+      const total = focus + scattered;
+      for (const [label, minutes, color] of [["Focus", focus, "var(--focus)"], ["Scattered", scattered, "var(--scattered)"]]) {
+        if (minutes === 0) continue;
+        const segment = element("div");
+        segment.style.flex = `${minutes} 0 0`;
+        segment.style.background = color;
+        tip(segment, `${label}: ${minutesText(minutes)}, ${Math.round((minutes / total) * 100)}% of screen time`);
+        node.append(segment);
+      }
+    });
+
+  const fillCategories = (metrics) => {
+    const categories = Array.isArray(metrics.categories) ? metrics.categories.filter((category) => isNumber(category.minutes)) : [];
+    const largest = Math.max(0, ...categories.map((category) => category.minutes));
+    each("categories", "bars", (node) => {
+      node.replaceChildren();
+      if (categories.length === 0) {
+        node.append(element("p", "empty", "No categories measured."));
+        return;
+      }
+      for (const category of categories) {
+        const track = element("div", "bar-track");
+        const bar = element("div", "bar");
+        bar.style.width = `${largest === 0 ? 0 : (category.minutes / largest) * 100}%`;
+        const share = isNumber(metrics.activeMinutes) && metrics.activeMinutes > 0 ? `, ${Math.round((category.minutes / metrics.activeMinutes) * 100)}% of screen time` : "";
+        tip(bar, `${category.label}: ${minutesText(category.minutes)}${share} (estimate)`);
+        track.append(bar);
+        node.append(element("div", "bar-label", category.label), track, element("div", "bar-value", minutesText(category.minutes)));
+      }
+    });
+    each("categories", "table", (node) =>
+      node.replaceChildren(
+        ...categories.map((category) => {
+          const label = element("th", "", category.label);
+          label.scope = "row";
+          const row = element("tr");
+          row.append(label, element("td", "number", minutesText(category.minutes)));
+          return row;
+        }),
+      ),
+    );
+  };
+
+  const fillSentMails = (metrics) => {
+    const mailboxes = Array.isArray(metrics.sentMails) ? metrics.sentMails : [];
+    const counted = mailboxes.filter((mailbox) => isNumber(mailbox.count));
+    each("sentMails", "total", (node) =>
+      show(node, counted.length === 0 ? null : String(counted.reduce((sum, mailbox) => sum + mailbox.count, 0))),
+    );
+    each("sentMails", "note", (node) => {
+      node.textContent = counted.length < mailboxes.length ? "Without the mailboxes that weren't measured" : "Across all mailboxes";
+    });
+    each("sentMails", "list", (node) => {
+      const shown = mailboxes.filter((mailbox) => !isNumber(mailbox.count) || mailbox.count > 0);
+      if (shown.length === 0) {
+        node.replaceChildren(element("li", "meta", mailboxes.length === 0 ? "Not measured." : "No mail sent."));
+        return;
+      }
+      node.replaceChildren(
+        ...shown.map((mailbox) => {
+          const item = element("li", "", `${mailbox.mailbox}: `);
+          item.append(isNumber(mailbox.count) ? String(mailbox.count) : element("span", "unmeasured", "Not measured"));
+          return item;
+        }),
+      );
+    });
+  };
+
+  const fillCoverage = (metrics) =>
+    each("coverage", "list", (node) => {
+      const gaps = (Array.isArray(metrics.coverage) ? metrics.coverage : []).filter((entry) => entry.status !== "complete");
+      if (gaps.length === 0) {
+        node.replaceChildren(element("li", "meta", "Every measured source was complete."));
+        return;
+      }
+      node.replaceChildren(
+        ...gaps.map((entry) => {
+          const [kind, ...rest] = String(entry.source).split(":");
+          const detail = rest.join(":");
+          const name = `${sourceNames[kind] ?? kind}${detail ? ` (${detail})` : ""}`;
+          return element("li", "", `${name}: ${statusNames[entry.status] ?? entry.status}`);
+        }),
+      );
+    });
+
+  const fill = (metricsVersion, metrics) => {
+    const notice = document.querySelector("[data-version-notice]");
+    const version = metrics.metricsVersion ?? metricsVersion;
+    notice.hidden = version === METRICS_VERSION;
+    notice.textContent = "These numbers come from a different metrics version than this report was built for, so some may be missing. Running /wrap again for this day rebuilds it.";
+    each("day", null, (node) => {
+      const ms = Date.parse(`${metrics.day}T12:00:00Z`);
+      if (!Number.isNaN(ms)) node.textContent = longDate.format(ms);
+    });
+    for (const key of ["activeMinutes", "focusMinutes", "scatteredMinutes", "offComputerMinutes", "appointmentMinutes", "appointmentOffScreenMinutes"]) fillMinutes(metrics, key);
+    for (const key of ["firstActivityAt", "lastActivityAt"]) fillClock(metrics, key);
+    fillCount(metrics, "landedPrs");
+    fillSplit(metrics);
+    fillCategories(metrics);
+    fillSentMails(metrics);
+    fillCoverage(metrics);
+  };
+
+  const postHeight = () => {
+    window.parent.postMessage({ type: "postlude:report-height", height: Math.ceil(document.body.getBoundingClientRect().height) }, "*");
+  };
+
+  window.addEventListener("message", (event) => {
+    if (event.source !== window.parent) return;
+    const data = event.data;
+    if (typeof data !== "object" || data === null || data.type !== "postlude:day-metrics") return;
+    if (typeof data.dayMetrics !== "object" || data.dayMetrics === null) return;
+    document.documentElement.dataset.theme = data.theme === "dark" ? "dark" : "light";
+    fill(data.metricsVersion, data.dayMetrics);
+    postHeight();
+  });
+
+  const tooltip = document.querySelector(".tooltip");
+  const place = (target, x, y) => {
+    tooltip.textContent = target.dataset.tip;
+    tooltip.hidden = false;
+    const width = tooltip.offsetWidth;
+    tooltip.style.left = `${Math.max(4, Math.min(x + 12, window.innerWidth - width - 4))}px`;
+    tooltip.style.top = `${Math.max(4, y - 34)}px`;
+  };
+  document.addEventListener("pointermove", (event) => {
+    const target = event.target instanceof Element ? event.target.closest("[data-tip]") : null;
+    if (target) place(target, event.clientX, event.clientY);
+    else tooltip.hidden = true;
+  });
+  document.addEventListener("focusin", (event) => {
+    const target = event.target instanceof Element ? event.target.closest("[data-tip]") : null;
+    if (!target) return;
+    const box = target.getBoundingClientRect();
+    place(target, box.left, box.top);
+  });
+  const hideTooltip = () => {
+    tooltip.hidden = true;
+  };
+  document.addEventListener("focusout", hideTooltip);
+  document.addEventListener("pointerleave", hideTooltip);
+
+  new ResizeObserver(postHeight).observe(document.body);
+</script>
+</body>
+</html>
