@@ -1,5 +1,5 @@
 import { compareText } from "./compare.ts";
-import { type DayWindow, toBerlinClock, toBerlinDate } from "./day.ts";
+import { type DayWindow, eventOnDay, toBerlinClock, toBerlinDate } from "./day.ts";
 import type { CalendarEvent, Sources } from "./sources.ts";
 
 /** A thread counts as open for several days once it was created this many days before the end of the journal day. */
@@ -73,13 +73,6 @@ const landedPrs = (reading: Sources["github"], window: DayWindow): ReportInputs[
   return { status: reading.value.incomplete ? "partial" : "complete", items };
 };
 
-const coversDay = (event: CalendarEvent, window: DayWindow): boolean => {
-  if (event.allDay) return event.start.slice(0, 10) <= window.day && window.day <= event.end.slice(0, 10);
-  const start = Date.parse(event.start);
-  const end = Date.parse(event.end);
-  return start < window.endMs && end > window.startMs;
-};
-
 const appointments = (reading: Sources["calendar"], window: DayWindow): ReportInputs["appointments"] => {
   if (!reading.ok) return missing();
   const accounts = reading.value.accounts;
@@ -87,10 +80,17 @@ const appointments = (reading: Sources["calendar"], window: DayWindow): ReportIn
   if (reachable.length === 0) return missing();
   const seen = new Set<string>();
   const events: CalendarEvent[] = [];
+  // A meeting whose answer couldn't be read is left out, as in metrics.ts.
+  let unanswered = false;
   for (const account of reachable) {
     for (const event of account.events) {
+      if (event.cancelled || event.declined === true || !eventOnDay(event, window)) continue;
+      if (event.declined === null) {
+        unanswered = true;
+        continue;
+      }
       const key = JSON.stringify([event.summary, event.start, event.end, event.allDay]);
-      if (seen.has(key) || !coversDay(event, window)) continue;
+      if (seen.has(key)) continue;
       seen.add(key);
       events.push(event);
     }
@@ -101,7 +101,7 @@ const appointments = (reading: Sources["calendar"], window: DayWindow): ReportIn
       time: event.allDay ? null : `${toBerlinClock(Date.parse(event.start))}–${toBerlinClock(Date.parse(event.end))}`,
       title: event.summary,
     }));
-  const complete = accounts.every((account) => account.failure === null) && !reading.value.limitReached;
+  const complete = accounts.every((account) => account.failure === null) && !reading.value.limitReached && !unanswered;
   return { status: complete ? "complete" : "partial", items };
 };
 

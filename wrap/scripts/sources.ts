@@ -30,6 +30,9 @@ export type CalendarEvent = {
   readonly start: string;
   readonly end: string;
   readonly allDay: boolean;
+  readonly cancelled: boolean;
+  /** Whether the account declined a meeting someone else organizes on the journal day; null when its answer couldn't be read. */
+  readonly declined: boolean | null;
 };
 
 /** pim lists an account's failure beside the events it could read, so an account can have both. */

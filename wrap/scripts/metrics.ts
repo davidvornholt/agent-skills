@@ -8,10 +8,10 @@
 // Definitions:
 // - Activity numbers and categories are copied from the activity summary (Contract 1). They are null when the summary is unavailable or every host is missing.
 // - offComputerMinutes: time tracked in Super Productivity on the day on tasks tagged OFF_COMPUTER_TAG, or whose parent task carries the tag. Only tasks without subtasks count, because a parent's tracked time is the sum of its subtasks'. SP files time under its own date keys, which follow its "start of next day" setting rather than the 04:00 journal boundary.
-// - appointmentMinutes: the union of all timed calendar events, clipped to the journal day, so overlapping events count once. All-day events don't count.
-// - appointmentOffScreenMinutes: the part of that union outside the active screen intervals of both hosts. It needs `activeIntervals` in the activity summary and every host complete, because screen time on a host that wasn't fully read would count as off screen.
+// - appointmentMinutes: the union of all timed calendar events, clipped to the journal day, so overlapping events count once. All-day events, cancelled events, and meetings the account's own attendee entry declined don't count. A meeting whose answer couldn't be read is left out, and its calendar is partial.
+// - appointmentOffScreenMinutes: the part of that union outside the summary's activeIntervals. It needs every activity host complete, because screen time on a host that wasn't fully read would count as off screen.
 // - landedPrs: pull requests authored by the davidvornholt account and merged during the journal day, in any repository.
-// - sentMails: messages in each mailbox's Sent folder dated within the journal day.
+// - sentMails: messages in each mailbox's Sent folder dated within the journal day, except the test mailboxes in collect.ts.
 
 import { compareText } from "./compare.ts";
 import type { DayWindow } from "./day.ts";
@@ -19,7 +19,7 @@ import { clip, type Interval, subtract, totalMinutes, union } from "./intervals.
 import type { CalendarEvent, Reading, SentMailData, Sources, SpData } from "./sources.ts";
 
 export const METRICS_VERSION = 1;
-export const SUMMARY_VERSION = 1;
+export const SUMMARY_VERSION = 2;
 export const OFF_COMPUTER_TAG = "off-computer";
 
 export type CoverageStatus = "complete" | "partial" | "missing";
@@ -75,7 +75,7 @@ export const parseSummary = (raw: unknown, day: string): Summary => {
   if (!isRecord(raw)) throw new Error("the activity summary is not a JSON object");
   if (raw.summaryVersion !== SUMMARY_VERSION) {
     throw new Error(
-      `the activity summary has summaryVersion ${String(raw.summaryVersion)}, but the metrics read version ${SUMMARY_VERSION}; update metrics.ts and bump METRICS_VERSION`,
+      `the activity summary has summaryVersion ${String(raw.summaryVersion)}, but the metrics read version ${SUMMARY_VERSION}; rebuild this host if its activity-digest is older, or update metrics.ts and bump METRICS_VERSION if the summary changed`,
     );
   }
   if (raw.day !== day) throw new Error(`the activity summary is for ${String(raw.day)}, not ${day}`);
@@ -91,15 +91,11 @@ export const parseSummary = (raw: unknown, day: string): Summary => {
     }
     return { id: category.id, label: category.label, minutes: category.minutes };
   });
-  // activeIntervals is not in Contract 1 yet; without it the off-screen appointment time stays null.
-  let activeIntervals: Interval[] | null = null;
-  if (raw.activeIntervals !== undefined) {
-    if (!Array.isArray(raw.activeIntervals)) throw new Error("activeIntervals is not a list");
-    activeIntervals = raw.activeIntervals.map((interval, index) => {
-      if (!isRecord(interval) || !isInstant(interval.start) || !isInstant(interval.end)) throw new Error(`activeIntervals[${index}] needs a start and an end`);
-      return { start: Date.parse(interval.start), end: Date.parse(interval.end) };
-    });
-  }
+  if (!Array.isArray(raw.activeIntervals)) throw new Error("activeIntervals is not a list");
+  const activeIntervals = raw.activeIntervals.map((interval, index) => {
+    if (!isRecord(interval) || !isInstant(interval.start) || !isInstant(interval.end)) throw new Error(`activeIntervals[${index}] needs a start and an end`);
+    return { start: Date.parse(interval.start), end: Date.parse(interval.end) };
+  });
   return {
     hosts,
     activeMinutes: minutesOrNull(raw.activeMinutes, "activeMinutes"),
@@ -126,14 +122,8 @@ const activityPart = (reading: Reading<unknown>, day: string): Part<Summary | nu
     .map((host) => ({ source: `activity:${host.host}`, status: host.status }))
     .toSorted((a, b) => compareText(a.source, b.source));
   if (coverage.length === 0) coverage.push({ source: "activity", status: "missing" });
-  const problems: string[] = [];
   const allComplete = summary.hosts.every((host) => host.status === "complete");
-  if (summary.activeIntervals === null) {
-    coverage.push({ source: "activity:intervals", status: "missing" });
-    problems.push("The activity summary has no activeIntervals, so off-screen appointment time is unknown.");
-  } else if (!allComplete) {
-    problems.push("Some activity hosts were not complete, so off-screen appointment time is unknown.");
-  }
+  const problems = allComplete ? [] : ["Some activity hosts were not complete, so off-screen appointment time is unknown."];
   const anyHost = summary.hosts.some((host) => host.status !== "missing");
   return { value: anyHost ? { ...summary, activeIntervals: allComplete ? summary.activeIntervals : null } : null, coverage, problems };
 };
@@ -216,8 +206,13 @@ const calendarPart = (reading: Sources["calendar"], window: DayWindow): Part<Cal
     anyAccount = true;
     let status: CoverageStatus = failure !== null || reading.value.limitReached ? "partial" : "complete";
     if (failure !== null) problems.push(`Some calendar events of ${account} were unreadable: ${failure}`);
+    let unanswered = false;
     for (const event of events) {
-      if (event.allDay) continue;
+      if (event.allDay || event.cancelled || event.declined === true) continue;
+      if (event.declined === null) {
+        unanswered = true;
+        continue;
+      }
       const interval = toInterval(event);
       if (interval === null) {
         status = "partial";
@@ -225,6 +220,10 @@ const calendarPart = (reading: Sources["calendar"], window: DayWindow): Part<Cal
       } else {
         intervals.push(interval);
       }
+    }
+    if (unanswered) {
+      status = "partial";
+      problems.push(`The user's answer to some meetings in the calendar of ${account} couldn't be read, so they are left out.`);
     }
     coverage.push({ source, status });
   }

@@ -3,12 +3,14 @@
 import { Database } from "bun:sqlite";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { addDays, type DayWindow } from "./day.ts";
+import { addDays, type DayWindow, eventOnDay } from "./day.ts";
 import type { CalendarAccount, CalendarEvent, GithubData, LandedPr, Reading, SentMailData, Sources, SpData, SpTask, T3Thread } from "./sources.ts";
 
 const GITHUB_ACCOUNT = "davidvornholt";
-// Super Productivity runs on the X1, and T3 Code keeps its state on the z890.
-const SP_HOST = "david-x1-nixos";
+// pim reads these test accounts, but their sent mail isn't the user's.
+const TEST_MAILBOXES = new Set(["tester.test.legal@gmail.com", "testing.acc.david01@outlook.com"]);
+// Both hosts run a Super Productivity copy that syncs through SuperSync, and T3 Code keeps its state on the z890.
+const SP_HOSTS = ["david-x1-nixos", "david-z890-nixos"];
 const T3_HOST = "david-z890-nixos";
 const COMMAND_TIMEOUT_MS = 120_000;
 const CALENDAR_LIMIT = 1000;
@@ -61,9 +63,6 @@ const parseList = <T>(reading: Reading<unknown>, what: string, parse: (item: unk
 
 const readSummary = (day: string): Promise<Reading<unknown>> => runJson(["activity-digest", day, "--summary-json"]);
 
-// sp itself honours SP_HOST, and the X1 can't reach itself over SSH.
-const spHostArgs = (host: string): string[] => (process.env.SP_HOST || host === SP_HOST ? [] : ["--host", SP_HOST]);
-
 const parseTask = (item: unknown): SpTask => {
   if (!isRecord(item) || typeof item.id !== "string") throw new Error("a task has no id");
   const timeSpentOnDay: Record<string, number> = {};
@@ -88,8 +87,7 @@ const parseNamed = (item: unknown): { id: string; title: string } => {
   return { id: item.id, title: stringOr(item.title, "") };
 };
 
-const readSp = async (localHost: string): Promise<Reading<SpData>> => {
-  const host = spHostArgs(localHost);
+const readSpCopy = async (host: readonly string[]): Promise<Reading<SpData>> => {
   const tasks = parseList(await runJson(["sp", "tasks", "list", ...host, "--include-done", "--source", "all"]), "sp tasks", parseTask);
   if (!tasks.ok) return tasks;
   const tags = parseList(await runJson(["sp", "tags", "list", ...host]), "sp tags", parseNamed);
@@ -97,6 +95,15 @@ const readSp = async (localHost: string): Promise<Reading<SpData>> => {
   const projects = parseList(await runJson(["sp", "projects", "list", ...host]), "sp projects", parseNamed);
   if (!projects.ok) return projects;
   return ok({ tasks: tasks.value, tags: tags.value, projects: projects.value });
+};
+
+// The local copy comes first. sp itself honours SP_HOST, and a host can't reach itself over SSH.
+const readSp = async (localHost: string): Promise<Reading<SpData>> => {
+  const local = await readSpCopy([]);
+  const other = SP_HOSTS.find((host) => host !== localHost);
+  if (local.ok || process.env.SP_HOST || other === undefined) return local;
+  const remote = await readSpCopy(["--host", other]);
+  return remote.ok ? remote : failed(`${local.error}; on ${other}: ${remote.error}`);
 };
 
 const readGithub = async (window: DayWindow): Promise<Reading<GithubData>> => {
@@ -161,8 +168,10 @@ const readSentMail = async (email: string, window: DayWindow): Promise<Reading<S
   }
 };
 
+type ListedEvent = Omit<CalendarEvent, "declined"> & { readonly href: string; readonly needsAnswer: boolean };
+
 type CalendarCall = {
-  readonly events: readonly (CalendarEvent & { readonly account: string })[];
+  readonly events: readonly (ListedEvent & { readonly account: string })[];
   readonly failures: ReadonlyMap<string, string>;
   readonly limitReached: boolean;
 };
@@ -178,13 +187,33 @@ const callCalendar = async (window: DayWindow): Promise<Reading<CalendarCall>> =
     if (!isRecord(event) || typeof event.account !== "string" || typeof event.start !== "string" || typeof event.end !== "string") {
       return failed("a calendar event has no account, start, or end");
     }
-    events.push({ account: event.account, summary: stringOr(event.summary, ""), start: event.start, end: event.end, allDay: event.allDay === true });
+    const listed = { summary: stringOr(event.summary, ""), start: event.start, end: event.end, allDay: event.allDay === true };
+    const cancelled = stringOr(event.status, "").toLowerCase() === "cancelled";
+    // Only a meeting someone else organizes has an answer from the user.
+    const invited = typeof event.attendees === "number" && event.attendees > 0 && stringOr(event.organizer, "").toLowerCase() !== event.account.toLowerCase();
+    events.push({
+      ...listed,
+      account: event.account,
+      href: stringOr(event.href, ""),
+      cancelled,
+      needsAnswer: invited && !cancelled && eventOnDay(listed, window),
+    });
   }
   const failures = new Map<string, string>();
   for (const failure of Array.isArray(body.failures) ? body.failures : []) {
     if (isRecord(failure)) failures.set(stringOr(failure.account, "unknown account"), PIM_FAILURE);
   }
   return ok({ events, failures, limitReached: events.length >= CALENDAR_LIMIT });
+};
+
+// The event list doesn't say how the user answered, so a meeting someone else organizes is read once more.
+const isDeclined = async (account: string, event: Pick<ListedEvent, "href" | "needsAnswer">): Promise<boolean | null> => {
+  if (!event.needsAnswer) return false;
+  if (event.href === "") return null;
+  const detail = await runJson(["pim", "calendar", "get", "--account", account, "--href", event.href]);
+  if (!detail.ok || !isRecord(detail.value) || !Array.isArray(detail.value.attendees)) return null;
+  const own = detail.value.attendees.find((attendee) => isRecord(attendee) && stringOr(attendee.email, "").toLowerCase() === account.toLowerCase());
+  return isRecord(own) && own.partstat === "declined";
 };
 
 const readCalendar = async (window: DayWindow, accounts: readonly string[]): Promise<Reading<{ accounts: CalendarAccount[]; limitReached: boolean }>> => {
@@ -204,11 +233,12 @@ const readCalendar = async (window: DayWindow, accounts: readonly string[]): Pro
     const call = first.ok && !first.value.failures.has(account) ? first.value : second.ok ? second.value : first.ok ? first.value : null;
     if (call === null) continue;
     limitReached ||= call.limitReached;
-    perAccount.push({
-      account,
-      events: call.events.filter((event) => event.account === account).map(({ account: _, ...event }) => event),
-      failure: call.failures.get(account) ?? null,
-    });
+    const events: CalendarEvent[] = [];
+    for (const listed of call.events.filter((event) => event.account === account)) {
+      const { account: _, href: __, needsAnswer: ___, ...event } = listed;
+      events.push({ ...event, declined: await isDeclined(account, listed) });
+    }
+    perAccount.push({ account, events, failure: call.failures.get(account) ?? null });
   }
   return ok({ accounts: perAccount, limitReached });
 };
@@ -224,7 +254,7 @@ const readPim = async (window: DayWindow): Promise<PimReadings> => {
     accounts.value.filter((account) => account.calendar).map((account) => account.email),
   );
   const mailboxes = [];
-  for (const account of accounts.value.filter((candidate) => candidate.mail)) {
+  for (const account of accounts.value.filter((candidate) => candidate.mail && !TEST_MAILBOXES.has(candidate.email.toLowerCase()))) {
     mailboxes.push({ mailbox: account.email, reading: await readSentMail(account.email, window) });
   }
   return { mail: ok(mailboxes), calendar };

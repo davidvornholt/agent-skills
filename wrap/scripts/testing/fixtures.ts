@@ -1,11 +1,11 @@
 import { dayWindow } from "../day.ts";
-import type { Sources, SpTask } from "../sources.ts";
+import type { CalendarEvent, Sources, SpTask } from "../sources.ts";
 
 export const DAY = "2026-10-29";
 export const WINDOW = dayWindow(DAY);
 
 export const summary = {
-  summaryVersion: 1,
+  summaryVersion: 2,
   day: DAY,
   window: { start: WINDOW.start, end: WINDOW.end },
   hosts: [
@@ -41,6 +41,13 @@ const task = (fields: Partial<SpTask> & Pick<SpTask, "id" | "title">): SpTask =>
   subTaskIds: [],
   tagIds: [],
   timeSpentOnDay: {},
+  ...fields,
+});
+
+export const event = (fields: Partial<CalendarEvent> & Pick<CalendarEvent, "summary" | "start" | "end">): CalendarEvent => ({
+  allDay: false,
+  cancelled: false,
+  declined: false,
   ...fields,
 });
 
@@ -117,18 +124,20 @@ export const sources: Sources = {
           account: "me@example.com",
           failure: null,
           events: [
-            { summary: "Standup", start: "2026-10-29T10:00:00+01:00", end: "2026-10-29T11:00:00+01:00", allDay: false },
-            { summary: "Review", start: "2026-10-29T10:30:00+01:00", end: "2026-10-29T11:30:00+01:00", allDay: false },
-            { summary: "Lunch", start: "2026-10-29T12:00:00+01:00", end: "2026-10-29T13:00:00+01:00", allDay: false },
-            { summary: "Holiday", start: "2026-10-29", end: "2026-10-29", allDay: true },
-            { summary: "Night train", start: "2026-10-30T03:30:00+01:00", end: "2026-10-30T05:00:00+01:00", allDay: false },
-            { summary: "Before the day", start: "2026-10-29T02:00:00+01:00", end: "2026-10-29T03:00:00+01:00", allDay: false },
+            event({ summary: "Standup", start: "2026-10-29T10:00:00+01:00", end: "2026-10-29T11:00:00+01:00" }),
+            event({ summary: "Review", start: "2026-10-29T10:30:00+01:00", end: "2026-10-29T11:30:00+01:00" }),
+            event({ summary: "Lunch", start: "2026-10-29T12:00:00+01:00", end: "2026-10-29T13:00:00+01:00" }),
+            event({ summary: "Holiday", start: "2026-10-29", end: "2026-10-29", allDay: true }),
+            event({ summary: "Night train", start: "2026-10-30T03:30:00+01:00", end: "2026-10-30T05:00:00+01:00" }),
+            event({ summary: "Before the day", start: "2026-10-29T02:00:00+01:00", end: "2026-10-29T03:00:00+01:00" }),
+            event({ summary: "Moved call", start: "2026-10-29T14:00:00+01:00", end: "2026-10-29T15:00:00+01:00", cancelled: true }),
+            event({ summary: "Declined sync", start: "2026-10-29T19:00:00+01:00", end: "2026-10-29T20:00:00+01:00", declined: true }),
           ],
         },
         {
           account: "work@example.com",
           failure: null,
-          events: [{ summary: "Standup", start: "2026-10-29T10:00:00+01:00", end: "2026-10-29T11:00:00+01:00", allDay: false }],
+          events: [event({ summary: "Standup", start: "2026-10-29T10:00:00+01:00", end: "2026-10-29T11:00:00+01:00" })],
         },
       ],
     },

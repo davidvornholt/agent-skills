@@ -21,7 +21,7 @@ You write only the summary. Don't compute, estimate, or correct numbers yourself
    bun ~/.claude/skills/wrap/scripts/wrap.ts collect "$DAY" > "/tmp/wrap-$DAY.json"
    ```
 
-3. Read `reportInputs` and `problems`. If the user can fix a missing source now, such as Super Productivity not running on the X1, say so and offer to collect again. Otherwise continue, because the report shows a missing source as a gap rather than as zero.
+3. Read `reportInputs` and `problems`. If the user can fix a missing source now, such as Super Productivity running on neither host, say so and offer to collect again. Otherwise continue, because the report shows a missing source as a gap rather than as zero.
 4. Write two to four plain sentences that describe what the day held, based on the lists. Don't rate, judge, or advise, and don't use digits: `render` rejects them, because the report takes its numbers only from the metrics.
 5. Render and store. Re-running for a day replaces only the agent area, so it's safe after fixing a source.
 

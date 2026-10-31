@@ -6,7 +6,15 @@ import type { Collected } from "./day-report.ts";
 import { DAY, spTasks, summary, WINDOW } from "./testing/fixtures.ts";
 
 const COMMANDS = ["activity-digest", "sp", "gh", "pim", "ssh"];
-const SECRETS = ["SECRET-SUBJECT", "secret-recipient@example.com", "SECRET-BODY", "SECRET-CALENDAR-LINE", "SECRET-SEARCH-ERROR", "SECRET-STDERR"];
+const SECRETS = [
+  "SECRET-SUBJECT",
+  "secret-recipient@example.com",
+  "SECRET-BODY",
+  "SECRET-CALENDAR-LINE",
+  "SECRET-SEARCH-ERROR",
+  "SECRET-STDERR",
+  "SECRET-DESCRIPTION",
+];
 
 const directory = mkdtempSync(join(tmpdir(), "wrap-collect-"));
 const bin = join(directory, "bin");
@@ -29,6 +37,18 @@ const standup = {
   allDay: false,
 };
 const review = { ...standup, account: "work@example.com", uid: "2", summary: "Review", start: "2026-10-29T14:00:00+01:00", end: "2026-10-29T15:30:00+01:00" };
+// Someone else organizes the planning meeting, and the user declined it; the moved call was cancelled.
+const planning = {
+  ...standup,
+  href: "/planning",
+  uid: "3",
+  summary: "Planning",
+  start: "2026-10-29T16:00:00+01:00",
+  end: "2026-10-29T17:00:00+01:00",
+  organizer: "boss@example.com",
+  attendees: 2,
+};
+const moved = { ...standup, uid: "4", summary: "Moved call", start: "2026-10-29T18:00:00+01:00", end: "2026-10-29T19:00:00+01:00", status: "cancelled" };
 // The work mailbox sends enough mail to fill the first page inside the day, so the search has to grow.
 // pim quotes the line it can't parse, so the flaky calendar's failure holds private text.
 const unparseable = { account: "flaky@example.com", errorTag: "CalendarDataError", message: "Invalid iCalendar line: DESCRIPTION:SECRET-CALENDAR-LINE" };
@@ -36,6 +56,8 @@ const busyDay = Array.from({ length: 200 }, (_, index) => hit(new Date(Date.pars
 
 const fixtures = {
   [key("activity-digest", DAY, "--summary-json")]: { stdout: summary },
+  // This host's Super Productivity copy has no sync token, so the collection reads the X1's copy.
+  [key("sp", "tasks", "list", "--include-done", "--source", "all")]: { stderr: "TokenUnavailable", exitCode: 1 },
   [key("sp", "tasks", "list", ...sp, "--include-done", "--source", "all")]: { stdout: spTasks.map((task) => ({ ...task, notes: "SECRET-BODY", created: 0 })) },
   [key("sp", "tags", "list", ...sp)]: { stdout: [{ id: "t-off", title: "off-computer", color: "#fff" }] },
   [key("sp", "projects", "list", ...sp)]: {
@@ -64,6 +86,7 @@ const fixtures = {
       { email: "work@example.com", name: "Work", mail: {}, graph: {} },
       { email: "broken@example.com", name: "Broken", mail: {} },
       { email: "flaky@example.com", name: "Flaky", mail: {}, dav: {} },
+      { email: "tester.test.legal@gmail.com", name: "Test", mail: {} },
     ],
   },
   // The work calendar fails on the first call and answers on the retry, and the flaky calendar fails both times.
@@ -72,12 +95,22 @@ const fixtures = {
       stdout: {
         from: DAY,
         to: "2026-10-30",
-        events: [standup],
+        events: [standup, planning, moved],
         failures: [{ account: "work@example.com", errorTag: "Timeout", message: "timed out" }, unparseable],
       },
     },
-    { stdout: { from: DAY, to: "2026-10-30", events: [standup, review], failures: [unparseable] } },
+    { stdout: { from: DAY, to: "2026-10-30", events: [standup, planning, moved, review], failures: [unparseable] } },
   ],
+  [key("pim", "calendar", "get", "--account", "me@example.com", "--href", "/planning")]: {
+    stdout: {
+      ...planning,
+      description: "SECRET-DESCRIPTION",
+      attendees: [
+        { email: "boss@example.com", partstat: "accepted" },
+        { email: "Me@Example.com", name: "Me", partstat: "declined" },
+      ],
+    },
+  },
   [key("pim", "mail", "folders", "--account", "me@example.com")]: {
     stdout: [
       { path: "INBOX", name: "Inbox", specialUse: "\\Inbox" },
@@ -182,7 +215,7 @@ test("only reads", () => {
     const words = args.join(" ");
     if (command === "gh") return args[0] === "api" && args[1] === "--method" && args[2] === "GET" && args[3] === "search/issues";
     if (command === "sp") return /^(tasks|tags|projects) list\b/.test(words);
-    if (command === "pim") return /^(accounts|calendar events|mail folders|mail search)\b/.test(words);
+    if (command === "pim") return /^(accounts|calendar (events|get)|mail folders|mail search)\b/.test(words);
     if (command === "ssh") return args.at(-1) === "bun ~/.claude/skills/wrap/scripts/wrap.ts t3-threads";
     return command === "activity-digest" && args.includes("--summary-json");
   };
@@ -190,7 +223,25 @@ test("only reads", () => {
   expect(calls.filter((call) => !readOnly(call))).toEqual([]);
 });
 
+test("leaves out cancelled and declined meetings, asking once for the answer to a meeting someone else organizes", () => {
+  expect(collected.reportInputs.appointments.items.map((item) => item.title)).toEqual(["Standup", "Review"]);
+  expect(calls.filter((call) => call[1] === "calendar" && call[2] === "get")).toHaveLength(1);
+});
+
+test("skips the test mailboxes", () => {
+  expect(calls.some((call) => call.includes("tester.test.legal@gmail.com"))).toBe(false);
+});
+
+test("reads the other host's Super Productivity copy when the local one fails", () => {
+  expect(calls.filter((call) => call[0] === "sp").map((call) => call.slice(1, 3).concat(call.includes("--host") ? ["remote"] : []))).toEqual([
+    ["tasks", "list"],
+    ["tasks", "list", "remote"],
+    ["tags", "list", "remote"],
+    ["projects", "list", "remote"],
+  ]);
+});
+
 test("retries the calendar once and grows the mail search until it reaches before the day", () => {
-  expect(calls.filter((call) => call[1] === "calendar")).toHaveLength(2);
+  expect(calls.filter((call) => call[1] === "calendar" && call[2] === "events")).toHaveLength(2);
   expect(calls.filter((call) => call[2] === "search" && call[4] === "work@example.com").map((call) => call.at(-1))).toEqual(["200", "800"]);
 });

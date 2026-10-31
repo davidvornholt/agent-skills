@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { computeDayMetrics, METRICS_VERSION, parseSummary } from "./metrics.ts";
 import type { Sources } from "./sources.ts";
-import { DAY, sources, summary, WINDOW } from "./testing/fixtures.ts";
+import { DAY, event, sources, summary, WINDOW } from "./testing/fixtures.ts";
 
 const metrics = (changes: Partial<Sources> = {}) => computeDayMetrics(WINDOW, { ...sources, ...changes });
 const unavailable = { ok: false, error: "unreachable" } as const;
@@ -76,9 +76,9 @@ test("unreachable sources become missing coverage and null numbers, never zero",
 
 describe("activity", () => {
   test("rejects a summary of another version or day instead of guessing", () => {
-    expect(() => parseSummary({ ...summary, summaryVersion: 2 }, DAY)).toThrow(/summaryVersion 2/);
+    expect(() => parseSummary({ ...summary, summaryVersion: 1 }, DAY)).toThrow(/summaryVersion 1/);
     expect(() => parseSummary(summary, "2026-10-28")).toThrow(/not 2026-10-28/);
-    const { dayMetrics, problems } = metrics({ summary: { ok: true, value: { ...summary, summaryVersion: 2 } } });
+    const { dayMetrics, problems } = metrics({ summary: { ok: true, value: { ...summary, summaryVersion: 1 } } });
     expect(dayMetrics.activeMinutes).toBeNull();
     expect(dayMetrics.coverage[0]).toEqual({ source: "activity", status: "missing" });
     expect(problems[0]).toStartWith("Activity summary unusable");
@@ -95,13 +95,9 @@ describe("activity", () => {
     ]);
   });
 
-  test("leaves the off-screen appointment time null without active intervals", () => {
+  test("rejects a summary without active intervals", () => {
     const { activeIntervals: _, ...withoutIntervals } = summary;
-    const { dayMetrics, problems } = metrics({ summary: { ok: true, value: withoutIntervals } });
-    expect(dayMetrics.appointmentMinutes).toBe(180);
-    expect(dayMetrics.appointmentOffScreenMinutes).toBeNull();
-    expect(dayMetrics.coverage).toContainEqual({ source: "activity:intervals", status: "missing" });
-    expect(problems).toContain("The activity summary has no activeIntervals, so off-screen appointment time is unknown.");
+    expect(() => parseSummary(withoutIntervals, DAY)).toThrow(/activeIntervals is not a list/);
   });
 
   test("leaves the off-screen appointment time null unless every host is complete", () => {
@@ -175,13 +171,26 @@ describe("appointments", () => {
     ok: true,
     value: { accounts, limitReached },
   });
-  const standup = { summary: "Standup", start: "2026-10-29T10:00:00+01:00", end: "2026-10-29T11:00:00+01:00", allDay: false };
+  const standup = event({ summary: "Standup", start: "2026-10-29T10:00:00+01:00", end: "2026-10-29T11:00:00+01:00" });
 
   test("ignore all-day events", () => {
     const value = calendar([
-      { account: "me@example.com", failure: null, events: [standup, { summary: "Trip", start: "2026-10-28", end: "2026-10-30", allDay: true }] },
+      { account: "me@example.com", failure: null, events: [standup, event({ summary: "Trip", start: "2026-10-28", end: "2026-10-30", allDay: true })] },
     ]);
     expect(metrics({ calendar: value }).dayMetrics.appointmentMinutes).toBe(60);
+  });
+
+  test("leave out a meeting whose answer couldn't be read and mark its calendar partial", () => {
+    const unanswered = event({ summary: "Planning", start: "2026-10-29T16:00:00+01:00", end: "2026-10-29T17:00:00+01:00", declined: null });
+    const value = calendar([
+      { account: "me@example.com", failure: null, events: [standup, unanswered, { ...unanswered, start: "2026-10-29T18:00:00+01:00" }] },
+    ]);
+    const { dayMetrics, problems } = metrics({ calendar: value });
+    expect(dayMetrics.appointmentMinutes).toBe(60);
+    expect(coverageOf({ calendar: value }, "calendar")).toEqual([{ source: "calendar:me@example.com", status: "partial" }]);
+    expect(problems).toEqual(
+      expect.arrayContaining(["The user's answer to some meetings in the calendar of me@example.com couldn't be read, so they are left out."]),
+    );
   });
 
   test("count an account that failed with some events as partial, and one that failed without any as missing", () => {

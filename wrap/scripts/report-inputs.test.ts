@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { buildCollected } from "./day-report.ts";
 import { buildReportInputs } from "./report-inputs.ts";
 import type { Sources } from "./sources.ts";
-import { sources, WINDOW } from "./testing/fixtures.ts";
+import { event, sources, WINDOW } from "./testing/fixtures.ts";
 
 test("builds the lists of a day with all sources", () => {
   expect(buildReportInputs(WINDOW, sources)).toEqual({
@@ -63,6 +63,15 @@ test("marks appointments partial when an account failed", () => {
     },
   };
   expect(buildReportInputs(WINDOW, { ...sources, calendar }).appointments).toEqual({ status: "partial", items: [] });
+});
+
+test("leaves out a meeting whose answer couldn't be read and marks appointments partial", () => {
+  const events = [
+    event({ summary: "Standup", start: "2026-10-29T10:00:00+01:00", end: "2026-10-29T11:00:00+01:00" }),
+    event({ summary: "Planning", start: "2026-10-29T16:00:00+01:00", end: "2026-10-29T17:00:00+01:00", declined: null }),
+  ];
+  const calendar: Sources["calendar"] = { ok: true, value: { limitReached: false, accounts: [{ account: "me@example.com", failure: null, events }] } };
+  expect(buildReportInputs(WINDOW, { ...sources, calendar }).appointments).toEqual({ status: "partial", items: [{ time: "10:00–11:00", title: "Standup" }] });
 });
 
 test("reads only whether Kontor needs approval", () => {
