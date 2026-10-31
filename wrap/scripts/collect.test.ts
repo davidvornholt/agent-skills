@@ -14,6 +14,7 @@ const SECRETS = [
   "SECRET-SEARCH-ERROR",
   "SECRET-STDERR",
   "SECRET-DESCRIPTION",
+  "SECRET-SP-DETAIL",
 ];
 
 const directory = mkdtempSync(join(tmpdir(), "wrap-collect-"));
@@ -198,8 +199,42 @@ const fixtures = {
   },
 };
 
+// sp passes Super Productivity's error message and details on as they are.
+const spError = (tag: string) => ({
+  stderr: `${JSON.stringify({ error: { tag, message: "Task SECRET-SP-DETAIL failed", status: 500, details: { title: "SECRET-SP-DETAIL" } } })}\n`,
+  exitCode: 1,
+});
+const spDownFixtures = {
+  ...fixtures,
+  [key("sp", "tasks", "list", "--include-done", "--source", "all")]: spError("AppUnreachable"),
+  [key("sp", "tasks", "list", ...sp, "--include-done", "--source", "all")]: spError("Ssh"),
+};
+
+type Run = { readonly collected: Collected; readonly calls: string[][]; readonly stderr: string };
+
+const collect = async (name: string, answers: object): Promise<Run> => {
+  const state = join(directory, name);
+  mkdirSync(state);
+  writeFileSync(join(state, "fixtures.json"), JSON.stringify(answers));
+  // Only the fakes are on PATH, so kontor is a command that doesn't exist, and SP_HOST is unset.
+  const child = Bun.spawn([process.execPath, join(import.meta.dir, "testing/collect-day.ts"), DAY, "test-host"], {
+    env: { PATH: bin, HOME: directory, FAKE_CLI_FIXTURES: join(state, "fixtures.json"), FAKE_CLI_STATE: state },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+  if (exitCode !== 0) throw new Error(`collect-day failed: ${stderr}`);
+  const calls = readFileSync(join(state, "calls.jsonl"), "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as string[]);
+  return { collected: JSON.parse(stdout) as Collected, calls, stderr };
+};
+
 let collected: Collected;
 let calls: string[][];
+let stderr: string;
+let spDown: Run;
 
 beforeAll(async () => {
   mkdirSync(bin);
@@ -208,20 +243,7 @@ beforeAll(async () => {
     writeFileSync(shim, `#!/bin/sh\nexec "${process.execPath}" "${join(import.meta.dir, "testing/fake-cli.ts")}" ${command} "$@"\n`);
     chmodSync(shim, 0o755);
   }
-  writeFileSync(join(directory, "fixtures.json"), JSON.stringify(fixtures));
-  // Only the fakes are on PATH, so kontor is a command that doesn't exist, and SP_HOST is unset.
-  const child = Bun.spawn([process.execPath, join(import.meta.dir, "testing/collect-day.ts"), DAY, "test-host"], {
-    env: { PATH: bin, HOME: directory, FAKE_CLI_FIXTURES: join(directory, "fixtures.json"), FAKE_CLI_STATE: directory },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
-  if (exitCode !== 0) throw new Error(`collect-day failed: ${stderr}`);
-  collected = JSON.parse(stdout) as Collected;
-  calls = readFileSync(join(directory, "calls.jsonl"), "utf8")
-    .trim()
-    .split("\n")
-    .map((line) => JSON.parse(line) as string[]);
+  [{ collected, calls, stderr }, spDown] = await Promise.all([collect("all", fixtures), collect("sp-down", spDownFixtures)]);
 }, 60_000);
 
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
@@ -272,9 +294,10 @@ test("says where pim failed but withholds its error text", () => {
   );
 });
 
-test("never passes on mail subjects, recipients, notes, or pim's error text", () => {
-  const output = JSON.stringify(collected);
-  for (const secret of SECRETS) expect(output).not.toContain(secret);
+test("never passes on mail subjects, recipients, notes, or pim's or sp's error text", () => {
+  for (const output of [JSON.stringify(collected), stderr, JSON.stringify(spDown.collected), spDown.stderr]) {
+    for (const secret of SECRETS) expect(output).not.toContain(secret);
+  }
 });
 
 test("only reads", () => {
@@ -311,6 +334,10 @@ test("reads the other host's Super Productivity copy when the local one fails", 
     ["tags", "list", "remote"],
     ["projects", "list", "remote"],
   ]);
+});
+
+test("names Super Productivity's error tags but withholds their messages when both copies fail", () => {
+  expect(spDown.collected.problems).toContain("Super Productivity unavailable: sp exited with 1: AppUnreachable; on david-x1-nixos: sp exited with 1: Ssh");
 });
 
 test("retries the calendar once and grows the mail search until it reaches before the day", () => {

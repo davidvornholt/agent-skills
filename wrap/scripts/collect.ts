@@ -20,6 +20,8 @@ const T3_CONCURRENCY = 6;
 // pim's error text can quote mail or calendar text, so only these fixed diagnostics stand in for it.
 const PIM_WITHHELD = "its message is withheld because it can quote mail or calendar text";
 const PIM_FAILURE = `pim reported an error; ${PIM_WITHHELD}`;
+// sp prints Super Productivity's error message and details as they are, so only the tag of its JSON error, such as AppUnreachable, passes.
+const SP_UNTAGGED = "; it printed no error tag, and its error text is withheld";
 
 const ok = <T>(value: T): Reading<T> => ({ ok: true, value });
 const failed = <T>(error: string): Reading<T> => ({ ok: false, error });
@@ -28,13 +30,22 @@ const messageOf = (error: unknown): string => (error instanceof Error ? error.me
 
 const firstLine = (text: string): string => text.trim().split("\n")[0]?.slice(0, 300) ?? "";
 
+const spFailureDetail = (stderr: string): string => {
+  try {
+    const tag: unknown = JSON.parse(stderr)?.error?.tag;
+    return typeof tag === "string" && /^[A-Za-z][A-Za-z0-9]{0,63}$/.test(tag) ? `: ${tag}` : SP_UNTAGGED;
+  } catch {
+    return SP_UNTAGGED;
+  }
+};
+
 /** The command's stdout never appears in an error, because it may hold mail details. */
 export const runJson = async (command: readonly string[]): Promise<Reading<unknown>> => {
   try {
     const child = Bun.spawn([...command], { stdin: "ignore", stdout: "pipe", stderr: "pipe", timeout: COMMAND_TIMEOUT_MS });
     const [stdout, stderr, exitCode] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
     if (exitCode !== 0) {
-      const detail = command[0] === "pim" ? `; ${PIM_WITHHELD}` : `: ${firstLine(stderr)}`;
+      const detail = command[0] === "pim" ? `; ${PIM_WITHHELD}` : command[0] === "sp" ? spFailureDetail(stderr) : `: ${firstLine(stderr)}`;
       return failed(`${command[0]} exited with ${exitCode}${child.signalCode ? ` (${child.signalCode})` : ""}${detail}`);
     }
     try {
