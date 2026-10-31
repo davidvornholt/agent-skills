@@ -80,7 +80,6 @@ const appointments = (reading: Sources["calendar"], window: DayWindow): ReportIn
   if (reachable.length === 0) return missing();
   const seen = new Set<string>();
   const events: CalendarEvent[] = [];
-  // A meeting whose answer couldn't be read is left out, as in metrics.ts.
   let unanswered = false;
   for (const account of reachable) {
     for (const event of account.events) {

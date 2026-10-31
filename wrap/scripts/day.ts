@@ -95,7 +95,6 @@ export const dayWindow = (day: string): DayWindow => {
   return { day, start: toBerlinIso(startMs), end: toBerlinIso(endMs), startMs, endMs };
 };
 
-/** Whether a calendar event falls on the journal day; an all-day event counts on each date it spans. */
 export const eventOnDay = (event: { readonly start: string; readonly end: string; readonly allDay: boolean }, window: DayWindow): boolean => {
   if (event.allDay) return event.start.slice(0, 10) <= window.day && window.day <= event.end.slice(0, 10);
   return Date.parse(event.start) < window.endMs && Date.parse(event.end) > window.startMs;

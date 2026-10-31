@@ -37,7 +37,6 @@ const standup = {
   allDay: false,
 };
 const review = { ...standup, account: "work@example.com", uid: "2", summary: "Review", start: "2026-10-29T14:00:00+01:00", end: "2026-10-29T15:30:00+01:00" };
-// Someone else organizes the planning meeting, and the user declined it; the moved call was cancelled.
 const planning = {
   ...standup,
   href: "/planning",
@@ -56,7 +55,6 @@ const busyDay = Array.from({ length: 200 }, (_, index) => hit(new Date(Date.pars
 
 const fixtures = {
   [key("activity-digest", DAY, "--summary-json")]: { stdout: summary },
-  // This host's Super Productivity copy has no sync token, so the collection reads the X1's copy.
   [key("sp", "tasks", "list", "--include-done", "--source", "all")]: { stderr: "TokenUnavailable", exitCode: 1 },
   [key("sp", "tasks", "list", ...sp, "--include-done", "--source", "all")]: { stdout: spTasks.map((task) => ({ ...task, notes: "SECRET-BODY", created: 0 })) },
   [key("sp", "tags", "list", ...sp)]: { stdout: [{ id: "t-off", title: "off-computer", color: "#fff" }] },
