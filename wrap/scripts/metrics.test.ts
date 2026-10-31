@@ -77,6 +77,8 @@ test("unreachable sources become missing coverage and null numbers, never zero",
 describe("activity", () => {
   test("rejects a summary of another version or day instead of guessing", () => {
     expect(() => parseSummary({ ...summary, summaryVersion: 1 }, DAY)).toThrow(/summaryVersion 1/);
+    // A host whose activity-digest predates the Windows split.
+    expect(() => parseSummary({ ...summary, summaryVersion: 2 }, DAY)).toThrow(/summaryVersion 2/);
     expect(() => parseSummary(summary, "2026-10-28")).toThrow(/not 2026-10-28/);
     const { dayMetrics, problems } = metrics({ summary: { ok: true, value: { ...summary, summaryVersion: 1 } } });
     expect(dayMetrics.activeMinutes).toBeNull();
