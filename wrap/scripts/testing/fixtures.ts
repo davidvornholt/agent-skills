@@ -5,7 +5,7 @@ export const DAY = "2026-10-29";
 export const WINDOW = dayWindow(DAY);
 
 export const summary = {
-  summaryVersion: 2,
+  summaryVersion: 3,
   day: DAY,
   window: { start: WINDOW.start, end: WINDOW.end },
   hosts: [
