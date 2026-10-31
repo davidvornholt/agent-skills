@@ -35,6 +35,6 @@ You write only the summary. Don't compute, estimate, or correct numbers yourself
 
 ## Changing the metrics or report
 
-The definitions are in `scripts/metrics.ts`. Bump `METRICS_VERSION` with any change to a definition, even when the output shape stays the same, because Postlude doesn't compare days of different versions.
+The definitions and their versioning rule are in `scripts/metrics.ts`.
 
 Run `bun run check` from the repository root after any change.
