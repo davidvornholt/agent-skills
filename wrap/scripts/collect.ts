@@ -168,7 +168,7 @@ const readSentMail = async (email: string, window: DayWindow): Promise<Reading<S
   }
 };
 
-type ListedEvent = Omit<CalendarEvent, "declined"> & { readonly href: string; readonly needsAnswer: boolean };
+type ListedEvent = Omit<CalendarEvent, "declined"> & { readonly href: string; readonly recurrenceId: string | null; readonly needsAnswer: boolean };
 
 type CalendarCall = {
   readonly events: readonly (ListedEvent & { readonly account: string })[];
@@ -195,6 +195,7 @@ const callCalendar = async (window: DayWindow): Promise<Reading<CalendarCall>> =
       ...listed,
       account: event.account,
       href: stringOr(event.href, ""),
+      recurrenceId: stringOr(event.recurrenceId, null),
       cancelled,
       needsAnswer: invited && !cancelled && eventOnDay(listed, window),
     });
@@ -207,13 +208,19 @@ const callCalendar = async (window: DayWindow): Promise<Reading<CalendarCall>> =
 };
 
 // The event list doesn't say how the user answered, so a meeting someone else organizes is read once more.
-const isDeclined = async (account: string, event: Pick<ListedEvent, "href" | "needsAnswer">): Promise<boolean | null> => {
+const isDeclined = async (account: string, event: Pick<ListedEvent, "href" | "recurrenceId" | "needsAnswer">): Promise<boolean | null> => {
   if (!event.needsAnswer) return false;
   if (event.href === "") return null;
   const detail = await runJson(["pim", "calendar", "get", "--account", account, "--href", event.href]);
-  if (!detail.ok || !isRecord(detail.value) || !Array.isArray(detail.value.attendees)) return null;
-  const own = detail.value.attendees.find((attendee) => isRecord(attendee) && stringOr(attendee.email, "").toLowerCase() === account.toLowerCase());
-  return isRecord(own) && own.partstat === "declined";
+  if (!detail.ok || !isRecord(detail.value)) return null;
+  // A CalDAV href holds the whole series; an occurrence answered on its own lists its attendees under recurrence.changed.
+  const { recurrence } = detail.value;
+  const changed = isRecord(recurrence) && Array.isArray(recurrence.changed) ? recurrence.changed : [];
+  const occurrence = changed.find((change) => isRecord(change) && change.recurrenceId === event.recurrenceId && Array.isArray(change.attendees));
+  const attendees = isRecord(occurrence) ? occurrence.attendees : detail.value.attendees;
+  if (!Array.isArray(attendees)) return null;
+  const own = attendees.find((attendee) => isRecord(attendee) && stringOr(attendee.email, "").toLowerCase() === account.toLowerCase());
+  return isRecord(own) ? own.partstat === "declined" : null;
 };
 
 const readCalendar = async (window: DayWindow, accounts: readonly string[]): Promise<Reading<{ accounts: CalendarAccount[]; limitReached: boolean }>> => {
@@ -235,7 +242,7 @@ const readCalendar = async (window: DayWindow, accounts: readonly string[]): Pro
     limitReached ||= call.limitReached;
     const events: CalendarEvent[] = [];
     for (const listed of call.events.filter((event) => event.account === account)) {
-      const { account: _, href: __, needsAnswer: ___, ...event } = listed;
+      const { account: _, href: __, recurrenceId: ___, needsAnswer: ____, ...event } = listed;
       events.push({ ...event, declined: await isDeclined(account, listed) });
     }
     perAccount.push({ account, events, failure: call.failures.get(account) ?? null });

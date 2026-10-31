@@ -48,6 +48,26 @@ const planning = {
   attendees: 2,
 };
 const moved = { ...standup, uid: "4", summary: "Moved call", start: "2026-10-29T18:00:00+01:00", end: "2026-10-29T19:00:00+01:00", status: "cancelled" };
+// An occurrence of a weekly series the user accepted, declined on its own.
+const weekly = {
+  ...planning,
+  href: "/weekly",
+  uid: "5",
+  summary: "Weekly sync",
+  start: "2026-10-29T12:00:00+01:00",
+  end: "2026-10-29T13:00:00+01:00",
+  recurrenceId: "2026-10-29T12:00:00+01:00",
+};
+// The invitation went to an alias, so the work calendar never holds the user's own answer.
+const aliased = {
+  ...planning,
+  account: "work@example.com",
+  href: "/aliased",
+  uid: "6",
+  summary: "All hands",
+  start: "2026-10-29T20:00:00+01:00",
+  end: "2026-10-29T21:00:00+01:00",
+};
 // The work mailbox sends enough mail to fill the first page inside the day, so the search has to grow.
 // pim quotes the line it can't parse, so the flaky calendar's failure holds private text.
 const unparseable = { account: "flaky@example.com", errorTag: "CalendarDataError", message: "Invalid iCalendar line: DESCRIPTION:SECRET-CALENDAR-LINE" };
@@ -93,11 +113,11 @@ const fixtures = {
       stdout: {
         from: DAY,
         to: "2026-10-30",
-        events: [standup, planning, moved],
+        events: [standup, planning, moved, weekly],
         failures: [{ account: "work@example.com", errorTag: "Timeout", message: "timed out" }, unparseable],
       },
     },
-    { stdout: { from: DAY, to: "2026-10-30", events: [standup, planning, moved, review], failures: [unparseable] } },
+    { stdout: { from: DAY, to: "2026-10-30", events: [standup, planning, moved, weekly, review, aliased], failures: [unparseable] } },
   ],
   [key("pim", "calendar", "get", "--account", "me@example.com", "--href", "/planning")]: {
     stdout: {
@@ -106,6 +126,55 @@ const fixtures = {
       attendees: [
         { email: "boss@example.com", partstat: "accepted" },
         { email: "Me@Example.com", name: "Me", partstat: "declined" },
+      ],
+    },
+  },
+  [key("pim", "calendar", "get", "--account", "me@example.com", "--href", "/weekly")]: {
+    stdout: {
+      ...planning,
+      href: "/weekly",
+      summary: "Weekly sync",
+      start: "2026-10-01T12:00:00+02:00",
+      end: "2026-10-01T13:00:00+02:00",
+      description: "SECRET-DESCRIPTION",
+      attendees: [
+        { email: "boss@example.com", partstat: "accepted" },
+        { email: "me@example.com", partstat: "accepted" },
+      ],
+      recurrence: {
+        rule: "FREQ=WEEKLY",
+        excluded: [],
+        changed: [
+          {
+            recurrenceId: "2026-10-22T12:00:00+02:00",
+            start: "2026-10-22T12:00:00+02:00",
+            end: "2026-10-22T13:00:00+02:00",
+            attendees: [
+              { email: "boss@example.com", partstat: "accepted" },
+              { email: "me@example.com", partstat: "accepted" },
+              { email: "guest@example.com", partstat: "accepted" },
+            ],
+          },
+          {
+            recurrenceId: weekly.recurrenceId,
+            start: weekly.start,
+            end: weekly.end,
+            attendees: [
+              { email: "boss@example.com", partstat: "accepted" },
+              { email: "me@example.com", partstat: "declined" },
+            ],
+          },
+        ],
+      },
+    },
+  },
+  [key("pim", "calendar", "get", "--account", "work@example.com", "--href", "/aliased")]: {
+    stdout: {
+      ...aliased,
+      description: "SECRET-DESCRIPTION",
+      attendees: [
+        { email: "boss@example.com", partstat: "accepted" },
+        { email: "alias@example.com", partstat: "accepted" },
       ],
     },
   },
@@ -180,7 +249,8 @@ test("reads every source into the metrics", () => {
     { source: "mail:work@example.com", status: "complete" },
     { source: "calendar:flaky@example.com", status: "missing" },
     { source: "calendar:me@example.com", status: "complete" },
-    { source: "calendar:work@example.com", status: "complete" },
+    // The user's answer to the aliased All hands couldn't be read.
+    { source: "calendar:work@example.com", status: "partial" },
   ]);
   expect(collected.reportInputs.landedPrs.items).toEqual([{ repository: "davidvornholt/agent-skills", title: "Add the day report" }]);
   expect(collected.reportInputs.settledThreads.items).toEqual([{ title: "Settled today", project: "postlude" }]);
@@ -223,7 +293,11 @@ test("only reads", () => {
 
 test("leaves out cancelled and declined meetings, asking once for the answer to a meeting someone else organizes", () => {
   expect(collected.reportInputs.appointments.items.map((item) => item.title)).toEqual(["Standup", "Review"]);
-  expect(calls.filter((call) => call[1] === "calendar" && call[2] === "get")).toHaveLength(1);
+  expect(calls.filter((call) => call[1] === "calendar" && call[2] === "get").map((call) => call.at(-1))).toEqual(["/planning", "/weekly", "/aliased"]);
+});
+
+test("leaves out a meeting whose answer has no entry for the account, and says why its calendar is partial", () => {
+  expect(collected.problems).toContain("The user's answer to some meetings in the calendar of work@example.com couldn't be read, so they are left out.");
 });
 
 test("skips the test mailboxes", () => {
