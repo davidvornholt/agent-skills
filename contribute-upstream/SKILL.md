@@ -7,6 +7,8 @@ description: Use when contributing a change to a project the user doesn't mainta
 
 The user contributes to projects they don't maintain from a fork. A change gets a pull request in the fork first and is reviewed there, usually with review-fix. It goes upstream only when the user decides to send it. Upstream's conventions apply, not the user's own standards.
 
+Issues that `review-fix` files from a fork pull request go in the fork, with `gh issue create -R <owner>/<fork>`, because `gh` can otherwise default to upstream. Say in the issue whether the defect also exists on upstream. File an issue upstream only when the user decides to.
+
 Before branching, sync the fork with `gh repo sync <owner>/<fork>`, then branch from upstream's default branch. The fork's default branch only mirrors upstream. If upstream moves on before the upstream pull request is open, rebase onto it and run the checks again.
 
 Write the upstream pull request in upstream's template, and follow its contribution guide, including the checks it asks for. Write as the user, in a friendly tone: open with a short greeting and say why the change matters, then fill in the template. Link the fork pull request as the review record. Say what changed since that review, such as a resolved conflict or code moved to pass a check. For a breaking change, say who is affected and what they should use instead.
