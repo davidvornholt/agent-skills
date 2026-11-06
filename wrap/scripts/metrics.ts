@@ -19,7 +19,7 @@ import { clip, type Interval, subtract, totalMinutes, union } from "./intervals.
 import type { CalendarEvent, Reading, SentMailData, Sources, SpData } from "./sources.ts";
 
 export const METRICS_VERSION = 4;
-export const SUMMARY_VERSION = 5;
+export const SUMMARY_VERSION = 6;
 export const OFF_COMPUTER_TAG = "off-computer";
 
 export type CoverageStatus = "complete" | "partial" | "missing";

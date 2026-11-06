@@ -83,6 +83,8 @@ describe("activity", () => {
     expect(() => parseSummary({ ...summary, summaryVersion: 3 }, DAY)).toThrow(/summaryVersion 3/);
     // A host whose activity-digest predates sorting browser pages and documents.
     expect(() => parseSummary({ ...summary, summaryVersion: 4 }, DAY)).toThrow(/summaryVersion 4/);
+    // A host whose activity-digest still calls a running day partial over snapshot lag.
+    expect(() => parseSummary({ ...summary, summaryVersion: 5 }, DAY)).toThrow(/summaryVersion 5/);
     expect(() => parseSummary(summary, "2026-10-28")).toThrow(/not 2026-10-28/);
     const { dayMetrics, problems } = metrics({ summary: { ok: true, value: { ...summary, summaryVersion: 1 } } });
     expect(dayMetrics.activeMinutes).toBeNull();
