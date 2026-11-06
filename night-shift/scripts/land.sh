@@ -34,6 +34,7 @@ for _ in $(seq 1 45); do
   sleep 60
 done
 [[ $s == SUCCESS && $m == CLEAN ]] || { log "CI not green and clean within 45 min"; exit 1; }
+[[ -n $head ]] || { log "no head commit read, not merging"; exit 1; }
 [[ $(gh pr view "$P" -R "$R" --json headRefOid -q .headRefOid) == "$head" ]] || { log "head moved, not merging"; exit 1; }
 
 gh pr merge "$P" -R "$R" --squash --match-head-commit "$head" >/dev/null || { log "merge failed"; exit 1; }
