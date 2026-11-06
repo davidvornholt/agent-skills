@@ -1,0 +1,46 @@
+{
+  "title": "Night shift 6–7 Nov 2026",
+  "heading": "Night shift, 6–7 November",
+  "status": "Final, 08:00 CET",
+  "lede": "What the shift did, what went wrong, and what is left for the user, in two or three sentences.",
+  "source": "~/documents/reports/Night shift 2026-11-06.md (full text) and the worker logs in ~/dev/night-shift-worktrees/notes/",
+  "built": "7 Nov 2026, 08:00 CET",
+  "merge_chart_title": "3 PRs merged across 2 repos",
+  "merge_chart_sub": "Each merge deployed through its own run, and none was reverted.",
+  "health_title": "Health checks: 11 of 12 endpoints passed at 02:00, and all passed otherwise",
+  "tiles": [
+    { "label": "Merged", "value": "3", "sub": "PRs in 2 repos" },
+    { "label": "Issues", "value": "2 fixed", "sub": "1 closed as already fixed, 9 skipped" },
+    { "label": "Usage", "value": "40%", "sub": "of the Claude weekly limit" }
+  ],
+  "health": [{ "time": "23:30", "state": "12/12" }, { "time": "02:00", "state": "11/12" }, { "time": "07:30", "state": "12/12" }],
+  "merges": [{ "repo": "wordhold", "fix": 2, "dep": 0, "sync": 0 }, { "repo": "rota", "fix": 0, "dep": 1, "sync": 0 }],
+  "decisions": [
+    {
+      "n": 1,
+      "title": "Merge the deploy fix while you can watch it",
+      "effort": "Merge + watch one deploy",
+      "area": "owner/repo#123 · what it affects",
+      "stake": "What happens with each choice, for someone who has forgotten the background.",
+      "facts": ["A fact the decision rests on, which you checked yourself."],
+      "options": [
+        { "key": "a", "title": "Merge and watch the deploy", "recommended": true, "note": "Why this is the recommendation." },
+        { "key": "b", "title": "Leave it open" }
+      ],
+      "why": "Optional: why the recommendation holds.",
+      "links": [{ "label": "PR #123", "href": "https://github.com/owner/repo/pull/123" }]
+    }
+  ],
+  "detail_sections": [
+    "Smaller decisions",
+    "Merged tonight",
+    "Issues",
+    "Super Productivity upstream",
+    "Still open",
+    "Deploys and health",
+    "Social",
+    "Cleanup",
+    "Not touched"
+  ],
+  "inline_footer": "Full report with every section: ~/documents/reports/Night shift 2026-11-06.html (and .md)."
+}
