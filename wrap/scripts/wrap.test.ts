@@ -23,7 +23,7 @@ test("render prints the stdin for postlude agent-area put", async () => {
   expect(result.exitCode).toBe(0);
   const payload = JSON.parse(result.stdout);
   expect(payload.dayMetrics).toEqual(collected.dayMetrics);
-  expect(payload.metricsVersion).toBe(4);
+  expect(payload.metricsVersion).toBe(5);
   expect(payload.reportModel).toBe("claude-opus-5-5");
   expect(payload.reportHtml).toContain('<p class="summary">A calm day.</p>');
 });

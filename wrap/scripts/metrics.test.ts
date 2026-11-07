@@ -85,6 +85,8 @@ describe("activity", () => {
     expect(() => parseSummary({ ...summary, summaryVersion: 4 }, DAY)).toThrow(/summaryVersion 4/);
     // A host whose activity-digest still calls a running day partial over snapshot lag.
     expect(() => parseSummary({ ...summary, summaryVersion: 5 }, DAY)).toThrow(/summaryVersion 5/);
+    // A host whose activity-digest predates counting Windows used at the desk.
+    expect(() => parseSummary({ ...summary, summaryVersion: 6 }, DAY)).toThrow(/summaryVersion 6/);
     expect(() => parseSummary(summary, "2026-10-28")).toThrow(/not 2026-10-28/);
     const { dayMetrics, problems } = metrics({ summary: { ok: true, value: { ...summary, summaryVersion: 1 } } });
     expect(dayMetrics.activeMinutes).toBeNull();
