@@ -6,7 +6,7 @@
 // - missing: the source was unreachable, and its numbers are null.
 //
 // Definitions:
-// - Activity numbers and categories are copied from the activity summary (Contract 1). They are null when the summary is unavailable or every host is missing. Since summary version 7 (metrics version 5) they include the time David uses the Windows VM directly at the desk, not only while it is streamed.
+// - Activity numbers and categories are copied from the activity summary (Contract 1). They are null when the summary is unavailable or every host is missing. Since summary version 7 (metrics version 5) they include the time David uses the Windows VM directly at the desk, not only while it is streamed. Since summary version 8 (metrics version 6) Learning also counts more school subjects, their topics and school course pages.
 // - offComputerMinutes: time tracked in Super Productivity on the day on tasks tagged OFF_COMPUTER_TAG, or whose parent task carries the tag. Only tasks without subtasks count, because a parent's tracked time is the sum of its subtasks'. SP files time under its own date keys, which follow its "start of next day" setting rather than the 04:00 journal boundary.
 // - appointmentMinutes: the union of all timed calendar events, clipped to the journal day, so overlapping events count once. All-day events, cancelled events, and meetings the account's own attendee entry declined don't count. A meeting whose answer couldn't be read is left out, and its calendar is partial.
 // - appointmentOffScreenMinutes: the part of that union outside the summary's activeIntervals. It needs every activity host complete, because screen time on a host that wasn't fully read would count as off screen.
@@ -18,8 +18,8 @@ import type { DayWindow } from "./day.ts";
 import { clip, type Interval, subtract, totalMinutes, union } from "./intervals.ts";
 import type { CalendarEvent, Reading, SentMailData, Sources, SpData } from "./sources.ts";
 
-export const METRICS_VERSION = 5;
-export const SUMMARY_VERSION = 7;
+export const METRICS_VERSION = 6;
+export const SUMMARY_VERSION = 8;
 export const OFF_COMPUTER_TAG = "off-computer";
 
 export type CoverageStatus = "complete" | "partial" | "missing";

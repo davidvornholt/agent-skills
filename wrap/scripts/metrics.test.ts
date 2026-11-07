@@ -87,6 +87,8 @@ describe("activity", () => {
     expect(() => parseSummary({ ...summary, summaryVersion: 5 }, DAY)).toThrow(/summaryVersion 5/);
     // A host whose activity-digest predates counting Windows used at the desk.
     expect(() => parseSummary({ ...summary, summaryVersion: 6 }, DAY)).toThrow(/summaryVersion 6/);
+    // A host whose activity-digest predates the wider Learning category.
+    expect(() => parseSummary({ ...summary, summaryVersion: 7 }, DAY)).toThrow(/summaryVersion 7/);
     expect(() => parseSummary(summary, "2026-10-28")).toThrow(/not 2026-10-28/);
     const { dayMetrics, problems } = metrics({ summary: { ok: true, value: { ...summary, summaryVersion: 1 } } });
     expect(dayMetrics.activeMinutes).toBeNull();
