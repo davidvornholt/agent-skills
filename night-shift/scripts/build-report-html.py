@@ -1,50 +1,25 @@
 #!/usr/bin/env python3
-"""Build the visual night-shift report from the markdown report plus the data below.
+"""Build the night-shift morning report page from its data file.
 
-Usage: python3 build-report-html.py <report.md> <out.html> <data.json> [inline]
-Needs pandoc on PATH (nix shell nixpkgs#pandoc). report-data.example.json shows the data file's shape.
-With inline, the page uses the host's theme and leaves out the overview and details, for showing inside a session.
+Usage: python3 build-report-html.py <data.json> <out.html> [inline]
+report-data.example.json shows the data file's shape. With inline, the page uses the host's theme, for html_render.
 """
 import html
 import json
 import re
-import subprocess
 import sys
 
-MD_PATH, OUT_PATH, DATA_PATH = sys.argv[1], sys.argv[2], sys.argv[3]
-MODE = sys.argv[4] if len(sys.argv) > 4 else "full"
+DATA_PATH, OUT_PATH = sys.argv[1], sys.argv[2]
+MODE = sys.argv[3] if len(sys.argv) > 3 else "full"
 
 INLINE_THEME = """:root {
   --page: transparent; --surface: var(--card); --ink: var(--foreground); --ink-2: var(--muted-foreground); --muted: var(--muted-foreground);
   --grid: var(--border); --axis: var(--border); --ring: var(--border);
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
-  --good-text: var(--success, #0ca30c); --accent-wash: color-mix(in srgb, var(--s1) 12%, transparent);
+  --good-text: var(--success, #0ca30c); --bad-text: var(--destructive, #d03b3b); --accent-wash: color-mix(in srgb, var(--s1) 12%, transparent);
 }
 """
 DATA = json.load(open(DATA_PATH))
-
-md = open(MD_PATH).read()
-
-if DATA.get("social_log"):
-    times = re.findall(r"^\d+\. (\d{2}:\d{2}) \*\*", open(DATA["social_log"]).read(), re.M)
-    DATA["linkedin"] = [{"t": "22:30", "n": 0}] + [{"t": t, "n": i + 1} for i, t in enumerate(times)]
-
-
-def pandoc(fragment: str) -> str:
-    out = subprocess.run(
-        ["pandoc", "-f", "gfm", "-t", "html5", "--wrap=none"],
-        input=fragment, capture_output=True, text=True, check=True,
-    ).stdout
-    # Tables scroll horizontally on narrow screens.
-    out = out.replace("<table>", '<div class="table-wrap"><table>').replace("</table>", "</table></div>")
-    return out
-
-
-def section(title: str) -> str:
-    m = re.search(rf"^## {re.escape(title)}\n(.*?)(?=^## |\Z)", md, re.S | re.M)
-    return m.group(1).strip() if m else ""
-
-
 e = html.escape
 
 
@@ -107,31 +82,6 @@ def health_item(h: dict) -> str:
 
 
 health = "".join(health_item(h) for h in DATA["health"])
-
-detail_sections = ""
-for title in DATA["detail_sections"]:
-    body = section(title)
-    if not body:
-        continue
-    detail_sections += f"""
-<details class="card detail">
-  <summary><h3>{e(title)}</h3></summary>
-  <div class="md">{pandoc(body)}</div>
-</details>"""
-
-overview_html = pandoc(section("Overview"))
-
-linkedin_figure = ""
-if DATA.get("linkedin"):
-    linkedin_figure = f"""    <figure class="card chart" id="li-chart" aria-labelledby="li-title" style="border-top:1px solid var(--ring)">
-      <figcaption>
-        <span class="chart-title" id="li-title">{e(DATA['linkedin_chart_title'])}</span>
-        <span class="chart-sub">{e(DATA['linkedin_chart_sub'])}</span>
-      </figcaption>
-      <div class="plot" data-chart="linkedin"></div>
-      <details class="tableview"><summary>Show as table</summary><div class="tv"></div></details>
-    </figure>
-"""
 
 page = f"""<!doctype html>
 <html lang="en">
@@ -223,27 +173,16 @@ figcaption {{ display: flex; flex-direction: column; margin-bottom: 6px; }}
 .tip .tv-val {{ font-weight: 600; font-variant-numeric: tabular-nums; }}
 .tip .tv-lab {{ color: var(--ink-2); }}
 .tip .key {{ display: inline-block; width: 10px; height: 2px; margin-right: 6px; vertical-align: 3px; }}
-.tableview summary, details.detail summary {{ cursor: pointer; }}
+.tableview summary {{ cursor: pointer; }}
 .tableview {{ font-size: 13px; margin-top: 6px; color: var(--ink-2); }}
-.tableview table, .md table {{ border-collapse: collapse; width: 100%; font-size: 13.5px; margin: 8px 0; }}
-.tableview th, .tableview td, .md th, .md td {{ text-align: left; border-bottom: 1px solid var(--grid); padding: 5px 8px; vertical-align: top; }}
+.tableview table {{ border-collapse: collapse; width: 100%; font-size: 13.5px; margin: 8px 0; }}
+.tableview th, .tableview td {{ text-align: left; border-bottom: 1px solid var(--grid); padding: 5px 8px; vertical-align: top; }}
 .tableview td.n {{ text-align: right; font-variant-numeric: tabular-nums; }}
-.table-wrap {{ overflow-x: auto; }}
 .health {{ list-style: none; padding: 0; margin: 8px 0; display: flex; flex-wrap: wrap; gap: 8px; }}
 .hc {{ background: var(--surface); border: 1px solid var(--ring); border-radius: 10px; padding: 6px 10px; display: flex; flex-direction: column; min-width: 92px; }}
 .hc-time {{ font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }}
 .hc-state {{ font-size: 13.5px; font-weight: 600; color: var(--good-text); }}
-details.detail summary {{ list-style: none; display: flex; align-items: center; gap: 8px; }}
-details.detail summary::before {{ content: "▸"; color: var(--muted); }}
-details.detail[open] summary::before {{ content: "▾"; }}
-.md {{ margin-top: 10px; }}
-.md ul {{ padding-left: 20px; }}
-.md li {{ margin: 3px 0; }}
-.md code, .card code {{ font-size: 0.9em; background: var(--accent-wash); padding: 0 4px; border-radius: 4px; }}
-.overview ul {{ padding-left: 20px; margin: 6px 0; }}
-.overview li {{ margin: 4px 0; }}
-.two {{ display: grid; grid-template-columns: 1fr; gap: 12px; }}
-@media (min-width: 860px) {{ .two {{ grid-template-columns: 1fr 1fr; }} }}
+.card code {{ font-size: 0.9em; background: var(--accent-wash); padding: 0 4px; border-radius: 4px; }}
 footer {{ margin-top: 40px; font-size: 13px; color: var(--muted); }}
 </style>
 </head>
@@ -259,7 +198,6 @@ footer {{ margin-top: 40px; font-size: 13px; color: var(--muted); }}
   {decisions_html}
 
   <h2>What happened tonight</h2>
-  <div class="two">
     <figure class="card chart" id="merge-chart" aria-labelledby="mc-title" style="border-top:1px solid var(--ring)">
       <figcaption>
         <span class="chart-title" id="mc-title">{e(DATA['merge_chart_title'])}</span>
@@ -271,21 +209,15 @@ footer {{ margin-top: 40px; font-size: 13px; color: var(--muted); }}
       <div class="plot" data-chart="merges"></div>
       <details class="tableview"><summary>Show as table</summary><div class="tv"></div></details>
     </figure>
-{linkedin_figure}  </div>
 
   <h3 style="margin-top:20px">{e(DATA['health_title'])}</h3>
   <ul class="health">{health}</ul>
 
-  <div class="card overview"><h3>Overview</h3>{overview_html}</div>
-
-  <h2>Details</h2>
-  {detail_sections}
-
-  <footer>Source: {e(DATA['source'])}. Built {e(DATA['built'])}.</footer>
+  <footer>Built {e(DATA['built'])}.</footer>
 </main>
 <div class="tip" id="tip" role="status" aria-live="polite"></div>
 <script>
-const DATA = {json.dumps({"merges": DATA["merges"], "linkedin": DATA.get("linkedin", [])})};
+const DATA = {json.dumps({"merges": DATA["merges"]})};
 const NS = "http://www.w3.org/2000/svg";
 const tip = document.getElementById("tip");
 function el(tag, attrs, parent) {{
@@ -364,50 +296,6 @@ function drawMerges() {{
   table(host.parentElement.querySelector(".tv"), ["Repo", "Bug fix", "Dependency or infra", "Standards sync", "Total"], rows.map(r => [r.repo, r.fix, r.dep, r.sync, r.fix + r.dep + r.sync]));
 }}
 
-function drawLinkedIn() {{
-  const host = document.querySelector('[data-chart="linkedin"]');
-  if (!host) return;
-  const pts = DATA.linkedin;
-  const toMin = t => {{ const [h, m] = t.split(":").map(Number); return (h < 12 ? h + 24 : h) * 60 + m; }};
-  const W = Math.max(300, host.clientWidth || 440), H = 220, L = 34, R = 40, T = 12, B = 26;
-  const x0 = toMin("22:30"), x1 = toMin("07:30");
-  const ymax = Math.max(35, ...pts.map(p => p.n));
-  const sx = t => L + (W - L - R) * (toMin(t) - x0) / (x1 - x0), sy = v => T + (H - T - B) * (1 - v / ymax);
-  const svg = el("svg", {{ viewBox: `0 0 ${{W}} ${{H}}`, role: "img", "aria-label": "Line chart of cumulative LinkedIn comments over the night" }}, host);
-  [0, 10, 20, 30].forEach(v => {{
-    el("line", {{ x1: L, x2: W - R, y1: sy(v), y2: sy(v), class: v ? "gridline" : "baseline" }}, svg);
-    txt("text", {{ x: L - 6, y: sy(v) + 4, "text-anchor": "end", class: "tick" }}, v, svg);
-  }});
-  ["23:00", "01:00", "03:00", "05:00", "07:00"].forEach(t => txt("text", {{ x: sx(t), y: H - 6, "text-anchor": "middle", class: "tick" }}, t, svg));
-  const cap = el("line", {{ x1: L, x2: W - R, y1: sy(35), y2: sy(35), stroke: css("--axis"), "stroke-width": 1 }}, svg);
-  txt("text", {{ x: W - R + 4, y: sy(35) + 4, class: "tick" }}, "cap", svg);
-  const area = pts.map((p, i) => `${{i ? "L" : "M"}}${{sx(p.t)}},${{sy(p.n)}}`).join("");
-  el("path", {{ d: area + `L${{sx(pts[pts.length - 1].t)}},${{sy(0)}}L${{sx(pts[0].t)}},${{sy(0)}}Z`, fill: css("--s1"), "fill-opacity": 0.1 }}, svg);
-  el("path", {{ d: area, fill: "none", stroke: css("--s1"), "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }}, svg);
-  const last = pts[pts.length - 1];
-  el("circle", {{ cx: sx(last.t), cy: sy(last.n), r: 4.5, fill: css("--s1"), stroke: css("--surface"), "stroke-width": 2 }}, svg);
-  txt("text", {{ x: sx(last.t) + 8, y: sy(last.n) + 4, class: "val" }}, last.n, svg);
-  const cross = el("line", {{ y1: T, y2: H - B, stroke: css("--axis"), "stroke-width": 1, opacity: 0 }}, svg);
-  const dot = el("circle", {{ r: 4.5, fill: css("--s1"), stroke: css("--surface"), "stroke-width": 2, opacity: 0 }}, svg);
-  const hit = el("rect", {{ x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent", tabindex: 0 }}, svg);
-  function at(i, e) {{
-    const p = pts[i];
-    cross.setAttribute("x1", sx(p.t)); cross.setAttribute("x2", sx(p.t)); cross.setAttribute("opacity", 1);
-    dot.setAttribute("cx", sx(p.t)); dot.setAttribute("cy", sy(p.n)); dot.setAttribute("opacity", 1);
-    showTip(e, [{{ color: css("--s1"), value: p.n, label: "comments so far" }}], p.t);
-  }}
-  hit.addEventListener("pointermove", e => {{
-    const box = svg.getBoundingClientRect(), mx = (e.clientX - box.left) * W / box.width;
-    let best = 0; pts.forEach((p, i) => {{ if (Math.abs(sx(p.t) - mx) < Math.abs(sx(pts[best].t) - mx)) best = i; }});
-    at(best, e);
-  }});
-  let fi = pts.length - 1;
-  hit.addEventListener("focus", e => at(fi, e));
-  hit.addEventListener("keydown", e => {{ if (e.key === "ArrowLeft") fi = Math.max(0, fi - 1); else if (e.key === "ArrowRight") fi = Math.min(pts.length - 1, fi + 1); else return; at(fi, e); e.preventDefault(); }});
-  const off = () => {{ hideTip(); cross.setAttribute("opacity", 0); dot.setAttribute("opacity", 0); }};
-  hit.addEventListener("pointerleave", off); hit.addEventListener("blur", off);
-  table(host.parentElement.querySelector(".tv"), ["Time", "Comments so far"], pts.map(p => [p.t, p.n]));
-}}
 function pickTheme() {{
   const c = document.createElement("canvas").getContext("2d");
   let bg = getComputedStyle(document.body).backgroundColor;
@@ -421,7 +309,7 @@ function pickTheme() {{
 function drawAll() {{
   document.querySelectorAll(".plot").forEach(p => p.replaceChildren());
   document.querySelectorAll(".tv").forEach(p => p.replaceChildren());
-  drawMerges(); drawLinkedIn();
+  drawMerges();
 }}
 drawAll();
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawAll);
@@ -432,7 +320,7 @@ new MutationObserver(drawAll).observe(document.documentElement, {{ attributes: t
 </html>
 """
 if MODE == "inline":
-    # Variant for html_render: no page background, host theme variables, no detail sections.
+    # Variant for html_render: no page background and host theme variables.
     page, n = re.subn(r":root \{\n  color-scheme: light;.*?(?=\* \{ box-sizing)", INLINE_THEME, page, count=1, flags=re.S)
     assert n == 1
     swaps = [
@@ -445,8 +333,6 @@ if MODE == "inline":
     for a, b in swaps:
         assert a in page, a
         page = page.replace(a, b)
-    page = re.sub(r'<div class="card overview">.*?(?=<footer>)', "", page, count=1, flags=re.S)
-    page = re.sub(r"<footer>.*?</footer>", f"<footer>{e(DATA['inline_footer'])}</footer>", page, count=1, flags=re.S)
     page = page.replace("drawAll();\nmatchMedia", "pickTheme(); drawAll();\nmatchMedia")
 open(OUT_PATH, "w").write(page)
 print("wrote", OUT_PATH, len(page))
