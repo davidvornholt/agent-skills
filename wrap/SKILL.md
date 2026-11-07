@@ -1,6 +1,6 @@
 ---
 name: wrap
-description: Close one journal day by storing its metrics and a visual day report in Postlude's agent area. A versioned script computes every number, and the agent writes only a short neutral summary. Never touches journal text or ratings.
+description: Use when the user asks to close a journal day.
 disable-model-invocation: true
 argument-hint: [yesterday | YYYY-MM-DD]
 ---
