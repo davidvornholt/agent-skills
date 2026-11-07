@@ -20,11 +20,11 @@ Scripts named here are in the `scripts` folder next to this file. The user is as
 
 ## Landing
 
-Each change gets one pull request, opened as a draft. Apply the `Review before merge` rule in `AGENTS.md`, and run `review-fix` at most once on a pull request. A review takes 30 to 120 minutes, so don't count a reviewer that is still running as one that didn't report. When the rule applies but `review-fix` can't run, leave the pull request in draft rather than skipping the review.
+Each change gets one pull request, opened as a draft. Follow the rule in `AGENTS.md` on when to run `review-fix`, and run it at most once on a pull request. A review takes 30 to 120 minutes, so don't count a reviewer that is still running as one that didn't report. When the rule applies but `review-fix` can't run, leave the pull request in draft rather than skipping the review.
 
 Land only pull requests opened by `davidvornholt` or by a bot such as Dependabot or the standards sync. List any other in the report for the user.
 
-Merge only with `scripts/land.sh <owner/repo> <pr> [health]`, never with `gh pr merge` or the merge step in `review-fix`, because the script merges only an up-to-date pull request whose checks are green on its exact head. Run it for one pull request at a time per repository, and not while an `ask` or a blocker is open. Exit 2 means the merge landed but a push run isn't green, so check health and the deploy now. Revert a merge that broke production, and report it.
+Merge only with `scripts/land.sh <owner/repo> <pr> [health]`, never with `gh pr merge` or the landing step in `review-fix`, because the script merges only an up-to-date pull request whose checks are green on its exact head. Run it for one pull request at a time per repository, and not while an `ask` or a blocker is open. Exit 2 means the merge landed but a push run isn't green, so check health and the deploy now. Revert a merge that broke production, and report it.
 
 When you're done, remove your worktree with `git worktree remove` once everything in it is pushed.
 
