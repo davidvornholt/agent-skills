@@ -1,0 +1,3 @@
+#!/bin/sh
+# Talks to the host podman service, so containers behave the same inside the private network namespace.
+exec /run/current-system/sw/bin/podman --remote --url "unix:///run/user/$(id -u)/podman/podman.sock" "$@"

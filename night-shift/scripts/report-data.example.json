@@ -1,0 +1,33 @@
+{
+  "title": "Night shift 6–7 Nov 2026",
+  "heading": "Night shift, 6–7 November",
+  "status": "Final, 08:00 CET",
+  "lede": "What the shift did, what went wrong, and what is left for the user, in two or three sentences.",
+  "built": "7 Nov 2026, 08:00 CET",
+  "merge_chart_title": "3 PRs merged across 2 repos",
+  "merge_chart_sub": "Each merge deployed through its own run, and none was reverted.",
+  "health_title": "Health checks: 11 of 12 endpoints passed at 02:00, and all passed otherwise",
+  "tiles": [
+    { "label": "Merged", "value": "3", "sub": "PRs in 2 repos" },
+    { "label": "Issues", "value": "2 fixed", "sub": "1 closed as already fixed, 9 skipped" },
+    { "label": "Reverted", "value": "0", "sub": "merges that broke production" }
+  ],
+  "health": [{ "time": "23:30", "state": "12/12" }, { "time": "02:00", "state": "11/12" }, { "time": "07:30", "state": "12/12" }],
+  "merges": [{ "repo": "wordhold", "fix": 2, "dep": 0, "sync": 0 }, { "repo": "rota", "fix": 0, "dep": 1, "sync": 0 }],
+  "decisions": [
+    {
+      "n": 1,
+      "title": "Decide whether exports include deleted entries",
+      "effort": "One answer",
+      "area": "owner/repo#123 · what it affects",
+      "stake": "What happens with each choice, for someone who has forgotten the background.",
+      "facts": ["A fact the decision rests on, which you checked yourself."],
+      "options": [
+        { "key": "a", "title": "Leave deleted entries out", "recommended": true, "note": "Why this is the recommendation." },
+        { "key": "b", "title": "Include them with a marker" }
+      ],
+      "why": "Optional: why the recommendation holds.",
+      "links": [{ "label": "PR #123", "href": "https://github.com/owner/repo/pull/123" }]
+    }
+  ]
+}
