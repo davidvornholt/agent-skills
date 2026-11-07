@@ -1,6 +1,6 @@
 ---
 name: brief
-description: Morning briefing — yesterday in brief, today's planned tasks, the agent sessions, mail, and GitHub items that need the user, and a suggested focus when nothing is planned. Read-only.
+description: Use when the user asks for their morning brief.
 disable-model-invocation: true
 ---
 
