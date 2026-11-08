@@ -22,11 +22,11 @@ Scripts named here are in the `scripts` folder next to this file. The user is as
 
 ## Landing
 
-Each change gets one pull request, opened as a draft. Follow the rule in `AGENTS.md` on when to run `review-fix`, and run it at most once on a pull request. A review takes 30 to 120 minutes, so don't count a reviewer that is still running as one that didn't report. When the rule applies but `review-fix` can't run, leave the pull request in draft rather than skipping the review.
+Each change gets one pull request, opened as a draft. Follow the prs skill's rule on when to run `review-fix`, and run it at most once on a pull request. A review takes 30 to 120 minutes, so don't count a reviewer that is still running as one that didn't report. When the rule applies but `review-fix` can't run, leave the pull request in draft rather than skipping the review.
 
 Land only pull requests opened by `davidvornholt` or by a bot such as Dependabot or the standards sync. List any other in the report for the user.
 
-Merge with `land` as its skill describes, from inside your worktree, also when `review-fix` lands a pull request. Land one pull request at a time per repository, and not while an `ask` or a blocker is open. In a repository without workflows, log the result of the checks you ran before landing. After a merge into a repository that deploys, run `scripts/health.sh`, and when `land` exits 2, check health and the deploy now. Revert a merge that broke production, and report it.
+Land with the standards CLI's `land` command as the prs skill describes, from inside your worktree, also when `review-fix` lands a pull request. Land one pull request at a time per repository, and not while an `ask` or a blocker is open. In a repository where no workflow runs on pull requests, log the result of the checks you ran before landing. After a merge into a repository that deploys, run `scripts/health.sh`, and when `land` exits 2, check health and the deploy now. Revert a merge that broke production, and report it.
 
 When you're done, remove your worktree with `git worktree remove` once everything in it is pushed.
 
