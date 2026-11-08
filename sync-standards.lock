@@ -1,0 +1,18 @@
+{
+  "upstream": "github:davidvornholt/standards",
+  "sha": "52a9aee9372654b2f95f41cbba097c4445da9451",
+  "files": {
+    ".agents/skills/issues/SKILL.md": "1cb4ec0e6e7ec49530508b9108f1d4cae33fc8ba74fc6b090068924b5fd7a0e4",
+    ".agents/skills/prs/SKILL.md": "185ce8b73b3e816076e78899e93b65551beb60b1fffaa15f7ab51703d007e6ce",
+    ".agents/skills/review-fix/SKILL.md": "cebafecd29815dc60a035d69264faa67fb4037ebdac352bcdc1198147241fb05",
+    ".agents/skills/review/SKILL.md": "c36d6e32df1cd693fbbf5dc95d4ba57ce239c9e38ce7c437f18ddded76dae492",
+    ".agents/skills/standards-sync/agents/openai.yaml": "34a2d5f7474f257663e98a98999106e7d215c51619ce1467eb9f10a5a8e082bd",
+    ".agents/skills/standards-sync/references/github.md": "6c442755166c772dd1d266001e821aec5d88a61fd1e564984440724aab5974c6",
+    ".agents/skills/standards-sync/SKILL.md": "bf6fcfc5afb8ac336770b8eba21d7a7cc88feb8785a127a0d23583dd08070a8f",
+    ".claude/skills": "46e7c0c6e8f3bd5ac2cb8978db058041d60b9034ba2a60c7268777a1438ff117",
+    ".github/actions/sops-secret/action.yml": "c7eaf24946b47f3c5185bc9635739419754423a4d2662c8574197d0888daef7c",
+    ".github/workflows/standards-sync.yml": "c7f47505b3904f876c4482e7f0141375b212087d741f24efe253286b2a619ba2",
+    "AGENTS.md": "b95dec42cffa88526a0428eed7fe8aaed52dd2ea5d211fdb502c3a03b1afc5f1",
+    "sync-standards.json": "3a29db8bd149eb33de5ae75f7f1f13f77eeebe8bea55ae01cd85e11a5b17fc09"
+  }
+}
