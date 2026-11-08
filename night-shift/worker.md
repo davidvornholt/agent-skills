@@ -26,7 +26,7 @@ Each change gets one pull request, opened as a draft. Follow the prs skill's rul
 
 Land only pull requests opened by `davidvornholt` or by a bot such as Dependabot or the standards sync. List any other in the report for the user.
 
-Land with the standards CLI's `land` command as the prs skill describes, from inside your worktree, also when `review-fix` lands a pull request. Land one pull request at a time per repository, and not while an `ask` or a blocker is open. In a repository where no workflow runs on pull requests, log the result of the checks you ran before landing. After a merge into a repository that deploys, run `scripts/health.sh`, and when `land` exits 2, check health and the deploy now. Revert a merge that broke production, and report it.
+Land with the standards CLI's `land` command as the prs skill describes, from inside your worktree, also when `review-fix` lands a pull request. Land one pull request at a time per repository, and not while an `ask` or a blocker is open. In a repository where no workflow runs on pull requests, log the result of the checks you ran before landing. After a merge into a repository that deploys, wait for its deploy run to finish, then run `scripts/health.sh`. Revert a merge that broke production, and report it.
 
 When you're done, remove your worktree with `git worktree remove` once everything in it is pushed.
 
