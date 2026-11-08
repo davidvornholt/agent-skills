@@ -48,12 +48,16 @@ const renderLists = (inputs: ReportInputs): string =>
     ),
   ].join("\n  ");
 
+// Before its first sync Kontor always needs an approval, and the note says so instead.
 const renderAlerts = (inputs: ReportInputs): string =>
-  inputs.kontor.approvalNeeded === true
+  inputs.kontor.synced === true && inputs.kontor.approvalNeeded === true
     ? `<div class="alert" role="status"><span class="alert-icon" aria-hidden="true">!</span><p>Kontor needs a new approval for the bank connection.</p></div>`
     : "";
 
-const renderNotes = (inputs: ReportInputs): string => (inputs.kontor.status === "missing" ? `<p class="meta">Kontor's bank status was not available.</p>` : "");
+const renderNotes = (inputs: ReportInputs): string => {
+  if (inputs.kontor.status === "missing") return `<p class="meta">Kontor's bank status was not available.</p>`;
+  return inputs.kontor.synced === false ? `<p class="meta">Kontor has not synced with the bank yet.</p>` : "";
+};
 
 const fillSlot = (template: string, slot: string, content: string): string => {
   const marker = `<!--wrap:${slot}-->`;

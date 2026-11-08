@@ -279,7 +279,7 @@ test("reads every source into the metrics", () => {
 });
 
 test("turns a command that doesn't exist into missing coverage", () => {
-  expect(collected.reportInputs.kontor).toEqual({ status: "missing", approvalNeeded: null });
+  expect(collected.reportInputs.kontor).toEqual({ status: "missing", synced: null, approvalNeeded: null });
   expect(collected.problems.some((problem) => problem.startsWith("Kontor status unavailable: kontor could not run"))).toBe(true);
 });
 

@@ -14,8 +14,11 @@ export type ReportInputs = {
   readonly openThreads: List<{ readonly title: string; readonly project: string; readonly openSince: string }>;
   readonly landedPrs: List<{ readonly repository: string; readonly title: string }>;
   readonly appointments: List<{ readonly time: string | null; readonly title: string }>;
-  /** Only whether the bank connection needs a new approval; never amounts. */
-  readonly kontor: { readonly status: ListStatus; readonly approvalNeeded: boolean | null };
+  /**
+   * Only whether Kontor has ever synced and whether the bank connection needs a new approval; never amounts.
+   * Before its first sync Kontor holds no bank data and always reports approvalNeeded.
+   */
+  readonly kontor: { readonly status: ListStatus; readonly synced: boolean | null; readonly approvalNeeded: boolean | null };
 };
 
 const missing = <T>(): List<T> => ({ status: "missing", items: [] });
@@ -105,12 +108,11 @@ const appointments = (reading: Sources["calendar"], window: DayWindow): ReportIn
 };
 
 const kontor = (reading: Sources["kontor"]): ReportInputs["kontor"] => {
-  if (!reading.ok) return { status: "missing", approvalNeeded: null };
-  const value = reading.value;
-  if (typeof value !== "object" || value === null || typeof (value as { approvalNeeded?: unknown }).approvalNeeded !== "boolean") {
-    return { status: "missing", approvalNeeded: null };
-  }
-  return { status: "complete", approvalNeeded: (value as { approvalNeeded: boolean }).approvalNeeded };
+  const unknown = { status: "missing", synced: null, approvalNeeded: null } as const;
+  if (!reading.ok || typeof reading.value !== "object" || reading.value === null) return unknown;
+  const { lastSyncAt, approvalNeeded } = reading.value as { lastSyncAt?: unknown; approvalNeeded?: unknown };
+  if (typeof approvalNeeded !== "boolean" || (typeof lastSyncAt !== "string" && lastSyncAt !== null)) return unknown;
+  return { status: "complete", synced: lastSyncAt !== null, approvalNeeded };
 };
 
 export const buildReportInputs = (window: DayWindow, sources: Sources): ReportInputs => ({

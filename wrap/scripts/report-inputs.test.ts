@@ -39,7 +39,7 @@ test("builds the lists of a day with all sources", () => {
         { time: "03:30–05:00", title: "Night train" },
       ],
     },
-    kontor: { status: "missing", approvalNeeded: null },
+    kontor: { status: "missing", synced: null, approvalNeeded: null },
   });
 });
 
@@ -74,13 +74,30 @@ test("leaves out a meeting whose answer couldn't be read and marks appointments 
   expect(buildReportInputs(WINDOW, { ...sources, calendar }).appointments).toEqual({ status: "partial", items: [{ time: "10:00–11:00", title: "Standup" }] });
 });
 
-test("reads only whether Kontor needs approval", () => {
+test("reads only whether Kontor has synced and needs approval", () => {
   const kontor = (value: unknown) => buildReportInputs(WINDOW, { ...sources, kontor: { ok: true, value } }).kontor;
   expect(kontor({ lastSyncAt: "2026-10-29T06:00:00Z", approvalExpiresAt: "2026-11-02T00:00:00Z", daysLeft: 3, approvalNeeded: true })).toEqual({
     status: "complete",
+    synced: true,
     approvalNeeded: true,
   });
-  expect(kontor({ daysLeft: 3 })).toEqual({ status: "missing", approvalNeeded: null });
+  expect(kontor({ daysLeft: 3 })).toEqual({ status: "missing", synced: null, approvalNeeded: null });
+  expect(kontor({ approvalNeeded: false })).toEqual({ status: "missing", synced: null, approvalNeeded: null });
+  expect(kontor(null)).toEqual({ status: "missing", synced: null, approvalNeeded: null });
+});
+
+test("reads a Kontor that has never synced as a state, not a gap", () => {
+  const neverSynced = {
+    lastSyncAt: null,
+    approvalExpiresAt: null,
+    daysLeft: 0,
+    approvalNeeded: true,
+    reason: "never-approved",
+    lastSyncOutcome: null,
+  };
+  const collected = buildCollected(WINDOW, { ...sources, kontor: { ok: true, value: neverSynced } });
+  expect(collected.reportInputs.kontor).toEqual({ status: "complete", synced: false, approvalNeeded: true });
+  expect(collected.problems.filter((problem) => problem.startsWith("Kontor"))).toEqual([]);
 });
 
 test("explains every gap in the collected problems", () => {

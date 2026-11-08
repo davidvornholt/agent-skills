@@ -18,7 +18,7 @@ export const buildCollected = (window: DayWindow, sources: Sources): Collected =
   const listProblems = [
     ...(sources.t3.ok ? [] : [`T3 Code threads unavailable: ${sources.t3.error}`]),
     ...(sources.kontor.ok ? [] : [`Kontor status unavailable: ${sources.kontor.error}`]),
-    ...(sources.kontor.ok && reportInputs.kontor.status === "missing" ? ["Kontor status has no approvalNeeded field."] : []),
+    ...(sources.kontor.ok && reportInputs.kontor.status === "missing" ? ["Kontor status has no approvalNeeded or lastSyncAt field."] : []),
   ];
   return { day: window.day, window: { start: window.start, end: window.end }, dayMetrics, reportInputs, problems: [...problems, ...listProblems] };
 };
