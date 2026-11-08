@@ -197,6 +197,10 @@ const fixtures = {
   [key("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "david@david-z890-nixos", "bun ~/.claude/skills/wrap/scripts/wrap.ts t3-threads")]: {
     stdout: [{ title: "Settled today", project: "postlude", settledAt: "2026-10-29T16:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-28T10:00:00.000Z" }],
   },
+  // A Kontor that has never synced.
+  [key("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "david@david-z890-nixos", "kontor status --json")]: {
+    stdout: { lastSyncAt: null, approvalExpiresAt: null, daysLeft: 0, approvalNeeded: true, reason: "never-approved", lastSyncOutcome: null },
+  },
 };
 
 // sp passes Super Productivity's error message and details on as they are.
@@ -212,12 +216,12 @@ const spDownFixtures = {
 
 type Run = { readonly collected: Collected; readonly calls: string[][]; readonly stderr: string };
 
-const collect = async (name: string, answers: object): Promise<Run> => {
+const collect = async (name: string, answers: object, host = "test-host"): Promise<Run> => {
   const state = join(directory, name);
   mkdirSync(state);
   writeFileSync(join(state, "fixtures.json"), JSON.stringify(answers));
   // Only the fakes are on PATH, so kontor is a command that doesn't exist, and SP_HOST is unset.
-  const child = Bun.spawn([process.execPath, join(import.meta.dir, "testing/collect-day.ts"), DAY, "test-host"], {
+  const child = Bun.spawn([process.execPath, join(import.meta.dir, "testing/collect-day.ts"), DAY, host], {
     env: { PATH: bin, HOME: directory, FAKE_CLI_FIXTURES: join(state, "fixtures.json"), FAKE_CLI_STATE: state },
     stdout: "pipe",
     stderr: "pipe",
@@ -235,6 +239,7 @@ let collected: Collected;
 let calls: string[][];
 let stderr: string;
 let spDown: Run;
+let onZ890: Run;
 
 beforeAll(async () => {
   mkdirSync(bin);
@@ -243,7 +248,11 @@ beforeAll(async () => {
     writeFileSync(shim, `#!/bin/sh\nexec "${process.execPath}" "${join(import.meta.dir, "testing/fake-cli.ts")}" ${command} "$@"\n`);
     chmodSync(shim, 0o755);
   }
-  [{ collected, calls, stderr }, spDown] = await Promise.all([collect("all", fixtures), collect("sp-down", spDownFixtures)]);
+  [{ collected, calls, stderr }, spDown, onZ890] = await Promise.all([
+    collect("all", fixtures),
+    collect("sp-down", spDownFixtures),
+    collect("z890", fixtures, "david-z890-nixos"),
+  ]);
 }, 60_000);
 
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
@@ -278,9 +287,15 @@ test("reads every source into the metrics", () => {
   expect(collected.reportInputs.settledThreads.items).toEqual([{ title: "Settled today", project: "postlude" }]);
 });
 
+test("asks the z890 for Kontor's status from another host", () => {
+  expect(collected.reportInputs.kontor).toEqual({ status: "complete", synced: false, approvalNeeded: true });
+  expect(collected.problems.filter((problem) => problem.startsWith("Kontor"))).toEqual([]);
+});
+
 test("turns a command that doesn't exist into missing coverage", () => {
-  expect(collected.reportInputs.kontor).toEqual({ status: "missing", synced: null, approvalNeeded: null });
-  expect(collected.problems.some((problem) => problem.startsWith("Kontor status unavailable: kontor could not run"))).toBe(true);
+  expect(onZ890.calls.some((call) => call[0] === "ssh")).toBe(false);
+  expect(onZ890.collected.reportInputs.kontor).toEqual({ status: "missing", synced: null, approvalNeeded: null });
+  expect(onZ890.collected.problems.some((problem) => problem.startsWith("Kontor status unavailable: kontor could not run"))).toBe(true);
 });
 
 test("says where pim failed but withholds its error text", () => {
@@ -307,7 +322,7 @@ test("only reads", () => {
     if (command === "gh") return args[0] === "api" && args[1] === "--method" && args[2] === "GET" && args[3] === "search/issues";
     if (command === "sp") return /^(tasks|tags|projects) list\b/.test(words);
     if (command === "pim") return /^(accounts|calendar (events|get)|mail folders|mail search)\b/.test(words);
-    if (command === "ssh") return args.at(-1) === "bun ~/.claude/skills/wrap/scripts/wrap.ts t3-threads";
+    if (command === "ssh") return ["bun ~/.claude/skills/wrap/scripts/wrap.ts t3-threads", "kontor status --json"].includes(args.at(-1) ?? "");
     return command === "activity-digest" && args.includes("--summary-json");
   };
   expect(calls.length).toBeGreaterThan(0);
