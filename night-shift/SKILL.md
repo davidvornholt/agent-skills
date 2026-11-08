@@ -16,13 +16,13 @@ Ask for whatever the request doesn't already say:
 
 - when the shift ends;
 - what is off limits tonight, such as repositories with an active session or pull requests the user wants to keep;
-- any extra tasks. Social media work happens only when the user asks for it tonight.
+- any extra tasks, and which Super Productivity tasks the shift may take. Social media work happens only when the user asks for it tonight.
 
 After that, ask nothing. Record the answers and a first `scripts/health.sh` result in the state file.
 
 ## Coordinating
 
-Put the shift's files in `/tmp/night-shift/<date>/`, using the date the shift starts. Keep the state file there, as `state.md`, with the user's instructions, the off-limits list, every worker, and a timestamped log, so that a coordinator that loses its context can resume from it.
+Put the shift's files in `/tmp/night-shift/<date>/`, using the date the shift starts. Keep the state file there, as `state.md`, with the user's instructions, the off-limits list, every worker and any Super Productivity task it took, and a timestamped log, so that a coordinator that loses its context can resume from it.
 
 Start workers with `delegate_task` and follow the `next` it returns: a worker's completion wakes you, so end your turn rather than waiting on or polling a running worker. Leave `isolation` at `shared`, because workers make their own worktrees in other repositories. A worker knows only its brief, so give it its goal, its repositories, the off-limits items in them, a log file under `/tmp/night-shift/<date>/notes/`, and the absolute path of `worker.md` in this skill's folder, with the instruction to follow it.
 
@@ -34,10 +34,19 @@ Spend by subscription: GPT-6 Astra hunts and reviews, Claude fixes and coordinat
 
 Work through this list while usage lasts:
 
-1. Do what the user named tonight.
+1. Do what the user named tonight, including the Super Productivity tasks they handed over.
 2. Land what is ready, as `worker.md` describes: open bot pull requests, and pull requests by `davidvornholt` that are marked ready for review and aren't off limits, because a draft may still be in progress.
 3. Resolve issues.
 4. Hunt bugs: GPT-6 Astra reads a repository without changing it, and a Claude worker fixes what it can reproduce.
+
+## Super Productivity tasks
+
+Use `sp` as the `super-productivity` skill describes.
+
+- Before starting a worker, find the task that plans its work: one the user handed over tonight, or a result of `sp tasks list --query <words> --brief` that clearly plans the same work. Leave every other task alone.
+- Once the worker has started, check the task off, but only when the worker can finish it and nothing in it still needs the user, such as a decision or a step only they can take. Then add the worker's thread link to the task's notes as `[<title>](t3-thread://v1/<childThreadId>)`, with the `childThreadId` that `delegate_task` returned.
+- If the worker hands the task back unfinished, uncheck it with `--undone`, so it returns to the user's plan.
+- Never run `sp tasks start`, because agents don't book time.
 
 ## Resolving issues
 
