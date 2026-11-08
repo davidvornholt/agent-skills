@@ -25,7 +25,7 @@ Each change gets one pull request, opened as a draft. Follow the rule in `AGENTS
 
 Land only pull requests opened by `davidvornholt` or by a bot such as Dependabot or the standards sync. List any other in the report for the user.
 
-Merge only with `scripts/land.sh <owner/repo> <pr> [health]`, never with `gh pr merge` or the landing step in `review-fix`, because the script merges only an up-to-date pull request whose checks are green on its exact head. Run it for one pull request at a time per repository, and not while an `ask` or a blocker is open. Exit 2 means the merge landed but a push run isn't green, so check health and the deploy now. Revert a merge that broke production, and report it.
+Merge only with `scripts/land.sh <owner/repo> <pr> [health]`, never with `gh pr merge` or the landing step in `review-fix`, because the script merges only an up-to-date pull request whose checks are green on its exact head. Run it for one pull request at a time per repository, and not while an `ask` or a blocker is open. A repository without workflows, such as `nix-config`, runs no checks, so the script merges once none has appeared for about three minutes. There your own run of the repository's checks, such as `nix flake check`, is the only gate: run it on the final branch before you land, and say in your log that you did. Exit 2 means the merge landed but a push run isn't green, so check health and the deploy now. Revert a merge that broke production, and report it.
 
 When you're done, remove your worktree with `git worktree remove` once everything in it is pushed.
 
