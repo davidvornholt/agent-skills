@@ -12,6 +12,8 @@ const TEST_MAILBOXES = new Set(["tester.test.legal@gmail.com", "testing.acc.davi
 // Both hosts run a Super Productivity copy that syncs through SuperSync, and T3 Code keeps its state on the z890.
 const SP_HOSTS = ["david-x1-nixos", "david-z890-nixos"];
 const T3_HOST = "david-z890-nixos";
+// Kontor's door on prod-1 takes only the z890's key.
+const KONTOR_HOST = "david-z890-nixos";
 const COMMAND_TIMEOUT_MS = 120_000;
 const CALENDAR_LIMIT = 1000;
 const FIRST_MAIL_LIMIT = 200;
@@ -338,7 +340,12 @@ const readT3 = async (host: string): Promise<Reading<readonly T3Thread[]>> => {
   );
 };
 
-const readKontor = (): Promise<Reading<unknown>> => runJson(["kontor", "status", "--json"]);
+const readKontor = (host: string): Promise<Reading<unknown>> =>
+  runJson(
+    host === KONTOR_HOST
+      ? ["kontor", "status", "--json"]
+      : ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", `david@${KONTOR_HOST}`, "kontor status --json"],
+  );
 
 export const readSources = async (window: DayWindow, host: string): Promise<Sources> => {
   const [summary, sp, github, pim, t3, kontor] = await Promise.all([
@@ -347,7 +354,7 @@ export const readSources = async (window: DayWindow, host: string): Promise<Sour
     readGithub(window),
     readPim(window),
     readT3(host),
-    readKontor(),
+    readKontor(host),
   ]);
   return { summary, sp, github, mail: pim.mail, calendar: pim.calendar, t3, kontor };
 };
