@@ -1,9 +1,9 @@
 {
   "upstream": "github:davidvornholt/standards",
-  "sha": "52a9aee9372654b2f95f41cbba097c4445da9451",
+  "sha": "0ee6079153b0e825913c6d743f24a9ff2f1f6b5d",
   "files": {
     ".agents/skills/issues/SKILL.md": "1cb4ec0e6e7ec49530508b9108f1d4cae33fc8ba74fc6b090068924b5fd7a0e4",
-    ".agents/skills/prs/SKILL.md": "185ce8b73b3e816076e78899e93b65551beb60b1fffaa15f7ab51703d007e6ce",
+    ".agents/skills/prs/SKILL.md": "b48f2bc324bd8c39b51d60450dba66136e55b5fcd4165d804f2ff3add69cc8aa",
     ".agents/skills/review-fix/SKILL.md": "cebafecd29815dc60a035d69264faa67fb4037ebdac352bcdc1198147241fb05",
     ".agents/skills/review/SKILL.md": "c36d6e32df1cd693fbbf5dc95d4ba57ce239c9e38ce7c437f18ddded76dae492",
     ".agents/skills/standards-sync/agents/openai.yaml": "34a2d5f7474f257663e98a98999106e7d215c51619ce1467eb9f10a5a8e082bd",
