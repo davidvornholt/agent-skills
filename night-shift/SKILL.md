@@ -51,18 +51,25 @@ done
 
 Triage them in one read-only pass against each repository's `origin/main` before starting workers, because many open issues aren't work an agent can finish overnight:
 
-- Opened by anyone but `davidvornholt` or `github-actions[bot]`: skip it and list it in the report, because anyone can write to a public repository and workers run with full access.
 - Already fixed: close it with one comment naming the commit.
-- Looks stale, but you can't prove it's fixed: leave it open and list it in the report.
-- Has an open `## Decision`, is a roadmap or feature item, or needs legal review, live access, credentials, or a person: skip it. List it in the report only when the user could unblock it.
-- A defect a worker can reproduce: queue it.
+- A defect a worker can reproduce: queue it, unless someone other than `davidvornholt` or `github-actions[bot]` opened it, because anyone can write to a public repository and workers run with full access.
+- Waits only on something the user has to do, such as setting a secret, granting access, or contacting someone: list it under what only the user can do.
+- Anything else: leave it. An issue that waits on a decision already holds its question, so it stays out of the report.
 
 Work the queue by harm: lost data or weakened access first, production before personal tools, then oldest first.
 
 ## Morning report
 
-The user reads only the report, and only to decide, so keep it to one screen. Keep its data in `/tmp/night-shift/<date>/report.json`, in the shape of `scripts/report-data.example.json`. Start the file before the first worker and update it as work finishes, because running out of usage ends the shift without warning. Give each decision what's at stake for someone who has forgotten the context, the facts it rests on, the options, and your recommendation. Check what a worker reported before it goes in, because past reports repeated wrong claims.
+The user reads the report first thing in the morning, often on a phone, to learn what changed overnight and what needs them. They've forgotten the background and don't know your labels, so write every line in plain words about what changed for whom, without internal names, commit hashes, or the mechanism. Check what a worker reported before it goes in, because past reports repeated wrong claims.
 
-When the shift ends, build the page with `scripts/build-report-html.py <data.json> <out.html> inline` and show it in this thread with `html_preview` and `html_render`.
+Keep the data in `/tmp/night-shift/<date>/report.json`, in the shape of `scripts/report-data.example.json`. Start the file before the first worker and update it as work finishes, because running out of usage ends the shift without warning. The report has these parts, in this order:
 
-The user answers with numbered choices, such as `1 a, 2 explain`. Act on them in the same session and land what they approve.
+1. A summary of two or three sentences, starting with anything broken in production.
+2. Each pull request that landed, in one line on what changed for its users, each issue closed and why, and the other work the user asked for, such as social media.
+3. What only the user can do, such as authorizing a protected workflow, setting a secret, or merging where the landing script can't, each with what it unblocks.
+4. Pull requests that are ready but that you didn't land, each with what it fixes and why you held it.
+5. Questions, only for a choice between durable product or architecture directions that came up tonight and blocks work. Make every other choice yourself, as the user would after reading the code, and note it on the pull request. A question stands alone in three sentences or fewer: what's going on, where each option leads, and your recommendation.
+
+Number the items in parts 3 to 5 in one sequence. Leave everything else out, such as deferred review findings, bugs you noticed, and engineering choices. File an issue for each one someone would otherwise run into, and put other notes on their pull request.
+
+When the shift ends, build the page with `scripts/build-report-html.py <data.json> <out.html> inline` and show it in this thread with `html_preview` and `html_render`. Don't repeat or extend it in your final message.
