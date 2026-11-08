@@ -1,0 +1,440 @@
+#!/usr/bin/env python3
+"""Merge a PR once its checks pass, delete its local branch, and watch its push runs.
+
+usage: land [PR_OR_BRANCH] [--no-wait]
+
+PR_OR_BRANCH is a PR number, URL, or branch (default: the current branch).
+--no-wait merges without waiting for pending checks, where GitHub allows that.
+Exit 0: done. Exit 1: nothing merged. Exit 2: merged, but a push run on the
+merge commit isn't green. The land skill's SKILL.md describes the details.
+"""
+
+from datetime import datetime, timezone
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import time
+
+
+POLL_SECONDS = 15
+# Tests set LAND_POLL_SECONDS=0 to poll without delay.
+DELAY = float(os.environ.get("LAND_POLL_SECONDS", POLL_SECONDS))
+# A push or ready event starts its checks within seconds, so a PR that changed
+# less than a minute ago may not show them yet.
+QUIET_SECONDS = 60
+GREEN = {"SUCCESS", "NEUTRAL", "SKIPPED"}
+
+
+class LandError(Exception):
+    pass
+
+
+def polls(minutes):
+    return minutes * 60 // POLL_SECONDS
+
+
+def warn(message):
+    print(f"land: {message}", file=sys.stderr)
+
+
+def gh_env():
+    # Resolve GitHub's repository from this checkout, even with GH_REPO set.
+    env = dict(os.environ)
+    env.pop("GH_REPO", None)
+    return env
+
+
+def run(*args, check=True):
+    result = subprocess.run(args, capture_output=True, text=True, env=gh_env())
+    if check and result.returncode:
+        raise LandError(result.stderr.strip() or f"{args[0]} failed")
+    return result
+
+
+def git(*args):
+    return run("git", *args).stdout.removesuffix("\n")
+
+
+def current_branch():
+    result = run("git", "symbolic-ref", "--quiet", "--short", "HEAD", check=False)
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def timestamp(text):
+    return datetime.fromisoformat(text.replace("Z", "+00:00"))
+
+
+def run_id(check):
+    match = re.search(r"/actions/runs/(\d+)/", check.get("detailsUrl") or "")
+    return int(match[1]) if match else 0
+
+
+def view_pr(selector, repo, fields="number,url,state,headRefOid,headRefName,baseRefName,isCrossRepository,mergeCommit,mergedAt"):
+    return json.loads(run("gh", "pr", "view", selector, "--repo", repo["url"], "--json", fields).stdout)
+
+
+def has_workflows(repo, ref):
+    result = run("gh", "api", f"repos/{repo['nameWithOwner']}/contents/.github/workflows?ref={ref}",
+                 "--silent", check=False)
+    if result.returncode == 0:
+        return True
+    if "HTTP 404" in result.stderr:
+        return False
+    raise LandError(result.stderr.strip() or "Cannot read the repository's workflows.")
+
+
+def land(selector, no_wait):
+    root = Path(git("rev-parse", "--show-toplevel")).resolve()
+    current = current_branch()
+    if selector is None:
+        if current is None:
+            raise LandError("Detached HEAD: specify a PR number or branch.")
+        selector = current
+
+    repo = json.loads(run(
+        "gh", "repo", "view", "--json", "url,nameWithOwner,defaultBranchRef,deleteBranchOnMerge",
+    ).stdout)
+    pr = view_pr(selector, repo)
+    if not pr["url"].startswith(repo["url"].rstrip("/") + "/pull/"):
+        raise LandError("The PR belongs to another repository.")
+
+    number = pr["number"]
+    if pr["state"] == "MERGED":
+        delete_branch(pr, repo, root, current)
+        update_base(pr["baseRefName"])
+        return 0
+    if pr["state"] != "OPEN":
+        raise LandError(f"PR #{number} is {pr['state']}, not merged.")
+
+    head = wait_for_checks(number, repo, no_wait)
+    # gh reports progress itself, so leave its output on the terminal.
+    merge = subprocess.run(
+        ["gh", "pr", "merge", str(number), "--repo", repo["url"], "--squash", "--match-head-commit", head],
+        env=gh_env(),
+    )
+    if merge.returncode:
+        raise LandError(f"PR #{number} was not merged.")
+    return after_merge(number, repo, root, current)
+
+
+def ready_time(number, repo):
+    """Return when the PR was last marked ready for review, or None if it never was a draft."""
+    owner, name = repo["nameWithOwner"].split("/")
+    ready = run(
+        "gh", "api", "graphql", "-F", f"number={number}", "-f", f"owner={owner}", "-f", f"name={name}",
+        "-f", "query=query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) "
+        "{ pullRequest(number: $number) { timelineItems(itemTypes: READY_FOR_REVIEW_EVENT, last: 1) "
+        "{ nodes { ... on ReadyForReviewEvent { createdAt } } } } } }",
+        "--jq", ".data.repository.pullRequest.timelineItems.nodes[0].createdAt // empty",
+    ).stdout.strip()
+    return timestamp(ready) if ready else None
+
+
+def runs_again_when_ready(repo, head):
+    """Map each workflow run on a head to whether its workflow runs again when a draft is marked ready."""
+    owner, name = repo["nameWithOwner"].split("/")
+    data = json.loads(run(
+        "gh", "api", "graphql", "-f", f"owner={owner}", "-f", f"name={name}", "-f", f"head={head}",
+        "-f", f"tree={head}:.github/workflows",
+        "-f", "query=query($owner: String!, $name: String!, $head: GitObjectID!, $tree: String!) "
+        "{ repository(owner: $owner, name: $name) { commit: object(oid: $head) { ... on Commit "
+        "{ checkSuites(first: 100) { nodes { workflowRun { databaseId file { path } } } } } } "
+        "workflows: object(expression: $tree) { ... on Tree { entries { path object { ... on Blob { text } } } } } } }",
+    ).stdout)["data"]["repository"]
+    texts = {}
+    for entry in (data["workflows"] or {}).get("entries", []):
+        texts[entry["path"]] = (entry["object"] or {}).get("text") or ""
+    again = {}
+    for suite in data["commit"]["checkSuites"]["nodes"]:
+        if suite["workflowRun"]:
+            text = texts.get((suite["workflowRun"]["file"] or {}).get("path"), "")
+            # Finding the event type outside a comment stands in for parsing the YAML.
+            again[suite["workflowRun"]["databaseId"]] = bool(re.search(r"^[^#\n]*\bready_for_review\b", text, re.M))
+    return again
+
+
+def stale_runs(number, repo, head, rollup, again):
+    """Return the runs whose checks were skipped while the PR was a draft and that the ready event replaces.
+
+    `again` caches runs_again_when_ready across polls.
+    """
+    # Only skipped checks need the ready time, so most polls skip the query.
+    skipped = [c for c in rollup if c.get("conclusion") == "SKIPPED"]
+    ready = ready_time(number, repo) if skipped else None
+    early = {run_id(c) for c in skipped if ready and timestamp(c["completedAt"]) < ready}
+    if any(r not in again for r in early):
+        again.update(dict.fromkeys(early, False) | runs_again_when_ready(repo, head))
+    # A workflow that doesn't run on the ready event, such as one that only
+    # auto-merges, never replaces its skipped checks, so their skip is final.
+    return {r for r in early if again[r]}
+
+
+def check_states(rollup, quiet, stale_ids):
+    """Sort a PR's checks into passed, pending, and failed names, and list the stale ones among the pending."""
+    # Several workflow runs can report checks for one head. A run that a newer
+    # run of its workflow cancelled is superseded, so its checks don't count.
+    # Until the PR is quiet, that newer run may not show yet.
+    newest = {}
+    for check in rollup:
+        if check.get("workflowName"):
+            newest[check["workflowName"]] = max(newest.get(check["workflowName"], 0), run_id(check))
+    states = {"passed": [], "pending": [], "stale": [], "failed": []}
+    for check in rollup:
+        name = check.get("name") or check.get("context") or "unnamed check"
+        if check.get("__typename") == "CheckRun":
+            superseded = run_id(check) < newest.get(check.get("workflowName"), 0)
+            # CI that skips its jobs on drafts leaves skipped checks that GitHub
+            # counts as passed, although nothing ran. The ready event starts
+            # the run that replaces them.
+            stale = check.get("conclusion") == "SKIPPED" and run_id(check) in stale_ids
+            # A running check's conclusion is empty, so its status decides first.
+            if check.get("status") != "COMPLETED":
+                state = "pending"
+            elif superseded and (stale or check.get("conclusion") == "CANCELLED"):
+                continue
+            elif stale:
+                states["stale"].append(name)
+                state = "pending"
+            elif check.get("conclusion") in GREEN:
+                state = "passed"
+            elif check.get("conclusion") == "CANCELLED" and not quiet:
+                state = "pending"
+            else:
+                state = "failed"
+        else:
+            state = {"SUCCESS": "passed", "PENDING": "pending", "EXPECTED": "pending"}.get(check.get("state"), "failed")
+        states[state].append(name)
+    return states
+
+
+def wait_for_checks(number, repo, no_wait):
+    """Return the head commit once GitHub may merge it and its checks have passed."""
+    shown, again = None, {}
+    for _ in range(polls(45)):
+        pr = view_pr(str(number), repo, "state,isDraft,headRefOid,mergeStateStatus,statusCheckRollup,updatedAt")
+        if pr["state"] != "OPEN":
+            raise LandError(f"PR #{number} became {pr['state']} while land waited.")
+        head, status = pr["headRefOid"], pr["mergeStateStatus"]
+        quiet = (datetime.now(timezone.utc) - timestamp(pr["updatedAt"])).total_seconds() >= QUIET_SECONDS
+        rollup = pr["statusCheckRollup"] or []
+        checks = check_states(rollup, quiet, stale_runs(number, repo, head, rollup, again))
+        if checks["failed"]:
+            raise LandError(f"Not merging PR #{number}: {', '.join(checks['failed'])} failed on {head[:7]}.")
+        if status == "DIRTY":
+            raise LandError(f"PR #{number} has merge conflicts.")
+        settled = quiet and not checks["pending"]
+        if pr["isDraft"]:
+            run("gh", "pr", "ready", str(number), "--repo", repo["url"])
+        elif status == "BEHIND":
+            # A merge commit keeps the old head in the new one's history.
+            run("gh", "pr", "update-branch", str(number), "--repo", repo["url"])
+        elif status in ("CLEAN", "UNSTABLE"):
+            # A head without workflows has no CI to wait for.
+            no_ci = not checks["pending"] and not has_workflows(repo, head)
+            # Not even --no-wait merges on a stale skipped check, because no CI ran for it.
+            if (no_wait and not checks["stale"]) or (settled and checks["passed"]) or no_ci:
+                return head
+        elif status == "BLOCKED" and no_wait:
+            raise LandError(
+                f"GitHub requires checks or reviews that PR #{number} still lacks, so --no-wait can't skip them."
+            )
+        elif status == "BLOCKED" and settled and checks["passed"]:
+            raise LandError(
+                f"GitHub blocks merging PR #{number} although its checks passed. "
+                "Resolve its review threads or get the required review."
+            )
+        if checks["pending"]:
+            waiting = ", ".join(checks["pending"])
+        elif not quiet:
+            waiting = "checks that a recent update may start"
+        elif not checks["passed"]:
+            waiting = "checks"
+        else:
+            waiting = f"GitHub ({status})"
+        if (head, waiting) != shown:
+            print(f"Waiting for {waiting} on {head[:7]}.")
+            shown = (head, waiting)
+        time.sleep(DELAY)
+    if shown and shown[1] == "checks":
+        raise LandError(
+            f"No checks appeared on PR #{number} within 45 minutes, although the repository has workflows. "
+            f"If none of them runs on pull requests, run `land {number} --no-wait`."
+        )
+    if checks["stale"]:
+        raise LandError(
+            f"PR #{number} wasn't ready to merge within 45 minutes: {', '.join(checks['stale'])} "
+            "skipped while it was a draft and didn't run again after it was marked ready."
+        )
+    raise LandError(f"PR #{number} wasn't ready to merge within 45 minutes.")
+
+
+def after_merge(number, repo, root, current):
+    """Finish a fresh merge. Problems from here on are warnings, because the PR is merged."""
+    try:
+        pr = view_pr(str(number), repo)
+    except LandError as error:
+        warn(f"PR #{number} is merged, but reading it back failed: {error}")
+        return 2
+    if pr["state"] != "MERGED":
+        raise LandError(f"GitHub accepted PR #{number} but hasn't merged it yet. Run `land {number}` again once it has.")
+    if not repo.get("deleteBranchOnMerge"):
+        warn("GitHub keeps merged branches in this repository. "
+             "Enable \"Automatically delete head branches\" in its settings.")
+    try:
+        delete_branch(pr, repo, root, current)
+        update_base(pr["baseRefName"])
+    except LandError as error:
+        warn(f"PR #{number} is merged, but local cleanup stopped: {error}")
+    sha = (pr.get("mergeCommit") or {}).get("oid")
+    if not sha:
+        warn(f"PR #{number} is merged, but GitHub shows no merge commit yet, so check its push runs by hand.")
+        return 2
+    try:
+        return 0 if watch_push_runs(repo, sha, pr["mergedAt"]) else 2
+    except LandError as error:
+        warn(f"PR #{number} is merged, but its push runs can't be read: {error}")
+        return 2
+
+
+def watch_push_runs(repo, sha, merged_at):
+    if not has_workflows(repo, sha):
+        return True
+    print(f"Waiting for push runs on {sha[:7]}. The PR is merged, so stopping now changes nothing.")
+    # GitHub files a run chained with `on: workflow_run`, such as a deploy,
+    # under the default branch's newest commit when it starts, which is another
+    # merge's once one follows. So chained runs are found by time, not commit.
+    queries = (("--commit", sha, "--event", "push"), ("--event", "workflow_run", "--created", f">={merged_at}"))
+    green, since = None, 0
+    for poll in range(polls(60)):
+        runs = [r for query in queries for r in json.loads(run(
+            "gh", "run", "list", "--repo", repo["url"], *query, "--limit", "100",
+            "--json", "workflowName,status,conclusion,url",
+        ).stdout)]
+        # Push runs appear within seconds, so none after two minutes means none.
+        if not runs and poll >= polls(2):
+            print("No push runs.")
+            return True
+        if runs and all(r["status"] == "completed" for r in runs):
+            red = [r for r in runs if r["conclusion"].upper() not in GREEN]
+            for r in red:
+                warn(f"Push run {r['workflowName']} {r['conclusion']}: {r['url']}")
+            if red:
+                return False
+            # A chained run starts only after the run it follows has completed.
+            if runs != green:
+                green, since = runs, poll
+            elif poll - since >= QUIET_SECONDS // POLL_SECONDS:
+                print("Push runs passed.")
+                return True
+        else:
+            green = None
+        time.sleep(DELAY)
+    warn(f"Push runs on {sha[:7]} are still running after 60 minutes.")
+    return False
+
+
+def contained_in_pr(tip, pr, repo):
+    # The PR's head contains the local tip when they match or GitHub's compare
+    # API finds the tip in its history, as after `gh pr update-branch`.
+    if tip == pr["headRefOid"]:
+        return True
+    result = run("gh", "api", f"repos/{repo['nameWithOwner']}/compare/{tip}...{pr['headRefOid']}",
+                 "--jq", ".status", check=False)
+    return result.returncode == 0 and result.stdout.strip() in ("ahead", "identical")
+
+
+def delete_branch(pr, repo, root, current):
+    if pr["isCrossRepository"]:
+        raise LandError("Fork PRs require manual local branch cleanup.")
+
+    branch = pr["headRefName"]
+    base = pr["baseRefName"]
+    default = (repo.get("defaultBranchRef") or {}).get("name")
+    if not default:
+        raise LandError("Cannot determine the repository's default branch.")
+    if branch in (base, default):
+        raise LandError(f"Refusing to delete the base or default branch {branch!r}.")
+    git("check-ref-format", "--branch", branch)
+    ref = f"refs/heads/{branch}"
+    local = run("git", "rev-parse", "--verify", "--quiet", ref, check=False)
+    if local.returncode == 1:
+        print(f"Local branch {branch!r} is already absent.")
+        return
+    if local.returncode:
+        raise LandError(local.stderr.strip() or "Cannot resolve the local branch.")
+    tip = local.stdout.strip()
+    if not contained_in_pr(tip, pr, repo):
+        raise LandError(
+            f"Keeping {branch!r}: its tip isn't part of merged PR #{pr['number']}. "
+            "It may contain additional or rewritten work."
+        )
+
+    # Porcelain with NUL delimiters preserves paths containing spaces/newlines
+    # and has none of the '*' / '+' decorations from `git branch -vv`.
+    worktrees = []
+    for record in git("worktree", "list", "--porcelain", "-z").split("\0\0"):
+        fields = dict(field.split(" ", 1) for field in record.split("\0") if " " in field)
+        if fields:
+            worktrees.append(fields)
+    for worktree in worktrees:
+        if worktree.get("branch") == ref and Path(worktree["worktree"]).resolve() != root:
+            raise LandError(
+                f"Keeping {branch!r}: checked out at {worktree['worktree']!r}. "
+                "Switch that worktree to another branch, or remove it explicitly, then retry."
+            )
+
+    if current == branch:
+        if git("status", "--porcelain", "--untracked-files=all"):
+            raise LandError("Commit or stash changes (including untracked files) before switching branches.")
+        if any(worktree.get("branch") == f"refs/heads/{base}" for worktree in worktrees):
+            # Another checkout holds the base, so leave this one detached at
+            # the same commit; remove the finished worktree when done.
+            git("switch", "--detach")
+        # Do not fetch, create a base branch, or guess a remote during cleanup.
+        elif run("git", "show-ref", "--verify", "--quiet", f"refs/heads/{base}", check=False).returncode:
+            raise LandError(f"Base branch {base!r} is not local. Switch to another branch, then retry.")
+        else:
+            git("switch", "--no-guess", "--", base)
+
+    # Recheck after switching (which can run user hooks). Squash merges need -D
+    # because the original commits are not ancestors of the merge commit.
+    if git("rev-parse", "--verify", ref) != tip:
+        raise LandError(f"Keeping {branch!r}: its tip changed during cleanup.")
+    print(git("branch", "-D", "--", branch))
+
+
+def update_base(base):
+    # The merge happened on GitHub, so a checkout on the base is now behind.
+    # Only fast-forward it; bases in other worktrees are left alone.
+    if current_branch() != base:
+        return
+    if run("git", "rev-parse", "--verify", "--quiet", "@{upstream}", check=False).returncode:
+        return
+    if subprocess.run(["git", "pull", "--ff-only", "--prune"]).returncode:
+        raise LandError(f"Could not fast-forward {base!r}; update it manually.")
+
+
+def main():
+    args = sys.argv[1:]
+    if args[:1] in (["-h"], ["--help"]):
+        print(__doc__.strip())
+        return 0
+    no_wait = "--no-wait" in args
+    args = [arg for arg in args if arg != "--no-wait"]
+    if len(args) > 1 or args and args[0].startswith("-"):
+        print(f"land: unexpected arguments: {' '.join(args)}. See `land --help`.", file=sys.stderr)
+        return 1
+    try:
+        return land(args[0] if args else None, no_wait)
+    except (LandError, OSError, ValueError, KeyError, TypeError) as error:
+        print(f"land: {error}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main())
