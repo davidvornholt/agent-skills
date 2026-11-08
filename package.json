@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "biome check --error-on-warnings . && tsc --noEmit && bun test",
+    "check": "biome check --error-on-warnings . && tsc --noEmit && bun test && python3 -m unittest discover -s land/scripts -p 'test_*.py'",
     "lint:fix": "biome check --write --error-on-warnings ."
   },
   "devDependencies": {
