@@ -1,33 +1,59 @@
 {
-  "title": "Night shift 6–7 Nov 2026",
-  "heading": "Night shift, 6–7 November",
-  "status": "Final, 08:00 CET",
-  "lede": "What the shift did, what went wrong, and what is left for the user, in two or three sentences.",
-  "built": "7 Nov 2026, 08:00 CET",
-  "merge_chart_title": "3 PRs merged across 2 repos",
-  "merge_chart_sub": "Each merge deployed through its own run, and none was reverted.",
-  "health_title": "Health checks: 11 of 12 endpoints passed at 02:00, and all passed otherwise",
-  "tiles": [
-    { "label": "Merged", "value": "3", "sub": "PRs in 2 repos" },
-    { "label": "Issues", "value": "2 fixed", "sub": "1 closed as already fixed, 9 skipped" },
-    { "label": "Reverted", "value": "0", "sub": "merges that broke production" }
+  "title": "Night shift, 7–8 November",
+  "built": "8 Nov 2026, 07:30 CET",
+  "summary": "Atrium has been down since Saturday evening and needs a restart (item 2). Otherwise 2 pull requests landed, 1 issue was closed, and nothing was reverted.",
+  "landed": [
+    {
+      "repo": "wordhold",
+      "ref": "#254",
+      "href": "https://github.com/davidvornholt/wordhold/pull/254",
+      "text": "A word list that fails to upload no longer clears the list you were editing."
+    },
+    {
+      "repo": "rota",
+      "ref": "#145",
+      "href": "https://github.com/davidvornholt/rota/pull/145",
+      "text": "Dependency updates, with no change you would notice."
+    }
   ],
-  "health": [{ "time": "23:30", "state": "12/12" }, { "time": "02:00", "state": "11/12" }, { "time": "07:30", "state": "12/12" }],
-  "merges": [{ "repo": "wordhold", "fix": 2, "dep": 0, "sync": 0 }, { "repo": "rota", "fix": 0, "dep": 1, "sync": 0 }],
-  "decisions": [
+  "closed": [
+    {
+      "repo": "rota",
+      "ref": "#140",
+      "href": "https://github.com/davidvornholt/rota/issues/140",
+      "text": "Shifts on a public holiday showed twice. Closed, because last week's release already fixed it."
+    }
+  ],
+  "other": ["Wrote 14 LinkedIn comments and 1 reply, and stopped when LinkedIn paused search on your account at 03:30."],
+  "held": [
     {
       "n": 1,
-      "title": "Decide whether exports include deleted entries",
-      "effort": "One answer",
-      "area": "owner/repo#123 · what it affects",
-      "stake": "What happens with each choice, for someone who has forgotten the background.",
-      "facts": ["A fact the decision rests on, which you checked yourself."],
+      "repo": "papersync",
+      "ref": "#99",
+      "href": "https://github.com/davidvornholt/papersync/pull/99",
+      "text": "Cancelling an import no longer leaves half of its pages behind.",
+      "why": "It changes code that deletes files, and you asked me to land only low-risk changes."
+    }
+  ],
+  "todo": [
+    {
+      "n": 2,
+      "text": "Restart Atrium on the production server. Its pages load, but nothing that needs the database works, and its deploys fail until it's back.",
+      "href": "https://atrium.fes-kirchheim.de/healthz"
+    }
+  ],
+  "questions": [
+    {
+      "n": 3,
+      "text": "When a household leaves the school, Atrium has to either archive or delete it, and the fix for departed households can't go ahead until that's settled.",
       "options": [
-        { "key": "a", "title": "Leave deleted entries out", "recommended": true, "note": "Why this is the recommendation." },
-        { "key": "b", "title": "Include them with a marker" }
-      ],
-      "why": "Optional: why the recommendation holds.",
-      "links": [{ "label": "PR #123", "href": "https://github.com/owner/repo/pull/123" }]
+        {
+          "key": "a",
+          "text": "Archive it: the school keeps its cleaning-duty history, but also its personal data until a retention period ends.",
+          "recommended": true
+        },
+        { "key": "b", "text": "Delete it: the personal data goes at once, and so does the history." }
+      ]
     }
   ]
 }

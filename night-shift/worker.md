@@ -17,6 +17,7 @@ Scripts named here are in the `scripts` folder next to this file. The user is as
 - Reproduce a defect on `origin/main` before fixing it. If you can't, report that rather than fixing on speculation.
 - A failure is pre-existing only if `origin/main` fails the same way.
 - Verify what you report by running it. Say plainly what failed or was skipped.
+- End your log with one plain line per pull request: what it changes for its users, whether it landed, and if not, why.
 
 ## Landing
 
