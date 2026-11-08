@@ -1,7 +1,7 @@
 {
   "title": "Night shift, 7–8 November",
   "built": "8 Nov 2026, 07:30 CET",
-  "summary": "Atrium has been down since Saturday evening and needs a restart (item 2). Otherwise 2 pull requests landed, 1 issue was closed, and nothing was reverted.",
+  "summary": "Atrium has been down since Saturday evening and needs a restart (item 1). Otherwise 2 pull requests landed, 1 issue was closed, and nothing was reverted.",
   "landed": [
     {
       "repo": "wordhold",
@@ -25,21 +25,21 @@
     }
   ],
   "other": ["Wrote 14 LinkedIn comments and 1 reply, and stopped when LinkedIn paused search on your account at 03:30."],
-  "held": [
+  "todo": [
     {
       "n": 1,
+      "text": "Restart Atrium on the production server. Its pages load, but nothing that needs the database works, and its deploys fail until it's back.",
+      "href": "https://atrium.fes-kirchheim.de/healthz"
+    }
+  ],
+  "held": [
+    {
+      "n": 2,
       "repo": "papersync",
       "ref": "#99",
       "href": "https://github.com/davidvornholt/papersync/pull/99",
       "text": "Cancelling an import no longer leaves half of its pages behind.",
       "why": "It changes code that deletes files, and you asked me to land only low-risk changes."
-    }
-  ],
-  "todo": [
-    {
-      "n": 2,
-      "text": "Restart Atrium on the production server. Its pages load, but nothing that needs the database works, and its deploys fail until it's back.",
-      "href": "https://atrium.fes-kirchheim.de/healthz"
     }
   ],
   "questions": [
@@ -52,7 +52,10 @@
           "text": "Archive it: the school keeps its cleaning-duty history, but also its personal data until a retention period ends.",
           "recommended": true
         },
-        { "key": "b", "text": "Delete it: the personal data goes at once, and so does the history." }
+        {
+          "key": "b",
+          "text": "Delete it: the personal data goes at once, and so does the history."
+        }
       ]
     }
   ]

@@ -75,7 +75,7 @@ def landed_section(items: list) -> str:
     if not items:
         return ""
     groups = []
-    for repo, group in groupby(sorted(items, key=lambda x: x["repo"]), key=lambda x: x["repo"]):
+    for repo, group in groupby(sorted(items, key=lambda x: x["repo"].lower()), key=lambda x: x["repo"]):
         lis = "".join(
             f'<li><a class="ref" href="{e(x["href"])}">{e(x["ref"])}</a>{e(x["text"])}</li>' for x in group
         )
@@ -113,8 +113,8 @@ def question(x: dict) -> str:
 
 
 waiting = [
-    ("Ready, but held", "held", held),
     ("Only you can do", "todo", todo),
+    ("Ready, but held", "held", held),
     ("Questions", "questions", question),
 ]
 waiting_html = "".join(
@@ -123,6 +123,12 @@ waiting_html = "".join(
 count = sum(len(DATA.get(key, [])) for _, key, _ in waiting)
 items = "1 item waits" if count == 1 else f"{count} items wait"
 jump = f'<p class="jump"><a href="#waiting">{items} for you</a></p>' if count else ""
+# Example replies come from the report's own items, so they never name a number it lacks.
+replies = [f"<code>land {x['n']}</code>" for x in DATA.get("held", [])[:1]]
+replies += [f"<code>{x['n']} {x['options'][0]['key']}</code>" for x in DATA.get("questions", [])[:1]]
+footer = f"Reply with the numbers, such as {' or '.join(replies)}." if replies else ""
+if not count:
+    footer = "Nothing waits for you."
 
 page = f"""<!doctype html>
 <html lang="en">
@@ -143,7 +149,7 @@ page = f"""<!doctype html>
   {plain_section('Issues closed', DATA.get('closed', []))}
   {plain_section('Other work', DATA.get('other', []))}
   {f'<h2 id="waiting">Waiting for you ({count})</h2>{waiting_html}' if count else ''}
-  <footer>{'Reply with the numbers, such as <code>land 1</code> or <code>3 a</code>.' if count else 'Nothing waits for you.'}</footer>
+  {f'<footer>{footer}</footer>' if footer else ''}
 </main>
 </body>
 </html>
