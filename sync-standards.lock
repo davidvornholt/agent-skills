@@ -1,10 +1,10 @@
 {
   "upstream": "github:davidvornholt/standards",
-  "sha": "935c51dc99459d1de7ca5f7b7078d03fa7571a20",
+  "sha": "dc77f1bdcb0122606e44db3d6fe7225e57c7b0cc",
   "files": {
     ".agents/skills/issues/SKILL.md": "1cb4ec0e6e7ec49530508b9108f1d4cae33fc8ba74fc6b090068924b5fd7a0e4",
     ".agents/skills/prs/SKILL.md": "41bec820f92e80bc964f2fe851ac9be6f79e784e7eb2b3ac99f0f0a3dda01431",
-    ".agents/skills/review-fix/SKILL.md": "cebafecd29815dc60a035d69264faa67fb4037ebdac352bcdc1198147241fb05",
+    ".agents/skills/review-fix/SKILL.md": "5752945774e8d7d1faa12013241a24c73359066dd2a0ed35185310b129be7943",
     ".agents/skills/review/SKILL.md": "c36d6e32df1cd693fbbf5dc95d4ba57ce239c9e38ce7c437f18ddded76dae492",
     ".agents/skills/standards-sync/agents/openai.yaml": "34a2d5f7474f257663e98a98999106e7d215c51619ce1467eb9f10a5a8e082bd",
     ".agents/skills/standards-sync/references/github.md": "6c442755166c772dd1d266001e821aec5d88a61fd1e564984440724aab5974c6",
