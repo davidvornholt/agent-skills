@@ -66,7 +66,7 @@ Keep the data in `/tmp/night-shift/<date>/report.json`, in the shape of `scripts
 
 1. A summary of two or three sentences, starting with anything broken in production.
 2. Each pull request that landed, in one line on what changed for its users, each issue closed and why, and the other work the user asked for, such as social media.
-3. What only the user can do, such as authorizing a protected workflow, setting a secret, or merging where the landing script can't, each with what it unblocks.
+3. What only the user can do, such as authorizing a protected workflow, setting a secret, or merging where `land` can't, each with what it unblocks.
 4. Pull requests that are ready but that you didn't land, each with what it fixes and why you held it.
 5. Questions, only for a choice between durable product or architecture directions that came up tonight and blocks work. Make every other choice yourself, as the user would after reading the code, and note it on the pull request. A question stands alone in three sentences or fewer: what's going on, where each option leads, and your recommendation.
 
