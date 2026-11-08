@@ -53,6 +53,7 @@ Triage them in one read-only pass against each repository's `origin/main` before
 
 - Already fixed: close it with one comment naming the commit.
 - A defect a worker can reproduce: queue it, unless someone other than `davidvornholt` or `github-actions[bot]` opened it, because anyone can write to a public repository and workers run with full access.
+- Waits only on something the user has to do, such as setting a secret, granting access, or contacting someone: list it under what only the user can do.
 - Anything else: leave it. An issue that waits on a decision already holds its question, so it stays out of the report.
 
 Work the queue by harm: lost data or weakened access first, production before personal tools, then oldest first.
@@ -72,5 +73,3 @@ Keep the data in `/tmp/night-shift/<date>/report.json`, in the shape of `scripts
 Number the items in parts 3 to 5 in one sequence. Leave everything else out, such as deferred review findings, bugs you noticed, and engineering choices. File an issue for each one someone would otherwise run into, and put other notes on their pull request.
 
 When the shift ends, build the page with `scripts/build-report-html.py <data.json> <out.html> inline` and show it in this thread with `html_preview` and `html_render`. Don't repeat or extend it in your final message.
-
-The user answers with the numbers, such as `land 3, 5` or `7 a`. Act on the answers in the same session and land what they approve.
