@@ -18,7 +18,7 @@ Ask for whatever the request doesn't already say:
 - what is off limits tonight, such as repositories with an active session or pull requests the user wants to keep;
 - any extra tasks, and which Super Productivity tasks the shift may take. Social media work happens only when the user asks for it tonight.
 
-Also check that `sp status` answers, because only the user can make Super Productivity reachable. After that, ask nothing. Record the answers and a first `scripts/health.sh` result in the state file.
+After that, ask nothing. Record the answers and a first `scripts/health.sh` result in the state file.
 
 ## Coordinating
 
@@ -41,7 +41,7 @@ Work through this list while usage lasts:
 
 ## Super Productivity tasks
 
-Use `sp` as the `super-productivity` skill describes. You run `sp`, not the workers.
+Use `sp` as the `super-productivity` skill describes.
 
 - Before starting a worker, find the task that plans its work: one the user handed over tonight, or a result of `sp tasks list --query <words> --brief` that clearly plans the same work. Leave every other task alone.
 - Once the worker has started, check the task off, but only when the worker can finish it and nothing in it still needs the user, such as a decision or a step only they can take. Then add the worker's thread link to the task's notes as `[<title>](t3-thread://v1/<childThreadId>)`, with the `childThreadId` that `delegate_task` returned.
