@@ -197,7 +197,7 @@ const fixtures = {
   [key("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "david@david-z890-nixos", "bun ~/.claude/skills/wrap/scripts/wrap.ts t3-threads")]: {
     stdout: [{ title: "Settled today", project: "postlude", settledAt: "2026-10-29T16:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-28T10:00:00.000Z" }],
   },
-  // A Kontor that has never synced.
+  // A Kontor that has never attempted a sync.
   [key("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "david@david-z890-nixos", "kontor status --json")]: {
     stdout: { lastSyncAt: null, approvalExpiresAt: null, daysLeft: 0, approvalNeeded: true, reason: "never-approved", lastSyncOutcome: null },
   },
@@ -288,13 +288,13 @@ test("reads every source into the metrics", () => {
 });
 
 test("asks the z890 for Kontor's status from another host", () => {
-  expect(collected.reportInputs.kontor).toEqual({ status: "complete", synced: false, approvalNeeded: true });
+  expect(collected.reportInputs.kontor).toEqual({ status: "complete", attempted: false, approvalNeeded: true });
   expect(collected.problems.filter((problem) => problem.startsWith("Kontor"))).toEqual([]);
 });
 
 test("turns a command that doesn't exist into missing coverage", () => {
   expect(onZ890.calls.some((call) => call[0] === "ssh")).toBe(false);
-  expect(onZ890.collected.reportInputs.kontor).toEqual({ status: "missing", synced: null, approvalNeeded: null });
+  expect(onZ890.collected.reportInputs.kontor).toEqual({ status: "missing", attempted: null, approvalNeeded: null });
   expect(onZ890.collected.problems.some((problem) => problem.startsWith("Kontor status unavailable: kontor could not run"))).toBe(true);
 });
 

@@ -80,28 +80,48 @@ describe("renderReport", () => {
     expect(gaps).toContain('<h2>Appointments</h2><p class="empty">No appointments.</p><p class="meta">Some sources were not available');
   });
 
-  test("shows the Kontor alert only when approval is needed after a sync", () => {
+  test("shows the Kontor alert only when approval is needed after an attempt", () => {
     expect(html).not.toContain('class="alert"');
     const withKontor = (kontor: Collected["reportInputs"]["kontor"]) =>
       renderReport(template, { ...collected, reportInputs: { ...collected.reportInputs, kontor } }, SUMMARY);
-    const alert = withKontor({ status: "complete", synced: true, approvalNeeded: true });
+    const alert = withKontor({ status: "complete", attempted: true, approvalNeeded: true });
     expect(alert).toContain("Kontor needs a new approval for the bank connection.");
     expect(alert).not.toContain("Kontor's bank status was not available.");
-    expect(alert).not.toContain("Kontor has not synced with the bank yet.");
-    const fine = withKontor({ status: "complete", synced: true, approvalNeeded: false });
+    expect(alert).not.toContain("Kontor has not attempted a bank sync yet.");
+    const fine = withKontor({ status: "complete", attempted: true, approvalNeeded: false });
     expect(fine).not.toContain('class="alert"');
     expect(fine).not.toContain("Kontor");
   });
 
-  test("says that Kontor has not synced yet instead of asking for an approval", () => {
-    const neverSynced = renderReport(
-      template,
-      { ...collected, reportInputs: { ...collected.reportInputs, kontor: { status: "complete", synced: false, approvalNeeded: true } } },
-      SUMMARY,
-    );
-    expect(neverSynced).not.toContain('class="alert"');
-    expect(neverSynced).toContain("Kontor has not synced with the bank yet.");
-    expect(neverSynced).not.toContain("Kontor's bank status was not available.");
+  // `kontor status --json` before anyone ran a sync or login, and after a first login that stopped at an unanswered approval.
+  const fromKontorStatus = (status: object) => renderReport(template, buildCollected(WINDOW, { ...sources, kontor: { ok: true, value: status } }), SUMMARY);
+
+  test("notes a Kontor that has never attempted a sync instead of asking for an approval", () => {
+    const neverAttempted = fromKontorStatus({
+      lastSyncAt: null,
+      approvalExpiresAt: null,
+      daysLeft: 0,
+      approvalNeeded: true,
+      reason: "never-approved",
+      lastSyncOutcome: null,
+    });
+    expect(neverAttempted).not.toContain('class="alert"');
+    expect(neverAttempted).toContain("Kontor has not attempted a bank sync yet.");
+    expect(neverAttempted).not.toContain("Kontor's bank status was not available.");
+  });
+
+  test("asks for an approval after an attempt that never completed a sync", () => {
+    const incomplete = fromKontorStatus({
+      lastSyncAt: null,
+      approvalExpiresAt: "2027-02-06T10:00:00.000Z",
+      daysLeft: 0,
+      approvalNeeded: true,
+      reason: "bank-asked",
+      lastSyncOutcome: "approval_required",
+    });
+    expect(incomplete).toContain("Kontor needs a new approval for the bank connection.");
+    expect(incomplete).not.toContain("Kontor has not attempted a bank sync yet.");
+    expect(incomplete).not.toContain("Kontor's bank status was not available.");
   });
 
   test("refuses a template without its slots", () => {

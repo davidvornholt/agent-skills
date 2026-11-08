@@ -15,10 +15,10 @@ export type ReportInputs = {
   readonly landedPrs: List<{ readonly repository: string; readonly title: string }>;
   readonly appointments: List<{ readonly time: string | null; readonly title: string }>;
   /**
-   * Only whether Kontor has ever synced and whether the bank connection needs a new approval; never amounts.
-   * Before its first sync Kontor holds no bank data and always reports approvalNeeded.
+   * Only whether Kontor has ever attempted a sync and whether the bank connection needs a new approval; never amounts.
+   * Until its first attempt (lastSyncOutcome null) Kontor always reports approvalNeeded. An attempt that stopped early may leave lastSyncAt null.
    */
-  readonly kontor: { readonly status: ListStatus; readonly synced: boolean | null; readonly approvalNeeded: boolean | null };
+  readonly kontor: { readonly status: ListStatus; readonly attempted: boolean | null; readonly approvalNeeded: boolean | null };
 };
 
 const missing = <T>(): List<T> => ({ status: "missing", items: [] });
@@ -108,11 +108,11 @@ const appointments = (reading: Sources["calendar"], window: DayWindow): ReportIn
 };
 
 const kontor = (reading: Sources["kontor"]): ReportInputs["kontor"] => {
-  const unknown = { status: "missing", synced: null, approvalNeeded: null } as const;
+  const unknown = { status: "missing", attempted: null, approvalNeeded: null } as const;
   if (!reading.ok || typeof reading.value !== "object" || reading.value === null) return unknown;
-  const { lastSyncAt, approvalNeeded } = reading.value as { lastSyncAt?: unknown; approvalNeeded?: unknown };
-  if (typeof approvalNeeded !== "boolean" || (typeof lastSyncAt !== "string" && lastSyncAt !== null)) return unknown;
-  return { status: "complete", synced: lastSyncAt !== null, approvalNeeded };
+  const { lastSyncOutcome, approvalNeeded } = reading.value as { lastSyncOutcome?: unknown; approvalNeeded?: unknown };
+  if (typeof approvalNeeded !== "boolean" || (typeof lastSyncOutcome !== "string" && lastSyncOutcome !== null)) return unknown;
+  return { status: "complete", attempted: lastSyncOutcome !== null, approvalNeeded };
 };
 
 export const buildReportInputs = (window: DayWindow, sources: Sources): ReportInputs => ({

@@ -39,7 +39,7 @@ test("builds the lists of a day with all sources", () => {
         { time: "03:30–05:00", title: "Night train" },
       ],
     },
-    kontor: { status: "missing", synced: null, approvalNeeded: null },
+    kontor: { status: "missing", attempted: null, approvalNeeded: null },
   });
 });
 
@@ -74,20 +74,19 @@ test("leaves out a meeting whose answer couldn't be read and marks appointments 
   expect(buildReportInputs(WINDOW, { ...sources, calendar }).appointments).toEqual({ status: "partial", items: [{ time: "10:00–11:00", title: "Standup" }] });
 });
 
-test("reads only whether Kontor has synced and needs approval", () => {
+test("reads only whether Kontor has attempted a sync and needs approval", () => {
   const kontor = (value: unknown) => buildReportInputs(WINDOW, { ...sources, kontor: { ok: true, value } }).kontor;
-  expect(kontor({ lastSyncAt: "2026-10-29T06:00:00Z", approvalExpiresAt: "2026-11-02T00:00:00Z", daysLeft: 3, approvalNeeded: true })).toEqual({
-    status: "complete",
-    synced: true,
-    approvalNeeded: true,
-  });
-  expect(kontor({ daysLeft: 3 })).toEqual({ status: "missing", synced: null, approvalNeeded: null });
-  expect(kontor({ approvalNeeded: false })).toEqual({ status: "missing", synced: null, approvalNeeded: null });
-  expect(kontor(null)).toEqual({ status: "missing", synced: null, approvalNeeded: null });
+  expect(
+    kontor({ lastSyncAt: "2026-10-29T06:00:00Z", approvalExpiresAt: "2026-11-02T00:00:00Z", daysLeft: 3, approvalNeeded: true, lastSyncOutcome: "ok" }),
+  ).toEqual({ status: "complete", attempted: true, approvalNeeded: true });
+  expect(kontor({ daysLeft: 3 })).toEqual({ status: "missing", attempted: null, approvalNeeded: null });
+  expect(kontor({ lastSyncAt: null, approvalNeeded: false })).toEqual({ status: "missing", attempted: null, approvalNeeded: null });
+  expect(kontor({ approvalNeeded: true, lastSyncOutcome: 1 })).toEqual({ status: "missing", attempted: null, approvalNeeded: null });
+  expect(kontor(null)).toEqual({ status: "missing", attempted: null, approvalNeeded: null });
 });
 
-test("reads a Kontor that has never synced as a state, not a gap", () => {
-  const neverSynced = {
+test("reads a Kontor that has never attempted a sync as a state, not a gap", () => {
+  const neverAttempted = {
     lastSyncAt: null,
     approvalExpiresAt: null,
     daysLeft: 0,
@@ -95,8 +94,23 @@ test("reads a Kontor that has never synced as a state, not a gap", () => {
     reason: "never-approved",
     lastSyncOutcome: null,
   };
-  const collected = buildCollected(WINDOW, { ...sources, kontor: { ok: true, value: neverSynced } });
-  expect(collected.reportInputs.kontor).toEqual({ status: "complete", synced: false, approvalNeeded: true });
+  const collected = buildCollected(WINDOW, { ...sources, kontor: { ok: true, value: neverAttempted } });
+  expect(collected.reportInputs.kontor).toEqual({ status: "complete", attempted: false, approvalNeeded: true });
+  expect(collected.problems.filter((problem) => problem.startsWith("Kontor"))).toEqual([]);
+});
+
+test("reads a first login that stopped before every account as an attempt", () => {
+  // Kontor archived what it read, but lastSyncAt counts only runs that read every account.
+  const incomplete = {
+    lastSyncAt: null,
+    approvalExpiresAt: "2027-02-06T10:00:00.000Z",
+    daysLeft: 0,
+    approvalNeeded: true,
+    reason: "bank-asked",
+    lastSyncOutcome: "approval_required",
+  };
+  const collected = buildCollected(WINDOW, { ...sources, kontor: { ok: true, value: incomplete } });
+  expect(collected.reportInputs.kontor).toEqual({ status: "complete", attempted: true, approvalNeeded: true });
   expect(collected.problems.filter((problem) => problem.startsWith("Kontor"))).toEqual([]);
 });
 
