@@ -132,7 +132,6 @@ const readSp = async (localHost: string): Promise<Reading<SpData>> => {
   return remote.ok ? remote : failed(`${local.error}; on ${other}: ${remote.error}`);
 };
 
-/** The user's pull requests a search finds, each parsed or null when it lacks a field. */
 const searchPrs = async <T>(
   filter: string,
   parse: (item: Record<string, unknown>, repository: string) => T | null,

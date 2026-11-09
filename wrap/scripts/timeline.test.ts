@@ -79,19 +79,30 @@ describe("part windows", () => {
     ).toEqual([[{ app: "org.example.Notes", title: "Seed list", minutes: 40 }], [{ app: "org.example.Notes", title: "Seed list", minutes: 20 }]]);
   });
 
-  test(`list the ${PART_WINDOWS} windows in front longest, with at least ${PART_WINDOW_MIN_MINUTES} minutes before rounding`, () => {
+  test(`list the ${PART_WINDOWS} windows in front longest`, () => {
     const many = Array.from({ length: PART_WINDOWS + 2 }, (_, index) => {
       const start = at("09:00") + index * 4 * 60_000;
       return { start, end: start + (index + 1) * 10_000 + 2 * 60_000, app: "org.example.Notes", title: `Page ${String.fromCharCode(65 + index)}` };
     });
-    const almostTwo = { start: at("10:30"), end: at("10:30") + PART_WINDOW_MIN_MINUTES * 60_000 - 1_000, app: "org.example.Calculator", title: "Calculator" };
-    const [listed] = windows([...many, almostTwo]);
+    const [listed] = windows(many);
     expect(listed?.map((entry) => entry.title)).toEqual(
       many
         .toReversed()
         .slice(0, PART_WINDOWS)
         .map((entry) => entry.title),
     );
+  });
+
+  test(`need at least ${PART_WINDOW_MIN_MINUTES} minutes in a part before rounding`, () => {
+    const lasting = (start: string, seconds: number, title: string): WindowPiece => ({
+      start: at(start),
+      end: at(start) + seconds * 1_000,
+      app: "org.example.Notes",
+      title,
+    });
+    // One second short of the minimum rounds up to it, so only a comparison before rounding leaves it out.
+    const [listed] = windows([lasting("09:00", PART_WINDOW_MIN_MINUTES * 60 - 1, "Short note"), lasting("09:10", PART_WINDOW_MIN_MINUTES * 60, "Long note")]);
+    expect(listed).toEqual([{ app: "org.example.Notes", title: "Long note", minutes: PART_WINDOW_MIN_MINUTES }]);
   });
 
   test("leave out T3 Code's and redacted windows, and moments with no window in front, but keep a known app without a title", () => {
