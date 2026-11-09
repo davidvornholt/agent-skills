@@ -1,4 +1,4 @@
-// The agent's text carries no numbers: the template reads the day's figures from Postlude's message (PLAN.md Contract 5), and the times and minutes this script prints come from the collected data, never from the agent.
+// The agent's text carries no numbers: the template reads the day's figures from Postlude's message, and the times and minutes this script prints come from the collected data, never from the agent.
 
 import { compareText } from "./compare.ts";
 import { toBerlinClock } from "./day.ts";
@@ -163,7 +163,7 @@ export const renderReport = (template: string, collected: Collected, text: Agent
 
 export const loadTemplate = (): Promise<string> => Bun.file(TEMPLATE_URL).text();
 
-/** The stdin of `postlude agent-area put <day>` (PLAN.md Contract 3). */
+/** The stdin of `postlude agent-area put <day>`. */
 export const agentAreaPayload = (collected: Collected, reportHtml: string, log: string, model: string) => ({
   dayMetrics: collected.dayMetrics,
   metricsVersion: collected.dayMetrics.metricsVersion,
