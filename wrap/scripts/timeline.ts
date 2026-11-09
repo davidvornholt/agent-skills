@@ -1,6 +1,6 @@
 // The day's timeline and its parts. The report draws the timeline, and the agent writes one paragraph per part.
 //
-// A part is a stretch of the user's screen time: the timeline's pieces joined across gaps shorter than PART_GAP_MINUTES. A stretch with less than PART_MIN_MINUTES of screen time joins the stretch before it, or the one after it when it comes first, so a short check at night doesn't need a paragraph of its own. For placing things that happened, such as a landed pull request or an agent's run, part i runs from its start to the start of part i + 1, the first part from the start of the journal day, and the last part to its end.
+// A part starts as a stretch of the user's screen time: the timeline's pieces joined across gaps shorter than PART_GAP_MINUTES. A stretch with less than PART_MIN_MINUTES of screen time joins the stretch before it, or the one after it when it comes first, so a short check at night doesn't need a paragraph of its own. Things that happened, such as a landed pull request or an agent's run, belong to the part whose bound holds them: from the start of its stretch to the start of the next one, the first part from the start of the journal day, and the last part to its end. A part's printed time range covers its screen time and everything placed in it, so it can begin before its stretch and end after it.
 
 import { compareText } from "./compare.ts";
 import { type DayWindow, toBerlinClock, toBerlinIso } from "./day.ts";
@@ -30,7 +30,7 @@ export type Timeline = {
 export type DayPart = {
   readonly start: string;
   readonly end: string;
-  /** The stretch's first and last minute of screen time, such as "09:10–11:45". */
+  /** start and end as clock times, such as "09:10–11:45": the first and last minute of the part's screen time, agent runs, and the tasks, threads, pull requests and appointments placed in it. */
   readonly clock: string;
   readonly screenMinutes: number;
   readonly areas: readonly { readonly label: string; readonly minutes: number }[];
@@ -95,14 +95,16 @@ const stretches = (pieces: readonly TimelinePiece[]): Interval[] => {
   return kept;
 };
 
-/** Where things that happened at a time belong: part i covers bounds[i] up to bounds[i + 1]. */
+/** Where things that happened at a time belong: part i covers bounds[i]. There is one bound per part. */
 export type PartBounds = readonly Interval[];
 
-export const partBounds = (window: DayWindow, parts: readonly Interval[]): PartBounds =>
-  parts.map((part, index) => ({
-    start: index === 0 ? window.startMs : part.start,
-    end: parts[index + 1]?.start ?? window.endMs,
+export const partBounds = (window: DayWindow, timeline: Timeline): PartBounds => {
+  const found = stretches(timeline.pieces);
+  return found.map((stretch, index) => ({
+    start: index === 0 ? window.startMs : stretch.start,
+    end: found[index + 1]?.start ?? window.endMs,
   }));
+};
 
 /** The index of the part an instant belongs to, or null when the day has no parts or the instant lies outside it. */
 export const partAt = (bounds: PartBounds, ms: number): number | null => {
@@ -113,13 +115,21 @@ export const partAt = (bounds: PartBounds, ms: number): number | null => {
 const byMinutes = <T extends { readonly minutes: number; readonly label: string }>(a: T, b: T): number =>
   b.minutes - a.minutes || compareText(a.label, b.label);
 
-export const buildParts = (window: DayWindow, timeline: Timeline): { readonly parts: readonly DayPart[]; readonly bounds: PartBounds } => {
-  const found = stretches(timeline.pieces);
-  const bounds = partBounds(window, found);
-  const parts = found.map((stretch, index): DayPart => {
-    const bound = bounds[index] as Interval;
+/** When something placed in a part happened: an instant, with start equal to end, or an appointment. */
+export type Moment = Interval & { readonly part: number | null };
+
+export const buildParts = (timeline: Timeline, bounds: PartBounds, moments: readonly Moment[]): DayPart[] =>
+  bounds.map((bound, index): DayPart => {
     const pieces = clipped(timeline.pieces, bound);
     const runs = clipped(timeline.agentRuns.items, bound);
+    // An appointment can begin before the journal day or run into the next part, so only its time within this part's bound counts.
+    const placed = moments
+      .filter((moment) => moment.part === index)
+      .map((moment) => ({ start: Math.max(moment.start, bound.start), end: Math.min(moment.end, bound.end) }));
+    // Every part has screen time, so the range is never empty.
+    const covered = [...pieces, ...runs, ...placed];
+    const start = Math.min(...covered.map((interval) => interval.start));
+    const end = Math.max(...covered.map((interval) => interval.end));
     const areas = new Map<string, number>();
     const projects = new Map<string, { screen: Interval[]; agent: Interval[] }>();
     const project = (path: string) => {
@@ -141,9 +151,9 @@ export const buildParts = (window: DayWindow, timeline: Timeline): { readonly pa
       thread.runs.push(run);
     }
     return {
-      start: toBerlinIso(stretch.start),
-      end: toBerlinIso(stretch.end),
-      clock: `${toBerlinClock(stretch.start)}–${toBerlinClock(stretch.end)}`,
+      start: toBerlinIso(start),
+      end: toBerlinIso(end),
+      clock: `${toBerlinClock(start)}–${toBerlinClock(end)}`,
       screenMinutes: totalMinutes(pieces),
       areas: [...areas]
         .map(([label, ms]) => ({ label, minutes: minutes(ms) }))
@@ -160,5 +170,3 @@ export const buildParts = (window: DayWindow, timeline: Timeline): { readonly pa
         .slice(0, PART_THREADS),
     };
   });
-  return { parts, bounds };
-};

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { sources, summary, WINDOW } from "./testing/fixtures.ts";
-import { buildParts, buildTimeline, PART_GAP_MINUTES, PART_MIN_MINUTES, partAt, type Timeline } from "./timeline.ts";
+import { buildParts, buildTimeline, PART_GAP_MINUTES, PART_MIN_MINUTES, partAt, partBounds, type Timeline } from "./timeline.ts";
 
 const at = (clock: string): number => Date.parse(`2026-10-29T${clock}:00+01:00`);
 const piece = (start: string, end: string) => ({ start: at(start), end: at(end), category: "code", project: null });
@@ -11,7 +11,10 @@ const timeline = (pieces: Timeline["pieces"]): Timeline => ({
   categoryLabels: { code: "Code" },
   agentRuns: { status: "complete", items: [] },
 });
-const clocks = (pieces: Timeline["pieces"]) => buildParts(WINDOW, timeline(pieces)).parts.map((part) => part.clock);
+const clocks = (pieces: Timeline["pieces"]) => {
+  const built = timeline(pieces);
+  return buildParts(built, partBounds(WINDOW, built), []).map((part) => part.clock);
+};
 
 describe("parts", () => {
   test(`join screen time across gaps shorter than ${PART_GAP_MINUTES} minutes`, () => {
@@ -27,11 +30,12 @@ describe("parts", () => {
   });
 
   test("don't exist without screen time", () => {
-    expect(buildParts(WINDOW, timeline([]))).toEqual({ parts: [], bounds: [] });
+    expect(partBounds(WINDOW, timeline([]))).toEqual([]);
+    expect(buildParts(timeline([]), [], [])).toEqual([]);
   });
 
   test("place an instant in the part whose stretch it follows, from the start to the end of the journal day", () => {
-    const { bounds } = buildParts(WINDOW, timeline([piece("09:00", "10:00"), piece("14:00", "15:00")]));
+    const bounds = partBounds(WINDOW, timeline([piece("09:00", "10:00"), piece("14:00", "15:00")]));
     expect(partAt(bounds, WINDOW.startMs)).toBe(0);
     expect(partAt(bounds, at("12:00"))).toBe(0);
     expect(partAt(bounds, at("14:00"))).toBe(1);

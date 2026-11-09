@@ -28,7 +28,7 @@ test("render prints the stdin for postlude agent-area put", async () => {
   expect(payload.metricsVersion).toBe(7);
   expect(payload.reportModel).toBe("Claude Opus 5.5");
   expect(payload.reportHtml).toContain('<p class="summary">A calm day.</p>');
-  expect(payload.dayLog).toBe("A calm day.\n\n08:00–12:00 A quiet morning.\n\n13:00–18:30 A quiet afternoon.");
+  expect(payload.dayLog).toBe("A calm day.\n\n04:00–13:00 A quiet morning.\n\n13:00–04:00 A quiet afternoon.");
 });
 
 test("render refuses a summary with digits and a paragraph count that doesn't match the parts", async () => {

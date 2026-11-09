@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import { buildCollected } from "./day-report.ts";
+import { clip } from "./intervals.ts";
 import { buildReportInputs } from "./report-inputs.ts";
 import type { Sources } from "./sources.ts";
 import { event, sources, WINDOW } from "./testing/fixtures.ts";
-import { buildTimeline } from "./timeline.ts";
+import { buildTimeline, partBounds } from "./timeline.ts";
 
 const inputs = (changes: Partial<Sources> = {}) => {
   const all = { ...sources, ...changes };
@@ -14,9 +15,10 @@ test("builds the parts and lists of a day with all sources", () => {
   expect(inputs()).toEqual({
     parts: [
       {
-        start: "2026-10-29T08:00:00+01:00",
-        end: "2026-10-29T12:00:00+01:00",
-        clock: "08:00–12:00",
+        // The pull request at the start of the day and the run clipped to it come before the screen time, and lunch runs until the next part.
+        start: "2026-10-29T04:00:00+01:00",
+        end: "2026-10-29T13:00:00+01:00",
+        clock: "04:00–13:00",
         screenMinutes: 240,
         areas: [
           { label: "Code", minutes: 210 },
@@ -33,9 +35,10 @@ test("builds the parts and lists of a day with all sources", () => {
         ],
       },
       {
+        // A task done just before the end of the journal day, and the night train clipped to it.
         start: "2026-10-29T13:00:00+01:00",
-        end: "2026-10-29T18:30:00+01:00",
-        clock: "13:00–18:30",
+        end: "2026-10-30T04:00:00+01:00",
+        clock: "13:00–04:00",
         screenMinutes: 330,
         areas: [
           { label: "Code", minutes: 180 },
@@ -180,4 +183,31 @@ test("explains every gap in the collected problems", () => {
   expect(collected.problems).toContain("T3 Code unavailable: ssh timed out");
   expect(collected.problems).toContain("Kontor status unavailable: kontor could not run: Executable not found in $PATH");
   expect(collected.window).toEqual({ start: "2026-10-29T04:00:00+01:00", end: "2026-10-30T04:00:00+01:00" });
+});
+
+test("prints each part's time range over everything placed in it", () => {
+  const timeline = buildTimeline(WINDOW, sources);
+  const { parts, handedOffTasks, settledThreads, landedPrs, appointments } = buildReportInputs(WINDOW, sources, timeline);
+  const bounds = partBounds(WINDOW, timeline);
+  const instant = (part: number | null, what: string, iso: string) => ({ part, what, start: Date.parse(iso), end: Date.parse(iso) });
+  const placed = [
+    ...handedOffTasks.items.map((task) => instant(task.part, task.title, task.doneAt)),
+    ...settledThreads.items.map((thread) => instant(thread.part, thread.title, thread.settledAt)),
+    ...landedPrs.items.map((pr) => instant(pr.part, pr.title, pr.mergedAt)),
+    ...appointments.items.flatMap((event) =>
+      event.start === null || event.end === null ? [] : [{ part: event.part, what: event.title, start: Date.parse(event.start), end: Date.parse(event.end) }],
+    ),
+    // An agent run belongs to every part whose bound it overlaps.
+    ...timeline.agentRuns.items.flatMap((run) => bounds.map((_, index) => ({ part: index, what: run.threadTitle, start: run.start, end: run.end }))),
+  ];
+  const outside = placed.flatMap(({ part, what, start, end }) => {
+    const bound = part === null ? undefined : bounds[part];
+    const range = part === null ? undefined : parts[part];
+    if (bound === undefined || range === undefined) return [];
+    const [shown] = start === end ? [{ start, end }] : clip([{ start, end }], bound);
+    if (shown === undefined) return [];
+    return shown.start < Date.parse(range.start) || shown.end > Date.parse(range.end) ? [`${what} in ${range.clock}`] : [];
+  });
+  expect(parts).toHaveLength(2);
+  expect(outside).toEqual([]);
 });

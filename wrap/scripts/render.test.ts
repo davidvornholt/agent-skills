@@ -77,7 +77,7 @@ describe("renderReport", () => {
 
   test("shows each part's paragraph under its time range", () => {
     expect(html).toContain(
-      '<h2>The day in parts</h2><ol class="parts"><li><p class="part-time">08:00–12:00</p><p>The morning went to the parser.</p></li><li><p class="part-time">13:00–18:30</p>',
+      '<h2>The day in parts</h2><ol class="parts"><li><p class="part-time">04:00–13:00</p><p>The morning went to the parser.</p></li><li><p class="part-time">13:00–04:00</p>',
     );
   });
 
@@ -256,7 +256,7 @@ describe("renderTimeline", () => {
 describe("dayLog", () => {
   test("puts the summary first and each paragraph after its part's time range", () => {
     expect(dayLog(collected, TEXT)).toBe(
-      "A quiet day of reviews and garden work.\n\n08:00–12:00 The morning went to the parser.\n\n13:00–18:30 The afternoon went to tidying tests.",
+      "A quiet day of reviews and garden work.\n\n04:00–13:00 The morning went to the parser.\n\n13:00–04:00 The afternoon went to tidying tests.",
     );
   });
 

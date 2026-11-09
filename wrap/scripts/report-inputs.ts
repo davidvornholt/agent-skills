@@ -1,7 +1,7 @@
 import { compareText } from "./compare.ts";
 import { type DayWindow, eventOnDay, toBerlinDate, toBerlinIso } from "./day.ts";
 import type { CalendarEvent, Sources, SpData, SpTask } from "./sources.ts";
-import { buildParts, type DayPart, type PartBounds, partAt, type Timeline } from "./timeline.ts";
+import { buildParts, type DayPart, type Moment, type PartBounds, partAt, partBounds, type Timeline } from "./timeline.ts";
 
 /** A thread counts as open for several days once it was created this many days before the end of the journal day. */
 export const OPEN_THREAD_DAYS = 3;
@@ -148,15 +148,32 @@ const kontor = (reading: Sources["kontor"]): ReportInputs["kontor"] => {
   return { status: "complete", attempted: lastSyncOutcome !== null, approvalNeeded };
 };
 
+type Placed = Pick<ReportInputs, "handedOffTasks" | "settledThreads" | "landedPrs" | "appointments">;
+
+const moments = (placed: Placed): Moment[] => {
+  const instant = (part: number | null, iso: string): Moment => ({ part, start: Date.parse(iso), end: Date.parse(iso) });
+  return [
+    ...placed.handedOffTasks.items.map((task) => instant(task.part, task.doneAt)),
+    ...placed.settledThreads.items.map((thread) => instant(thread.part, thread.settledAt)),
+    ...placed.landedPrs.items.map((pr) => instant(pr.part, pr.mergedAt)),
+    ...placed.appointments.items.flatMap((event) =>
+      event.start === null || event.end === null ? [] : [{ part: event.part, start: Date.parse(event.start), end: Date.parse(event.end) }],
+    ),
+  ];
+};
+
 export const buildReportInputs = (window: DayWindow, sources: Sources, timeline: Timeline): ReportInputs => {
-  const { parts, bounds } = buildParts(window, timeline);
-  return {
-    parts,
+  const bounds = partBounds(window, timeline);
+  const placed: Placed = {
     handedOffTasks: handedOffTasks(sources.sp, window, bounds),
     settledThreads: settledThreads(sources.t3, window, bounds),
-    openThreads: openThreads(sources.t3, window),
     landedPrs: landedPrs(sources.github, window, bounds),
     appointments: appointments(sources.calendar, window, bounds),
+  };
+  return {
+    parts: buildParts(timeline, bounds, moments(placed)),
+    ...placed,
+    openThreads: openThreads(sources.t3, window),
     offComputerTasks: offComputerTasks(sources.sp, window.day),
     kontor: kontor(sources.kontor),
   };
