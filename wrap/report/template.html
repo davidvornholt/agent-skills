@@ -21,6 +21,9 @@
     --line: #d3cdc3;
     --focus: #2e8b57;
     --scattered: #a49d94;
+    --screen: #2e8b57;
+    --agent: #9b8573;
+    --appointment: #4f6fa8;
     --warning: #fab219;
     --warning-ink: #0b0b0b;
     --tooltip-surface: #2a1f19;
@@ -36,6 +39,9 @@
     --line: #453b33;
     --focus: #2fae78;
     --scattered: #7d726a;
+    --screen: #2fae78;
+    --agent: #8c7b6d;
+    --appointment: #7f9fd6;
     --warning: #fab219;
     --warning-ink: #0b0b0b;
     --tooltip-surface: #ece7dd;
@@ -47,6 +53,7 @@
   main { max-width: 760px; margin: 0 auto; padding: 24px 20px 32px; }
   h1 { font-size: 22px; line-height: 1.25; font-weight: 600; margin: 0; }
   h2 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
+  h3 { font-size: 13px; font-weight: 600; margin: 14px 0 4px; }
   .eyebrow { margin: 0 0 4px; font-size: 13px; color: var(--ink-muted); }
   .summary { margin: 12px 0 0; color: var(--ink-secondary); max-width: 62ch; }
   .notice { margin: 12px 0 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; color: var(--ink-secondary); }
@@ -88,9 +95,43 @@
   .meta { color: var(--ink-muted); font-size: 13px; }
   .time { padding-right: 12px; color: var(--ink-secondary); }
   .empty { margin: 0; color: var(--ink-muted); font-size: 13px; }
-  .tooltip { position: fixed; z-index: 1; pointer-events: none; padding: 4px 8px; border-radius: 6px; background: var(--tooltip-surface); color: var(--tooltip-ink); font-size: 12px; white-space: nowrap; }
+  .section-note { margin: -6px 0 10px; }
+  .tooltip { position: fixed; z-index: 1; pointer-events: none; max-width: min(420px, calc(100vw - 8px)); padding: 4px 8px; border-radius: 6px; background: var(--tooltip-surface); color: var(--tooltip-ink); font-size: 12px; }
+  /* The timeline: one row per area and project, marks placed in percent of the drawn hours. */
+  .timeline { font-size: 12px; }
+  .tl-row { display: grid; grid-template-columns: minmax(80px, 140px) 1fr; gap: 10px; align-items: center; }
+  .tl-label { color: var(--ink-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tl-track { position: relative; height: 18px; border-bottom: 1px solid var(--line);
+    background-image: linear-gradient(to right, var(--line) 1px, transparent 1px); background-size: calc(100% / var(--hours)) 100%; }
+  .tl-axis .tl-ticks { position: relative; height: 16px; color: var(--ink-muted); }
+  .tl-ticks span { position: absolute; transform: translateX(-50%); }
+  .tl-ticks span:first-child { transform: none; }
+  .tl-group { margin: 10px 0 2px; color: var(--ink-muted); }
+  .tl-mark { position: absolute; top: 3px; height: 12px; min-width: 2px; }
+  .tl-screen { background: var(--screen); }
+  .tl-focus { border: 2px solid var(--ink); border-radius: 3px; top: 1px; height: 16px; }
+  .tl-agent { background: var(--agent); }
+  /* In a project's row, the user's own screen time runs as a thin bar over the agents' work. */
+  /* A project row has two lanes: agents working above, you in the project below. */
+  .tl-projects .tl-agent { top: 2px; height: 7px; }
+  .tl-projects .tl-screen { top: 10px; height: 6px; }
+  .tl-appointment { background: var(--appointment); border-radius: 3px; }
+  .tl-tick { width: 2px; top: 1px; height: 16px; background: var(--ink); }
+  .swatch.tl-focus { background: none; border-width: 1px; }
+  .swatch.tl-agent, .swatch.tl-tick { height: 10px; }
+  .swatch.tl-tick { width: 2px; }
+  details.prs { margin: 0; font-size: inherit; color: inherit; }
+  details.prs summary h2 { display: inline; margin: 0 12px 0 0; }
+  ol.parts { margin: 0; padding: 0; list-style: none; }
+  ol.parts li { display: grid; grid-template-columns: 96px 1fr; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  ol.parts li:last-child { border-bottom: none; }
+  ol.parts p { margin: 0; }
+  .part-time { color: var(--ink-secondary); }
+  @media (max-width: 520px) {
+    ol.parts li { grid-template-columns: 1fr; gap: 2px; }
+  }
   @media (forced-colors: active) {
-    .bar, .split > div, .swatch { forced-color-adjust: none; border: 1px solid CanvasText; }
+    .bar, .split > div, .swatch, .tl-mark { forced-color-adjust: none; border: 1px solid CanvasText; }
   }
 </style>
 </head>
@@ -113,7 +154,7 @@
     <div class="tile">
       <p class="tile-label">Focus</p>
       <p class="tile-value" data-metric="focusMinutes"></p>
-      <p class="tile-note">Scattered: <span data-metric="scatteredMinutes"></span></p>
+      <p class="tile-note">Short stretches: <span data-metric="scatteredMinutes"></span></p>
     </div>
     <div class="tile">
       <p class="tile-label">Off the computer</p>
@@ -136,12 +177,17 @@
     </div>
   </section>
 
+  <!--wrap:timeline-->
+
+  <!--wrap:parts-->
+
   <section>
-    <h2>Focus and scattered time</h2>
+    <h2>Focus and short stretches</h2>
+    <p class="meta section-note">Focus is screen time spent at least 25 minutes on one area, not counting switches away shorter than two minutes. The rest is short stretches.</p>
     <div class="split" data-metric="focusMinutes" data-view="split"></div>
     <ul class="legend">
       <li><span class="swatch" style="background: var(--focus)"></span>Focus <span data-metric="focusMinutes"></span></li>
-      <li><span class="swatch" style="background: var(--scattered)"></span>Scattered <span data-metric="scatteredMinutes"></span></li>
+      <li><span class="swatch" style="background: var(--scattered)"></span>Short stretches <span data-metric="scatteredMinutes"></span></li>
     </ul>
   </section>
 
@@ -164,10 +210,11 @@
 
   <!--wrap:lists-->
 
-  <section>
+  <!--wrap:notes-->
+
+  <section data-sources hidden>
     <h2>Sources</h2>
     <ul class="items" data-metric="coverage" data-view="list"></ul>
-    <!--wrap:notes-->
   </section>
 </main>
 <div class="tooltip" role="tooltip" hidden></div>
@@ -226,7 +273,7 @@
         return;
       }
       const total = focus + scattered;
-      for (const [label, minutes, color] of [["Focus", focus, "var(--focus)"], ["Scattered", scattered, "var(--scattered)"]]) {
+      for (const [label, minutes, color] of [["Focus", focus, "var(--focus)"], ["Short stretches", scattered, "var(--scattered)"]]) {
         if (minutes === 0) continue;
         const segment = element("div");
         segment.style.flex = `${minutes} 0 0`;
@@ -293,13 +340,11 @@
     });
   };
 
+  // The section shows only when a source was partly or not available.
   const fillCoverage = (metrics) =>
     each("coverage", "list", (node) => {
       const gaps = (Array.isArray(metrics.coverage) ? metrics.coverage : []).filter((entry) => entry.status !== "complete");
-      if (gaps.length === 0) {
-        node.replaceChildren(element("li", "meta", "Every measured source was complete."));
-        return;
-      }
+      node.closest("[data-sources]").hidden = gaps.length === 0;
       node.replaceChildren(
         ...gaps.map((entry) => {
           const [kind, ...rest] = String(entry.source).split(":");

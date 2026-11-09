@@ -7,7 +7,7 @@
 //
 // Definitions:
 // - Activity numbers and categories are copied from the activity summary (Contract 1). They are null when the summary is unavailable or every host is missing. Since summary version 7 (metrics version 5) they include the time David uses the Windows VM directly at the desk, not only while it is streamed. Since summary version 8 (metrics version 6) Learning also counts more school subjects, their topics and school course pages.
-// - offComputerMinutes: time tracked in Super Productivity on the day on tasks tagged OFF_COMPUTER_TAG, or whose parent task carries the tag. Only tasks without subtasks count, because a parent's tracked time is the sum of its subtasks'. SP files time under its own date keys, which follow its "start of next day" setting rather than the 04:00 journal boundary.
+// - offComputerMinutes: all time tracked in Super Productivity on the day, because the user tracks only time away from the computer there (metrics version 7; before, only tasks with an "off-computer" tag counted). Only tasks without subtasks count, because a parent's tracked time is the sum of its subtasks'. SP files time under its own date keys, which follow its "start of next day" setting rather than the 04:00 journal boundary.
 // - appointmentMinutes: the union of all timed calendar events, clipped to the journal day, so overlapping events count once. All-day events, cancelled events, and meetings the account's own attendee entry declined don't count. A meeting whose answer couldn't be read is left out, and its calendar is partial.
 // - appointmentOffScreenMinutes: the part of that union outside the summary's activeIntervals. It needs every activity host complete, because screen time on a host that wasn't fully read would count as off screen.
 // - landedPrs: pull requests authored by the davidvornholt account and merged during the journal day, in any repository.
@@ -18,9 +18,8 @@ import type { DayWindow } from "./day.ts";
 import { clip, type Interval, subtract, totalMinutes, union } from "./intervals.ts";
 import type { CalendarEvent, Reading, SentMailData, Sources, SpData } from "./sources.ts";
 
-export const METRICS_VERSION = 6;
-export const SUMMARY_VERSION = 8;
-export const OFF_COMPUTER_TAG = "off-computer";
+export const METRICS_VERSION = 7;
+export const SUMMARY_VERSION = 9;
 
 export type CoverageStatus = "complete" | "partial" | "missing";
 export type Coverage = { readonly source: string; readonly status: CoverageStatus };
@@ -43,7 +42,11 @@ export type DayMetrics = {
   readonly coverage: readonly Coverage[];
 };
 
-type Summary = {
+/** A stretch of the summary's timeline in which the category and the T3 project stay the same; null where the time has none. */
+export type TimelinePiece = Interval & { readonly category: string | null; readonly project: string | null };
+export type FocusBlock = Interval & { readonly category: string };
+
+export type Summary = {
   readonly hosts: readonly { readonly host: string; readonly status: CoverageStatus; readonly activeMinutes: number | null }[];
   readonly activeMinutes: number | null;
   readonly firstActivityAt: string | null;
@@ -52,6 +55,8 @@ type Summary = {
   readonly scatteredMinutes: number | null;
   readonly categories: readonly Category[];
   readonly activeIntervals: readonly Interval[] | null;
+  readonly timeline: readonly TimelinePiece[];
+  readonly focusBlocks: readonly FocusBlock[];
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -63,6 +68,20 @@ const minutesOrNull = (value: unknown, path: string): number | null => {
   if (value === null) return null;
   if (isMinutes(value)) return value;
   throw new Error(`${path} is not a number of minutes`);
+};
+
+const textOrNull = (value: unknown, path: string): string | null => {
+  if (value === null || typeof value === "string") return value;
+  throw new Error(`${path} is not text or null`);
+};
+
+const intervals = <T>(raw: unknown, key: string, extra: (entry: Record<string, unknown>, path: string) => T): (Interval & T)[] => {
+  if (!Array.isArray(raw)) throw new Error(`${key} is not a list`);
+  return raw.map((entry, index) => {
+    const path = `${key}[${index}]`;
+    if (!isRecord(entry) || !isInstant(entry.start) || !isInstant(entry.end)) throw new Error(`${path} needs a start and an end`);
+    return { start: Date.parse(entry.start), end: Date.parse(entry.end), ...extra(entry, path) };
+  });
 };
 
 const instantOrNull = (value: unknown, path: string): string | null => {
@@ -91,10 +110,14 @@ export const parseSummary = (raw: unknown, day: string): Summary => {
     }
     return { id: category.id, label: category.label, minutes: category.minutes };
   });
-  if (!Array.isArray(raw.activeIntervals)) throw new Error("activeIntervals is not a list");
-  const activeIntervals = raw.activeIntervals.map((interval, index) => {
-    if (!isRecord(interval) || !isInstant(interval.start) || !isInstant(interval.end)) throw new Error(`activeIntervals[${index}] needs a start and an end`);
-    return { start: Date.parse(interval.start), end: Date.parse(interval.end) };
+  const activeIntervals = intervals(raw.activeIntervals, "activeIntervals", () => ({}));
+  const timeline = intervals(raw.timeline, "timeline", (entry, path) => ({
+    category: textOrNull(entry.category, `${path}.category`),
+    project: textOrNull(entry.project, `${path}.project`),
+  }));
+  const focusBlocks = intervals(raw.focusBlocks, "focusBlocks", (entry, path) => {
+    if (typeof entry.category !== "string") throw new Error(`${path}.category is not text`);
+    return { category: entry.category };
   });
   return {
     hosts,
@@ -105,6 +128,8 @@ export const parseSummary = (raw: unknown, day: string): Summary => {
     scatteredMinutes: minutesOrNull(raw.scatteredMinutes, "scatteredMinutes"),
     categories,
     activeIntervals,
+    timeline,
+    focusBlocks,
   };
 };
 
@@ -129,21 +154,8 @@ const activityPart = (reading: Reading<unknown>, day: string): Part<Summary | nu
 };
 
 const offComputerMinutes = (sp: SpData, day: string): Part<number | null> => {
-  const tag = sp.tags.find((candidate) => candidate.title.trim().toLowerCase() === OFF_COMPUTER_TAG);
-  if (!tag) {
-    return {
-      value: null,
-      coverage: [{ source: "sp", status: "partial" }],
-      problems: [`Super Productivity has no tag named "${OFF_COMPUTER_TAG}", so off-computer time is unknown.`],
-    };
-  }
-  const byId = new Map(sp.tasks.map((task) => [task.id, task]));
-  let milliseconds = 0;
-  for (const task of sp.tasks) {
-    if (task.subTaskIds.some((id) => byId.has(id))) continue;
-    const parent = task.parentId === null ? undefined : byId.get(task.parentId);
-    if (task.tagIds.includes(tag.id) || parent?.tagIds.includes(tag.id)) milliseconds += task.timeSpentOnDay[day] ?? 0;
-  }
+  const ids = new Set(sp.tasks.map((task) => task.id));
+  const milliseconds = sp.tasks.filter((task) => !task.subTaskIds.some((id) => ids.has(id))).reduce((sum, task) => sum + (task.timeSpentOnDay[day] ?? 0), 0);
   return { value: Math.round(milliseconds / 60_000), coverage: [{ source: "sp", status: "complete" }], problems: [] };
 };
 

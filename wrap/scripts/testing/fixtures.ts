@@ -5,7 +5,7 @@ export const DAY = "2026-10-29";
 export const WINDOW = dayWindow(DAY);
 
 export const summary = {
-  summaryVersion: 8,
+  summaryVersion: 9,
   day: DAY,
   window: { start: WINDOW.start, end: WINDOW.end },
   hosts: [
@@ -27,6 +27,13 @@ export const summary = {
   activeIntervals: [
     { start: "2026-10-29T08:00:00+01:00", end: "2026-10-29T12:00:00+01:00" },
     { start: "2026-10-29T13:00:00+01:00", end: "2026-10-29T18:30:00+01:00" },
+  ],
+  timeline: [
+    { start: "2026-10-29T08:00:00+01:00", end: "2026-10-29T11:30:00+01:00", category: "code", project: "~/dev/postlude" },
+    { start: "2026-10-29T11:30:00+01:00", end: "2026-10-29T12:00:00+01:00", category: "mail", project: null },
+    { start: "2026-10-29T13:00:00+01:00", end: "2026-10-29T14:00:00+01:00", category: "admin", project: null },
+    { start: "2026-10-29T14:00:00+01:00", end: "2026-10-29T17:00:00+01:00", category: "code", project: "~/dev/sp-cli" },
+    { start: "2026-10-29T17:00:00+01:00", end: "2026-10-29T18:30:00+01:00", category: null, project: null },
   ],
 };
 
@@ -144,14 +151,22 @@ export const sources: Sources = {
   },
   t3: {
     ok: true,
-    value: [
-      { title: "Settled today", project: "postlude", settledAt: "2026-10-29T16:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-28T10:00:00.000Z" },
-      { title: "Settled yesterday", project: "postlude", settledAt: "2026-10-28T16:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-27T10:00:00.000Z" },
-      { title: "Long open", project: "dev", settledAt: null, snoozedUntil: null, createdAt: "2026-10-25T10:00:00.000Z" },
-      { title: "Recently opened", project: "dev", settledAt: null, snoozedUntil: null, createdAt: "2026-10-28T10:00:00.000Z" },
-      { title: "Snoozed", project: "dev", settledAt: null, snoozedUntil: "2026-11-02T08:00:00.000Z", createdAt: "2026-10-20T10:00:00.000Z" },
-      { title: "Settled later", project: "nix-config", settledAt: "2026-10-30T12:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-20T10:00:00.000Z" },
-    ],
+    value: {
+      runs: [
+        // Began before the journal day, so the timeline clips it to the day's start.
+        { threadTitle: "Night build", project: "~/dev/nix-config", start: "2026-10-29T02:30:00.000Z", end: "2026-10-29T03:30:00.000Z" },
+        { threadTitle: "Fix the parser", project: "~/dev/postlude", start: "2026-10-29T08:30:00.000Z", end: "2026-10-29T09:15:00.000Z" },
+        { threadTitle: "Tidy tests", project: "~/dev/sp-cli", start: "2026-10-29T14:00:00.000Z", end: "2026-10-29T14:40:00.000Z" },
+      ],
+      threads: [
+        { title: "Settled today", project: "postlude", settledAt: "2026-10-29T16:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-28T10:00:00.000Z" },
+        { title: "Settled yesterday", project: "postlude", settledAt: "2026-10-28T16:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-27T10:00:00.000Z" },
+        { title: "Long open", project: "dev", settledAt: null, snoozedUntil: null, createdAt: "2026-10-25T10:00:00.000Z" },
+        { title: "Recently opened", project: "dev", settledAt: null, snoozedUntil: null, createdAt: "2026-10-28T10:00:00.000Z" },
+        { title: "Snoozed", project: "dev", settledAt: null, snoozedUntil: "2026-11-02T08:00:00.000Z", createdAt: "2026-10-20T10:00:00.000Z" },
+        { title: "Settled later", project: "nix-config", settledAt: "2026-10-30T12:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-20T10:00:00.000Z" },
+      ],
+    },
   },
   kontor: { ok: false, error: "kontor could not run: Executable not found in $PATH" },
 };

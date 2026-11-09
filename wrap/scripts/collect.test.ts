@@ -194,8 +194,13 @@ const fixtures = {
   },
   [sentSearch("work@example.com", "Sent Items", 200)]: { stdout: { hits: busyDay, failures: [] } },
   [sentSearch("work@example.com", "Sent Items", 800)]: { stdout: { hits: [...busyDay, hit("2026-10-28T22:00:00+01:00")], failures: [] } },
-  [key("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "david@david-z890-nixos", "bun ~/.claude/skills/wrap/scripts/wrap.ts t3-threads")]: {
-    stdout: [{ title: "Settled today", project: "postlude", settledAt: "2026-10-29T16:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-28T10:00:00.000Z" }],
+  [key("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "david@david-z890-nixos", "bun ~/.claude/skills/wrap/scripts/wrap.ts t3 2026-10-29")]: {
+    stdout: {
+      threads: [
+        { title: "Settled today", project: "postlude", settledAt: "2026-10-29T16:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-28T10:00:00.000Z" },
+      ],
+      runs: [{ threadTitle: "Fix the parser", project: "~/dev/postlude", start: "2026-10-29T08:30:00.000Z", end: "2026-10-29T09:15:00.000Z" }],
+    },
   },
   // A Kontor that has never attempted a sync.
   [key("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "david@david-z890-nixos", "kontor status --json")]: {
@@ -260,7 +265,7 @@ afterAll(() => rmSync(directory, { recursive: true, force: true }));
 test("reads every source into the metrics", () => {
   expect(collected.dayMetrics).toMatchObject({
     activeMinutes: 330,
-    offComputerMinutes: 70,
+    offComputerMinutes: 120,
     appointmentMinutes: 150,
     appointmentOffScreenMinutes: null,
     landedPrs: 1,
@@ -283,8 +288,14 @@ test("reads every source into the metrics", () => {
     // The user's answer to the aliased All hands couldn't be read.
     { source: "calendar:work@example.com", status: "partial" },
   ]);
-  expect(collected.reportInputs.landedPrs.items).toEqual([{ repository: "davidvornholt/agent-skills", title: "Add the day report" }]);
-  expect(collected.reportInputs.settledThreads.items).toEqual([{ title: "Settled today", project: "postlude" }]);
+  expect(collected.reportInputs.landedPrs.items).toMatchObject([{ repository: "davidvornholt/agent-skills", title: "Add the day report" }]);
+  expect(collected.reportInputs.settledThreads.items).toMatchObject([{ title: "Settled today", project: "postlude" }]);
+  expect(collected.timeline.agentRuns).toEqual({
+    status: "complete",
+    items: [
+      { threadTitle: "Fix the parser", project: "~/dev/postlude", start: Date.parse("2026-10-29T08:30:00.000Z"), end: Date.parse("2026-10-29T09:15:00.000Z") },
+    ],
+  });
 });
 
 test("asks the z890 for Kontor's status from another host", () => {
@@ -322,7 +333,7 @@ test("only reads", () => {
     if (command === "gh") return args[0] === "api" && args[1] === "--method" && args[2] === "GET" && args[3] === "search/issues";
     if (command === "sp") return /^(tasks|tags|projects) list\b/.test(words);
     if (command === "pim") return /^(accounts|calendar (events|get)|mail folders|mail search)\b/.test(words);
-    if (command === "ssh") return ["bun ~/.claude/skills/wrap/scripts/wrap.ts t3-threads", "kontor status --json"].includes(args.at(-1) ?? "");
+    if (command === "ssh") return ["bun ~/.claude/skills/wrap/scripts/wrap.ts t3 2026-10-29", "kontor status --json"].includes(args.at(-1) ?? "");
     return command === "activity-digest" && args.includes("--summary-json");
   };
   expect(calls.length).toBeGreaterThan(0);

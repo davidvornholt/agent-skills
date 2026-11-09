@@ -23,7 +23,7 @@ test("computes every metric of a day with all sources", () => {
         { id: "mail", label: "Mail", minutes: 80 },
         { id: "admin", label: "Admin", minutes: 50 },
       ],
-      offComputerMinutes: 70,
+      offComputerMinutes: 120,
       appointmentMinutes: 180,
       appointmentOffScreenMinutes: null,
       landedPrs: 2,
@@ -89,6 +89,8 @@ describe("activity", () => {
     expect(() => parseSummary({ ...summary, summaryVersion: 6 }, DAY)).toThrow(/summaryVersion 6/);
     // A host whose activity-digest predates the wider Learning category.
     expect(() => parseSummary({ ...summary, summaryVersion: 7 }, DAY)).toThrow(/summaryVersion 7/);
+    // A host whose activity-digest predates the timeline by category and T3 project.
+    expect(() => parseSummary({ ...summary, summaryVersion: 8 }, DAY)).toThrow(/summaryVersion 8/);
     expect(() => parseSummary(summary, "2026-10-28")).toThrow(/not 2026-10-28/);
     const { dayMetrics, problems } = metrics({ summary: { ok: true, value: { ...summary, summaryVersion: 1 } } });
     expect(dayMetrics.activeMinutes).toBeNull();
@@ -112,6 +114,20 @@ describe("activity", () => {
     expect(() => parseSummary(withoutIntervals, DAY)).toThrow(/activeIntervals is not a list/);
   });
 
+  test("reads the timeline and focus blocks as epoch milliseconds", () => {
+    const parsed = parseSummary(summary, DAY);
+    expect(parsed.timeline[0]).toEqual({
+      start: Date.parse("2026-10-29T08:00:00+01:00"),
+      end: Date.parse("2026-10-29T11:30:00+01:00"),
+      category: "code",
+      project: "~/dev/postlude",
+    });
+    expect(parsed.timeline.at(-1)).toMatchObject({ category: null, project: null });
+    expect(parsed.focusBlocks).toEqual([{ start: Date.parse("2026-10-29T08:12:00+01:00"), end: Date.parse("2026-10-29T11:32:00+01:00"), category: "code" }]);
+    expect(() => parseSummary({ ...summary, timeline: undefined }, DAY)).toThrow(/timeline is not a list/);
+    expect(() => parseSummary({ ...summary, timeline: [{ ...summary.timeline[0], project: 1 }] }, DAY)).toThrow(/timeline\[0\]\.project/);
+  });
+
   test("leaves the off-screen appointment time null unless every host is complete", () => {
     const withLaptop = (status: string) => ({
       ok: true as const,
@@ -128,19 +144,18 @@ describe("activity", () => {
 });
 
 describe("off-computer time", () => {
-  test("is unknown, not zero, when the tag doesn't exist", () => {
+  test("counts all time tracked in Super Productivity, each task without subtasks once", () => {
     if (!sources.sp.ok) throw new Error("fixture");
-    const sp = { ok: true as const, value: { ...sources.sp.value, tags: [{ id: "t-off", title: "outside" }] } };
-    const { dayMetrics, problems } = metrics({ sp });
-    expect(dayMetrics.offComputerMinutes).toBeNull();
-    expect(coverageOf({ sp }, "sp")).toEqual([{ source: "sp", status: "partial" }]);
-    expect(problems).toContain('Super Productivity has no tag named "off-computer", so off-computer time is unknown.');
+    // Garden's own total repeats its subtasks', so only Dig and Plant count; Walk's time on the day before doesn't.
+    const tasks = sources.sp.value.tasks.filter((task) => ["garden", "dig", "plant", "walk"].includes(task.id));
+    expect(metrics({ sp: { ok: true, value: { ...sources.sp.value, tasks } } }).dayMetrics.offComputerMinutes).toBe(65);
   });
 
-  test("matches the tag title regardless of case and spaces", () => {
+  test("is zero, not unknown, when nothing was tracked", () => {
     if (!sources.sp.ok) throw new Error("fixture");
-    const sp = { ok: true as const, value: { ...sources.sp.value, tags: [{ id: "t-off", title: " Off-Computer " }] } };
-    expect(metrics({ sp }).dayMetrics.offComputerMinutes).toBe(70);
+    const { dayMetrics } = metrics({ sp: { ok: true, value: { ...sources.sp.value, tasks: [] } } });
+    expect(dayMetrics.offComputerMinutes).toBe(0);
+    expect(dayMetrics.coverage).toContainEqual({ source: "sp", status: "complete" });
   });
 });
 

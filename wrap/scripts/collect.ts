@@ -3,8 +3,22 @@
 import { Database } from "bun:sqlite";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { compareText } from "./compare.ts";
 import { addDays, type DayWindow, eventOnDay } from "./day.ts";
-import type { CalendarAccount, CalendarEvent, GithubData, LandedPr, Reading, SentMailData, Sources, SpData, SpTask, T3Thread } from "./sources.ts";
+import type {
+  CalendarAccount,
+  CalendarEvent,
+  GithubData,
+  LandedPr,
+  Reading,
+  SentMailData,
+  Sources,
+  SpData,
+  SpTask,
+  T3Data,
+  T3Run,
+  T3Thread,
+} from "./sources.ts";
 
 const GITHUB_ACCOUNT = "davidvornholt";
 // pim reads these test accounts, but their sent mail isn't the user's.
@@ -305,20 +319,63 @@ const parseThread = (item: unknown): T3Thread => {
   };
 };
 
-/** Reads every top-level thread of every T3 Code project on this machine. The CLI has no project list, so the ids come from T3's state database, opened read-only. */
-export const readLocalT3 = async (): Promise<Reading<T3Thread[]>> => {
-  let projects: { project_id: string; title: string }[];
+type ProjectRow = { readonly project_id: string; readonly title: string; readonly workspace_root: string; readonly deleted_at: string | null };
+type RunRow = { readonly thread_title: string; readonly project_id: string; readonly started_at: string; readonly completed_at: string | null };
+
+/** Writes the home folder as "~", as the activity summary does for T3 projects. */
+export const homeRelative = (path: string, home: string): string => (path === home ? "~" : path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path);
+
+const parseRun = (item: unknown): T3Run => {
+  if (!isRecord(item) || typeof item.project !== "string" || typeof item.start !== "string" || typeof item.end !== "string") {
+    throw new Error("a run has no project, start, or end");
+  }
+  return {
+    threadTitle: stringOr(item.threadTitle, ""),
+    project: item.project,
+    start: item.start,
+    end: item.end,
+  };
+};
+
+/**
+ * Reads this machine's T3 Code threads and the agent runs that overlap the journal day, child threads included.
+ * The CLI lists neither projects nor runs, so both come from T3's state database, opened read-only. A run that never started has no time and is left out.
+ */
+export const readLocalT3 = async (window: DayWindow, nowMs: number): Promise<Reading<T3Data>> => {
+  let projects: ProjectRow[];
+  let runRows: RunRow[];
   try {
     const database = new Database(join(homedir(), ".t3/userdata/statev2.sqlite"), { readonly: true });
     try {
-      projects = database.query("select project_id, title from projection_projects where deleted_at is null order by project_id").all() as typeof projects;
+      projects = database.query("select project_id, title, workspace_root, deleted_at from projection_projects order by project_id").all() as ProjectRow[];
+      // T3 writes its times with toISOString, so they compare as text.
+      runRows = database
+        .query(
+          `select t.title as thread_title, t.project_id, json_extract(r.payload_json, '$.startedAt') as started_at, json_extract(r.payload_json, '$.completedAt') as completed_at
+           from orchestration_v2_projection_runs r join orchestration_v2_projection_threads t on t.thread_id = r.thread_id
+           where started_at < ?1 and (completed_at >= ?2 or (completed_at is null and r.status = 'running'))`,
+        )
+        .all(new Date(window.endMs).toISOString(), new Date(window.startMs).toISOString()) as RunRow[];
     } finally {
       database.close();
     }
   } catch (error) {
-    return failed(`T3 projects unreadable: ${messageOf(error)}`);
+    return failed(`T3 state unreadable: ${messageOf(error)}`);
   }
-  const perProject = await mapLimited(projects, T3_CONCURRENCY, async (project) =>
+  const byId = new Map(projects.map((project) => [project.project_id, project]));
+  const runs = runRows
+    .map((row) => {
+      const project = byId.get(row.project_id);
+      return {
+        threadTitle: row.thread_title,
+        project: project === undefined ? "-" : homeRelative(project.workspace_root, homedir()),
+        start: row.started_at,
+        end: row.completed_at ?? new Date(nowMs).toISOString(),
+      };
+    })
+    .toSorted((a, b) => compareText(a.start, b.start) || compareText(a.threadTitle, b.threadTitle));
+  const live = projects.filter((project) => project.deleted_at === null);
+  const perProject = await mapLimited(live, T3_CONCURRENCY, async (project) =>
     parseList(await runJson(["t3", "thread", "list", "--project", project.project_id, "--json"]), `threads of ${project.title}`, (item) =>
       parseThread(isRecord(item) ? { ...item, project: project.title } : item),
     ),
@@ -328,16 +385,27 @@ export const readLocalT3 = async (): Promise<Reading<T3Thread[]>> => {
     if (!reading.ok) return reading;
     threads.push(...reading.value);
   }
-  return ok(threads);
+  return ok({ threads, runs });
 };
 
-const readT3 = async (host: string): Promise<Reading<readonly T3Thread[]>> => {
-  if (host === T3_HOST) return readLocalT3();
-  return parseList(
-    await runJson(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", `david@${T3_HOST}`, "bun ~/.claude/skills/wrap/scripts/wrap.ts t3-threads"]),
-    "T3 threads from the z890",
-    parseThread,
-  );
+const readT3 = async (window: DayWindow, host: string): Promise<Reading<T3Data>> => {
+  if (host === T3_HOST) return readLocalT3(window, Date.now());
+  const reading = await runJson([
+    "ssh",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=10",
+    `david@${T3_HOST}`,
+    `bun ~/.claude/skills/wrap/scripts/wrap.ts t3 ${window.day}`,
+  ]);
+  if (!reading.ok) return reading;
+  if (!isRecord(reading.value)) return failed("T3 Code from the z890 is not a JSON object");
+  const threads = parseList(ok(reading.value.threads), "T3 threads from the z890", parseThread);
+  if (!threads.ok) return threads;
+  const runs = parseList(ok(reading.value.runs), "T3 runs from the z890", parseRun);
+  if (!runs.ok) return runs;
+  return ok({ threads: threads.value, runs: runs.value });
 };
 
 const readKontor = (host: string): Promise<Reading<unknown>> =>
@@ -353,7 +421,7 @@ export const readSources = async (window: DayWindow, host: string): Promise<Sour
     readSp(host),
     readGithub(window),
     readPim(window),
-    readT3(host),
+    readT3(window, host),
     readKontor(host),
   ]);
   return { summary, sp, github, mail: pim.mail, calendar: pim.calendar, t3, kontor };
