@@ -1,6 +1,6 @@
 ---
 name: planner
-description: The user's rules for Super Productivity, their planner: what goes in it, when to check a task off, and when to track time. Use with the super-productivity skill whenever you add, change, check off, or track a task, and when a thread takes over a planned task or leaves something only the user can do.
+description: The user's rules for Super Productivity. Use whenever the super-productivity skill applies, and when a thread takes over a planned task or leaves something only the user can do.
 ---
 
 # Planner
