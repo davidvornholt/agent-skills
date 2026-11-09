@@ -245,9 +245,11 @@ describe("renderTimeline", () => {
     expect(html).toContain('<h3>Tracked away from the computer</h3><ul class="items"><li>Write tests <span class="meta">· Work · 50 min</span></li>');
   });
 
-  test("says what is missing", () => {
-    const missing = withTimeline({ status: "missing", pieces: [], focusBlocks: [], agentRuns: { status: "missing", items: [] } }, quiet);
-    expect(renderTimeline(missing)).toContain('<p class="empty">Nothing recorded.</p>');
+  test("says what is missing, also on a day with nothing to draw", () => {
+    const missing = renderTimeline(withTimeline({ status: "missing", pieces: [], focusBlocks: [], agentRuns: { status: "missing", items: [] } }, quiet));
+    expect(missing).toContain('<p class="empty">Nothing recorded.</p>');
+    expect(missing).toContain("Screen activity was not available.");
+    expect(missing).toContain("T3 Code was not available, so agent work is missing.");
     const partial = renderTimeline(withTimeline({ status: "partial" }));
     expect(partial).toContain("some screen time may be missing");
   });
