@@ -11,8 +11,6 @@ import { projectLabel } from "./timeline.ts";
 
 export const SUMMARY_MAX_LENGTH = 600;
 export const PART_MAX_LENGTH = 900;
-/** Postlude's limit for the day log. */
-export const DAY_LOG_MAX_LENGTH = 20_000;
 
 const TEMPLATE_URL = new URL("../report/template.html", import.meta.url);
 
@@ -47,13 +45,6 @@ export const parseAgentText = (raw: string, collected: Collected): AgentText => 
     summary: checkText("summary", summary, SUMMARY_MAX_LENGTH),
     parts: parts.map((part, index) => checkText(`paragraph of part ${index + 1}`, part, PART_MAX_LENGTH)),
   };
-};
-
-/** The plain text Postlude stores and searches: the summary, then each part's paragraph after its time range. */
-export const dayLog = (collected: Collected, text: AgentText): string => {
-  const log = [text.summary, ...collected.reportInputs.parts.map((part, index) => `${part.clock} ${text.parts[index]}`)].join("\n\n");
-  if (log.length > DAY_LOG_MAX_LENGTH) throw new Error(`The day log has ${log.length} characters; Postlude's limit is ${DAY_LOG_MAX_LENGTH}.`);
-  return log;
 };
 
 /** A model ID as people say it, such as "Claude Opus 5.5" for claude-opus-5-5. An unknown ID stays as it is. */
@@ -164,10 +155,9 @@ export const renderReport = (template: string, collected: Collected, text: Agent
 export const loadTemplate = (): Promise<string> => Bun.file(TEMPLATE_URL).text();
 
 /** The stdin of `postlude agent-area put <day>`. */
-export const agentAreaPayload = (collected: Collected, reportHtml: string, log: string, model: string) => ({
+export const agentAreaPayload = (collected: Collected, reportHtml: string, model: string) => ({
   dayMetrics: collected.dayMetrics,
   metricsVersion: collected.dayMetrics.metricsVersion,
   reportHtml,
   reportModel: modelDisplayName(model),
-  dayLog: log,
 });

@@ -2,17 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { buildCollected, type Collected } from "./day-report.ts";
 import { escapeHtml } from "./html.ts";
 import { METRICS_VERSION } from "./metrics.ts";
-import {
-  type AgentText,
-  agentAreaPayload,
-  DAY_LOG_MAX_LENGTH,
-  dayLog,
-  loadTemplate,
-  modelDisplayName,
-  parseAgentText,
-  renderReport,
-  SUMMARY_MAX_LENGTH,
-} from "./render.ts";
+import { type AgentText, agentAreaPayload, loadTemplate, modelDisplayName, parseAgentText, renderReport, SUMMARY_MAX_LENGTH } from "./render.ts";
 import { MARK_GAP_MINUTES, renderTimeline, TIMELINE_PROJECTS } from "./render-timeline.ts";
 import { sources, WINDOW } from "./testing/fixtures.ts";
 
@@ -272,19 +262,6 @@ describe("renderTimeline", () => {
   });
 });
 
-describe("dayLog", () => {
-  test("puts the summary first and each paragraph after its part's time range", () => {
-    expect(dayLog(collected, TEXT)).toBe(
-      "A quiet day of reviews and garden work.\n\n04:00–13:00 The morning went to the parser.\n\n13:00–04:00 The afternoon went to tidying tests.",
-    );
-  });
-
-  test("refuses a log longer than Postlude stores", () => {
-    const long = { summary: TEXT.summary, parts: ["a".repeat(DAY_LOG_MAX_LENGTH), "b"] };
-    expect(() => dayLog(collected, long)).toThrow(/limit/);
-  });
-});
-
 test("modelDisplayName writes model IDs as people say them", () => {
   expect(modelDisplayName("claude-opus-5-5")).toBe("Claude Opus 5.5");
   expect(modelDisplayName("claude-opus-5-5[1m]")).toBe("Claude Opus 5.5");
@@ -297,13 +274,12 @@ test("modelDisplayName writes model IDs as people say them", () => {
   expect(modelDisplayName("local-model")).toBe("local-model");
 });
 
-test("the agent area payload carries the metrics, the report, the day log, and the model's name", () => {
-  const payload = agentAreaPayload(collected, "<html></html>", "The log.", "claude-opus-5-5");
-  expect(Object.keys(payload).toSorted()).toEqual(["dayLog", "dayMetrics", "metricsVersion", "reportHtml", "reportModel"]);
+test("the agent area payload carries the metrics, the report, and the model's name", () => {
+  const payload = agentAreaPayload(collected, "<html></html>", "claude-opus-5-5");
+  expect(Object.keys(payload).toSorted()).toEqual(["dayMetrics", "metricsVersion", "reportHtml", "reportModel"]);
   expect(payload.metricsVersion).toBe(collected.dayMetrics.metricsVersion);
   expect(payload.dayMetrics).toBe(collected.dayMetrics);
   expect(payload.reportModel).toBe("Claude Opus 5.5");
-  expect(payload.dayLog).toBe("The log.");
 });
 
 test("escapeHtml escapes every markup character", () => {

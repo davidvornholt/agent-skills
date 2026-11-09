@@ -5,7 +5,7 @@ import { readLocalT3, readSources } from "./collect.ts";
 import { dayWindow, isDay, journalDayAt } from "./day.ts";
 import { buildCollected, type Collected } from "./day-report.ts";
 import { METRICS_VERSION } from "./metrics.ts";
-import { agentAreaPayload, dayLog, loadTemplate, parseAgentText, renderReport } from "./render.ts";
+import { agentAreaPayload, loadTemplate, parseAgentText, renderReport } from "./render.ts";
 
 const USAGE = `Usage:
   wrap.ts collect [YYYY-MM-DD]                    Read every source for the journal day (default: the current one) and print the metrics and report lists as JSON.
@@ -45,7 +45,7 @@ const main = async (args: readonly string[]): Promise<string> => {
     const collected = parseCollected(JSON.parse(await Bun.file(file).text()));
     const text = parseAgentText(await Bun.stdin.text(), collected);
     const reportHtml = renderReport(await loadTemplate(), collected, text);
-    return JSON.stringify(agentAreaPayload(collected, reportHtml, dayLog(collected, text), model.trim()));
+    return JSON.stringify(agentAreaPayload(collected, reportHtml, model.trim()));
   }
   if (command === "t3") {
     const day = rest[0];
