@@ -4,7 +4,7 @@
 
 import { compareText } from "./compare.ts";
 import { type DayWindow, toBerlinClock, toBerlinIso } from "./day.ts";
-import { clip, type Interval, totalMinutes, union } from "./intervals.ts";
+import { clip, type Interval, totalMinutes, totalMs, union } from "./intervals.ts";
 import { type FocusBlock, parseSummary, type TimelinePiece } from "./metrics.ts";
 import type { ListStatus } from "./report-inputs.ts";
 import type { Sources } from "./sources.ts";
@@ -84,12 +84,13 @@ const stretches = (pieces: readonly TimelinePiece[]): Interval[] => {
     if (last && piece.start - last.end < PART_GAP_MINUTES * 60_000) joined[joined.length - 1] = { start: last.start, end: piece.end };
     else joined.push(piece);
   }
-  const screen = (stretch: Interval) => totalMinutes(clip(pieces, stretch));
+  // Unrounded, so a stretch of nine and a half minutes doesn't count as ten.
+  const short = (stretch: Interval) => totalMs(clip(pieces, stretch)) < PART_MIN_MINUTES * 60_000;
   const kept: Interval[] = [];
   for (const stretch of joined) {
     const last = kept.at(-1);
-    if (last && screen(stretch) < PART_MIN_MINUTES) kept[kept.length - 1] = { start: last.start, end: stretch.end };
-    else if (last && screen(last) < PART_MIN_MINUTES) kept[kept.length - 1] = { start: last.start, end: stretch.end };
+    if (last && short(stretch)) kept[kept.length - 1] = { start: last.start, end: stretch.end };
+    else if (last && short(last)) kept[kept.length - 1] = { start: last.start, end: stretch.end };
     else kept.push(stretch);
   }
   return kept;

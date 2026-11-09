@@ -38,6 +38,8 @@ export const subtract = (from: readonly Interval[], remove: readonly Interval[])
   return result;
 };
 
+/** Milliseconds covered by the union of the intervals. */
+export const totalMs = (intervals: readonly Interval[]): number => union(intervals).reduce((sum, interval) => sum + interval.end - interval.start, 0);
+
 /** Whole minutes covered by the union of the intervals, rounded once at the end. */
-export const totalMinutes = (intervals: readonly Interval[]): number =>
-  Math.round(union(intervals).reduce((sum, interval) => sum + interval.end - interval.start, 0) / 60_000);
+export const totalMinutes = (intervals: readonly Interval[]): number => Math.round(totalMs(intervals) / 60_000);

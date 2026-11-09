@@ -25,6 +25,11 @@ describe("parts", () => {
     expect(clocks([piece("09:00", "10:00"), piece("22:00", "22:05")])).toEqual(["09:00–22:05"]);
   });
 
+  test("compare a stretch's screen time with the minimum before rounding it", () => {
+    const almostTen = { start: at("22:00"), end: at("22:00") + (PART_MIN_MINUTES - 1) * 60_000 + 31_000, category: "code", project: null };
+    expect(clocks([piece("09:00", "10:00"), almostTen])).toEqual(["09:00–22:09"]);
+  });
+
   test("fold a short first stretch into the one after it", () => {
     expect(clocks([piece("05:00", "05:05"), piece("09:00", "10:00"), piece("14:00", "15:00")])).toEqual(["05:00–10:00", "14:00–15:00"]);
   });
