@@ -127,8 +127,8 @@ const renderAxis = (axis: Interval): string => {
   return `<div class="tl-row tl-axis"><span></span><span class="tl-ticks">${labels.join("")}</span></div>`;
 };
 
-const renderOffComputer = (tasks: List<{ readonly title: string; readonly project: string | null; readonly minutes: number }>): string => {
-  const heading = "<h3>Tracked away from the computer</h3>";
+const renderTracked = (tasks: List<{ readonly title: string; readonly project: string | null; readonly minutes: number }>): string => {
+  const heading = "<h3>Tracked in Super Productivity</h3>";
   if (tasks.status === "missing") return `${heading}<p class="empty">Super Productivity was not available.</p>`;
   if (tasks.items.length === 0) return `${heading}<p class="empty">Nothing tracked.</p>`;
   const items = tasks.items.map((task) => {
@@ -142,7 +142,7 @@ export const renderTimeline = (collected: Collected): string => {
   const groups = [areaGroup(collected), projectGroup(collected), eventGroup(collected)].filter((group) => group.rows.length > 0);
   const day = { start: Date.parse(collected.window.start), end: Date.parse(collected.window.end) };
   const marks = groups.flatMap((group) => group.rows.flatMap((row) => row.marks));
-  const offComputer = renderOffComputer(collected.reportInputs.offComputerTasks);
+  const tracked = renderTracked(collected.reportInputs.trackedTasks);
   const partial =
     collected.timeline.status === "partial"
       ? `<p class="meta">Some computers' activity wasn't fully read, so some screen time may be missing.</p>`
@@ -150,7 +150,7 @@ export const renderTimeline = (collected: Collected): string => {
         ? `<p class="meta">Screen activity was not available.</p>`
         : "";
   const agentsMissing = collected.timeline.agentRuns.status === "missing" ? `<p class="meta">T3 Code was not available, so agent work is missing.</p>` : "";
-  if (marks.length === 0) return `<section><h2>Timeline</h2><p class="empty">Nothing recorded.</p>${partial}${agentsMissing}${offComputer}</section>`;
+  if (marks.length === 0) return `<section><h2>Timeline</h2><p class="empty">Nothing recorded.</p>${partial}${agentsMissing}${tracked}</section>`;
   // Whole hours from the first to the last mark, within the journal day.
   const first = Math.min(...marks.map((mark) => mark.start));
   const last = Math.max(...marks.map((mark) => mark.end));
@@ -183,6 +183,6 @@ export const renderTimeline = (collected: Collected): string => {
     <h2>Timeline</h2>
     <div class="timeline" role="img" aria-label="A timeline of the day; the day in parts describes it in words." style="--hours:${hours}">${renderAxis(axis)}${body}</div>
     <ul class="legend">${legend}</ul>${partial}${agentsMissing}
-    ${offComputer}
+    ${tracked}
   </section>`;
 };

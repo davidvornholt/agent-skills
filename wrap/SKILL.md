@@ -21,12 +21,12 @@ You write only the summary and a paragraph for each part of the day. Don't compu
    bun ~/.claude/skills/wrap/scripts/wrap.ts collect "$DAY" > "/tmp/wrap-$DAY.json"
    ```
 
-3. Read the collected day without the timeline, which only the renderer draws: `jq 'del(.timeline)' "/tmp/wrap-$DAY.json"`. Look at `reportInputs` and `problems`. If the user can fix a missing source now, such as Super Productivity running on neither host, say so and offer to collect again. Otherwise continue, because the report shows a missing source as a gap rather than as zero. On the X1, collect runs this skill's `t3` command on the z890 over SSH, so a usage error under "T3 Code unavailable" means the z890's copy of the skill is older.
-4. Write the report text:
-   - `summary`: two to four plain sentences on what the day held.
-   - `parts`: one paragraph per entry of `reportInputs.parts`, in the same order. Describe what happened on the computer in that part, from its areas, projects and agent threads, and from the tasks, threads, pull requests and appointments whose `part` is that entry's index. A part's time range covers everything placed in it. With no parts, the list is empty.
+3. Read the collected day without the timeline, which only the renderer draws: `jq 'del(.timeline)' "/tmp/wrap-$DAY.json"`. Look at `reportInputs` and `problems`. If the user can fix a missing source now, such as Super Productivity running on neither host, say so and offer to collect again. Otherwise continue, because the report shows a missing source as a gap rather than as zero.
+4. Write a `summary` of two to four sentences, and one paragraph for each entry of `reportInputs.parts`, in order, from that entry and everything whose `part` is its index.
 
-   Describe only what the data shows. Don't rate, judge, or advise, and don't guess why something happened, how it felt, or what happened away from the computer, because the user writes that in the journal. Don't use digits: the report prints every time and number from the collected data, and `render` rejects text with digits.
+   It's the user's day, not the agents'. Describe what the user did in a part's `windows`, such as writing, mail or reading, and write agent work as work the user had agents do. Tasks marked done within a few minutes of each other were ticked off then, not done then.
+
+   Describe only what the data shows. Don't rate, judge, or advise, and don't guess why something happened, how it felt, or what happened away from the computer, because the user writes that in the journal. Don't use digits: `render` rejects them, because the report prints every number from the collected data.
 5. Render and store. Re-running for a day replaces only the agent area, so it's safe after fixing a source.
 
    ```sh
@@ -35,7 +35,7 @@ You write only the summary and a paragraph for each part of the day. Don't compu
    EOF
    ```
 
-6. Check with `postlude agent-area get "$DAY"`, then tell the user the report is in Postlude and which sources were missing.
+6. Check with `postlude agent-area get "$DAY"`, and delete the collected file, which holds window titles: `rm "/tmp/wrap-$DAY.json"`. Then tell the user the report is in Postlude and which sources were missing.
 
 ## Changing the metrics or report
 

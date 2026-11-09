@@ -8,19 +8,21 @@ export type SpTask = {
   readonly projectId: string | null;
   readonly parentId: string | null;
   readonly subTaskIds: readonly string[];
-  readonly tagIds: readonly string[];
   readonly timeSpentOnDay: Readonly<Record<string, number>>;
 };
 
 export type SpData = {
   readonly tasks: readonly SpTask[];
-  readonly tags: readonly { readonly id: string; readonly title: string }[];
   readonly projects: readonly { readonly id: string; readonly title: string }[];
 };
 
 export type LandedPr = { readonly repository: string; readonly title: string; readonly mergedAt: string };
 
 export type GithubData = { readonly prs: readonly LandedPr[]; readonly incomplete: boolean };
+
+export type ClosedPr = { readonly repository: string; readonly title: string; readonly closedAt: string };
+
+export type ClosedPrData = { readonly prs: readonly ClosedPr[]; readonly incomplete: boolean };
 
 /** Send times only: recipients and subjects never leave the mail reader. */
 export type SentMailData = { readonly sentAt: readonly string[]; readonly limitReached: boolean };
@@ -64,6 +66,8 @@ export type Sources = {
   readonly summary: Reading<unknown>;
   readonly sp: Reading<SpData>;
   readonly github: Reading<GithubData>;
+  /** Pull requests closed without merging: a reading apart from github, so its failure leaves the landed count measured. */
+  readonly closedPrs: Reading<ClosedPrData>;
   readonly mail: Reading<readonly { readonly mailbox: string; readonly reading: Reading<SentMailData> }[]>;
   readonly calendar: Reading<CalendarData>;
   readonly t3: Reading<T3Data>;

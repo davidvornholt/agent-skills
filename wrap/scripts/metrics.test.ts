@@ -91,6 +91,8 @@ describe("activity", () => {
     expect(() => parseSummary({ ...summary, summaryVersion: 7 }, DAY)).toThrow(/summaryVersion 7/);
     // A host whose activity-digest predates the timeline by category and T3 project.
     expect(() => parseSummary({ ...summary, summaryVersion: 8 }, DAY)).toThrow(/summaryVersion 8/);
+    // A host whose activity-digest predates window titles.
+    expect(() => parseSummary({ ...summary, summaryVersion: 9 }, DAY)).toThrow(/summaryVersion 9/);
     expect(() => parseSummary(summary, "2026-10-28")).toThrow(/not 2026-10-28/);
     const { dayMetrics, problems } = metrics({ summary: { ok: true, value: { ...summary, summaryVersion: 1 } } });
     expect(dayMetrics.activeMinutes).toBeNull();
@@ -128,6 +130,18 @@ describe("activity", () => {
     expect(() => parseSummary({ ...summary, timeline: [{ ...summary.timeline[0], project: 1 }] }, DAY)).toThrow(/timeline\[0\]\.project/);
   });
 
+  test("reads the windows, and rejects a summary whose windows are malformed", () => {
+    expect(parseSummary(summary, DAY).windows.at(5)).toEqual({
+      start: Date.parse("2026-10-29T13:00:00+01:00"),
+      end: Date.parse("2026-10-29T14:00:00+01:00"),
+      app: "accounts.exe",
+      title: null,
+    });
+    expect(() => parseSummary({ ...summary, windows: undefined }, DAY)).toThrow(/windows is not a list/);
+    expect(() => parseSummary({ ...summary, windows: [{ ...summary.windows[0], app: 1 }] }, DAY)).toThrow(/windows\[0\]\.app/);
+    expect(() => parseSummary({ ...summary, windows: [{ ...summary.windows[0], end: "later" }] }, DAY)).toThrow(/windows\[0\] needs a start and an end/);
+  });
+
   test("leaves the off-screen appointment time null unless every host is complete", () => {
     const withLaptop = (status: string) => ({
       ok: true as const,
@@ -143,7 +157,7 @@ describe("activity", () => {
   });
 });
 
-describe("off-computer time", () => {
+describe("tracked time", () => {
   test("counts all time tracked in Super Productivity, each task without subtasks once", () => {
     if (!sources.sp.ok) throw new Error("fixture");
     // Garden's own total repeats its subtasks', so only Dig and Plant count; Walk's time on the day before doesn't.

@@ -5,7 +5,7 @@ export const DAY = "2026-10-29";
 export const WINDOW = dayWindow(DAY);
 
 export const summary = {
-  summaryVersion: 9,
+  summaryVersion: 10,
   day: DAY,
   window: { start: WINDOW.start, end: WINDOW.end },
   hosts: [
@@ -35,6 +35,19 @@ export const summary = {
     { start: "2026-10-29T14:00:00+01:00", end: "2026-10-29T17:00:00+01:00", category: "code", project: "~/dev/sp-cli" },
     { start: "2026-10-29T17:00:00+01:00", end: "2026-10-29T18:30:00+01:00", category: null, project: null },
   ],
+  windows: [
+    { start: "2026-10-29T08:00:00.000+01:00", end: "2026-10-29T11:30:00.000+01:00", app: "com.t3tools.T3Code", title: "T3 Code" },
+    { start: "2026-10-29T11:30:00.000+01:00", end: "2026-10-29T11:31:00.000+01:00", app: "org.example.Calculator", title: "Calculator" },
+    { start: "2026-10-29T11:31:00.000+01:00", end: "2026-10-29T11:50:00.000+01:00", app: "org.example.Mail", title: "Inbox - Mail" },
+    { start: "2026-10-29T11:50:00.000+01:00", end: "2026-10-29T11:55:00.000+01:00", app: "<redacted>", title: "<redacted>" },
+    { start: "2026-10-29T11:55:00.000+01:00", end: "2026-10-29T12:00:00.000+01:00", app: "org.example.Mail", title: "Inbox - Mail" },
+    { start: "2026-10-29T13:00:00.000+01:00", end: "2026-10-29T14:00:00.000+01:00", app: "accounts.exe", title: null },
+    { start: "2026-10-29T14:00:00.000+01:00", end: "2026-10-29T17:00:00.000+01:00", app: "t3code", title: "T3 Code (Beta)" },
+    { start: "2026-10-29T17:00:00.000+01:00", end: "2026-10-29T17:40:00.000+01:00", app: "org.example.Writer", title: "Garden plan - Writer" },
+    { start: "2026-10-29T17:40:00.000+01:00", end: "2026-10-29T17:50:00.000+01:00", app: "org.example.Browser", title: "<redacted>" },
+    { start: "2026-10-29T17:50:00.000+01:00", end: "2026-10-29T18:00:00.000+01:00", app: null, title: null },
+    { start: "2026-10-29T18:00:00.000+01:00", end: "2026-10-29T18:30:00.000+01:00", app: "org.example.Writer", title: "Garden plan - Writer" },
+  ],
 };
 
 const minutes = (count: number): number => count * 60_000;
@@ -46,7 +59,6 @@ const task = (fields: Partial<SpTask> & Pick<SpTask, "id" | "title">): SpTask =>
   projectId: "p-home",
   parentId: null,
   subTaskIds: [],
-  tagIds: [],
   timeSpentOnDay: {},
   ...fields,
 });
@@ -59,7 +71,7 @@ export const event = (fields: Partial<CalendarEvent> & Pick<CalendarEvent, "summ
 });
 
 export const spTasks: SpTask[] = [
-  task({ id: "garden", title: "Garden", tagIds: ["t-off"], subTaskIds: ["dig", "plant"], timeSpentOnDay: { [DAY]: minutes(45) } }),
+  task({ id: "garden", title: "Garden", subTaskIds: ["dig", "plant"], timeSpentOnDay: { [DAY]: minutes(45) } }),
   task({
     id: "dig",
     title: "Dig",
@@ -70,7 +82,7 @@ export const spTasks: SpTask[] = [
     timeSpentOnDay: { [DAY]: minutes(30) },
   }),
   task({ id: "plant", title: "Plant", parentId: "garden", timeSpentOnDay: { [DAY]: minutes(15) } }),
-  task({ id: "walk", title: "Walk", tagIds: ["t-off"], timeSpentOnDay: { [DAY]: minutes(20), "2026-10-28": minutes(10) } }),
+  task({ id: "walk", title: "Walk", timeSpentOnDay: { [DAY]: minutes(20), "2026-10-28": minutes(10) } }),
   task({
     id: "code",
     title: "Write tests",
@@ -79,7 +91,7 @@ export const spTasks: SpTask[] = [
     doneOn: at("2026-10-29T10:00:00+01:00"),
     timeSpentOnDay: { [DAY]: minutes(50) },
   }),
-  task({ id: "late", title: "Shop", tagIds: ["t-off"], isDone: true, doneOn: at("2026-10-30T03:59:59+01:00"), timeSpentOnDay: { [DAY]: minutes(5) } }),
+  task({ id: "late", title: "Shop", isDone: true, doneOn: at("2026-10-30T03:59:59+01:00"), timeSpentOnDay: { [DAY]: minutes(5) } }),
   task({ id: "next-day", title: "Next day", isDone: true, doneOn: at("2026-10-30T04:00:00+01:00") }),
   task({ id: "day-before", title: "Day before", isDone: true, doneOn: at("2026-10-28T20:00:00+01:00") }),
 ];
@@ -90,10 +102,6 @@ export const sources: Sources = {
     ok: true,
     value: {
       tasks: spTasks,
-      tags: [
-        { id: "t-off", title: "off-computer" },
-        { id: "t-urgent", title: "urgent" },
-      ],
       projects: [
         { id: "p-home", title: "Home" },
         { id: "p-work", title: "Work" },
@@ -108,6 +116,16 @@ export const sources: Sources = {
         { repository: "davidvornholt/postlude", title: "Start of day", mergedAt: "2026-10-29T03:00:00Z" },
         { repository: "davidvornholt/sp-cli", title: "Afternoon", mergedAt: "2026-10-29T15:00:00Z" },
         { repository: "davidvornholt/pim", title: "End of day belongs to the next day", mergedAt: "2026-10-30T03:00:00Z" },
+      ],
+    },
+  },
+  closedPrs: {
+    ok: true,
+    value: {
+      incomplete: false,
+      prs: [
+        { repository: "davidvornholt/sp-cli", title: "Try a second parser", closedAt: "2026-10-29T10:45:00Z" },
+        { repository: "davidvornholt/pim", title: "Closed the day before", closedAt: "2026-10-29T02:59:59Z" },
       ],
     },
   },

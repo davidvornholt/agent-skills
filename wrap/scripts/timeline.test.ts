@@ -1,6 +1,18 @@
 import { describe, expect, test } from "bun:test";
+import type { WindowPiece } from "./metrics.ts";
 import { sources, summary, WINDOW } from "./testing/fixtures.ts";
-import { buildParts, buildTimeline, PART_GAP_MINUTES, PART_MIN_MINUTES, partAt, partBounds, type Timeline } from "./timeline.ts";
+import {
+  buildParts,
+  buildTimeline,
+  dayWindows,
+  PART_GAP_MINUTES,
+  PART_MIN_MINUTES,
+  PART_WINDOW_MIN_MINUTES,
+  PART_WINDOWS,
+  partAt,
+  partBounds,
+  type Timeline,
+} from "./timeline.ts";
 
 const at = (clock: string): number => Date.parse(`2026-10-29T${clock}:00+01:00`);
 const piece = (start: string, end: string) => ({ start: at(start), end: at(end), category: "code", project: null });
@@ -13,7 +25,7 @@ const timeline = (pieces: Timeline["pieces"]): Timeline => ({
 });
 const clocks = (pieces: Timeline["pieces"]) => {
   const built = timeline(pieces);
-  return buildParts(built, partBounds(WINDOW, built), []).map((part) => part.clock);
+  return buildParts(built, partBounds(WINDOW, built), [], []).map((part) => part.clock);
 };
 
 describe("parts", () => {
@@ -36,7 +48,7 @@ describe("parts", () => {
 
   test("don't exist without screen time", () => {
     expect(partBounds(WINDOW, timeline([]))).toEqual([]);
-    expect(buildParts(timeline([]), [], [])).toEqual([]);
+    expect(buildParts(timeline([]), [], [], [])).toEqual([]);
   });
 
   test("place an instant in the part whose stretch it follows, from the start to the end of the journal day", () => {
@@ -47,6 +59,64 @@ describe("parts", () => {
     expect(partAt(bounds, WINDOW.endMs - 1)).toBe(1);
     expect(partAt(bounds, WINDOW.endMs)).toBeNull();
     expect(partAt([], at("12:00"))).toBeNull();
+  });
+});
+
+describe("part windows", () => {
+  const window = (start: string, end: string, app: string | null, title: string | null): WindowPiece => ({ start: at(start), end: at(end), app, title });
+  const windows = (pieces: readonly WindowPiece[]) => {
+    const built = timeline([piece("09:00", "10:00"), piece("14:00", "15:00")]);
+    return buildParts(built, partBounds(WINDOW, built), [], pieces).map((part) => part.windows);
+  };
+
+  test("add up each window's time within the part, splitting a window that crosses into the next one", () => {
+    expect(
+      windows([
+        window("09:00", "09:20", "org.example.Notes", "Seed list"),
+        window("09:40", "09:50", "org.example.Notes", "Seed list"),
+        window("13:50", "14:20", "org.example.Notes", "Seed list"),
+      ]),
+    ).toEqual([[{ app: "org.example.Notes", title: "Seed list", minutes: 40 }], [{ app: "org.example.Notes", title: "Seed list", minutes: 20 }]]);
+  });
+
+  test(`list the ${PART_WINDOWS} windows in front longest, with at least ${PART_WINDOW_MIN_MINUTES} minutes before rounding`, () => {
+    const many = Array.from({ length: PART_WINDOWS + 2 }, (_, index) => {
+      const start = at("09:00") + index * 4 * 60_000;
+      return { start, end: start + (index + 1) * 10_000 + 2 * 60_000, app: "org.example.Notes", title: `Page ${String.fromCharCode(65 + index)}` };
+    });
+    const almostTwo = { start: at("10:30"), end: at("10:30") + PART_WINDOW_MIN_MINUTES * 60_000 - 1_000, app: "org.example.Calculator", title: "Calculator" };
+    const [listed] = windows([...many, almostTwo]);
+    expect(listed?.map((entry) => entry.title)).toEqual(
+      many
+        .toReversed()
+        .slice(0, PART_WINDOWS)
+        .map((entry) => entry.title),
+    );
+  });
+
+  test("leave out T3 Code's and redacted windows, and moments with no window in front, but keep a known app without a title", () => {
+    const [listed] = windows([
+      window("09:00", "09:10", "com.t3tools.T3Code", "T3 Code"),
+      window("09:10", "09:20", "t3code", "Some thread"),
+      window("09:20", "09:30", "org.example.Browser", "T3 Code (Beta)"),
+      window("09:30", "09:40", "<redacted>", "<redacted>"),
+      window("09:40", "09:45", "org.example.Browser", "<redacted>"),
+      window("09:45", "09:50", null, null),
+      window("09:50", "09:55", "accounts.exe", null),
+      window("09:55", "10:00", null, "Untitled"),
+    ]);
+    expect(listed).toEqual([
+      { app: null, title: "Untitled", minutes: 5 },
+      { app: "accounts.exe", title: null, minutes: 5 },
+    ]);
+  });
+
+  test("come only from a usable summary, clipped to the journal day", () => {
+    const late = { start: "2026-10-30T03:50:00.000+01:00", end: "2026-10-30T04:10:00.000+01:00", app: "org.example.Notes", title: "Seed list" };
+    expect(dayWindows(WINDOW, { ...sources, summary: { ok: true, value: { ...summary, windows: [late] } } })).toEqual([
+      { start: Date.parse(late.start), end: WINDOW.endMs, app: late.app, title: late.title },
+    ]);
+    expect(dayWindows(WINDOW, { ...sources, summary: { ok: true, value: { ...summary, summaryVersion: 8 } } })).toEqual([]);
   });
 });
 

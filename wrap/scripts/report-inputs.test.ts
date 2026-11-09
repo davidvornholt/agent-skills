@@ -33,6 +33,8 @@ test("builds the parts and lists of a day with all sources", () => {
           { title: "Fix the parser", project: "postlude", agentMinutes: 45 },
           { title: "Night build", project: "nix-config", agentMinutes: 30 },
         ],
+        // Without T3 Code's own windows, redacted ones, and the calculator's single minute; the mail windows add up across the redacted one.
+        windows: [{ app: "org.example.Mail", title: "Inbox - Mail", minutes: 24 }],
       },
       {
         // A task done just before the end of the journal day, and the night train clipped to it.
@@ -47,6 +49,11 @@ test("builds the parts and lists of a day with all sources", () => {
         ],
         projects: [{ project: "sp-cli", screenMinutes: 180, agentMinutes: 40 }],
         threads: [{ title: "Tidy tests", project: "sp-cli", agentMinutes: 40 }],
+        windows: [
+          { app: "org.example.Writer", title: "Garden plan - Writer", minutes: 70 },
+          // A Windows program has no title.
+          { app: "accounts.exe", title: null, minutes: 60 },
+        ],
       },
     ],
     handedOffTasks: {
@@ -74,6 +81,10 @@ test("builds the parts and lists of a day with all sources", () => {
         { repository: "davidvornholt/sp-cli", title: "Afternoon", mergedAt: "2026-10-29T16:00:00+01:00", part: 1 },
       ],
     },
+    closedPrs: {
+      status: "complete",
+      items: [{ repository: "davidvornholt/sp-cli", title: "Try a second parser", closedAt: "2026-10-29T11:45:00+01:00", part: 0 }],
+    },
     appointments: {
       status: "complete",
       items: [
@@ -84,7 +95,7 @@ test("builds the parts and lists of a day with all sources", () => {
         { title: "Night train", start: "2026-10-30T03:30:00+01:00", end: "2026-10-30T05:00:00+01:00", part: 1 },
       ],
     },
-    offComputerTasks: {
+    trackedTasks: {
       status: "complete",
       items: [
         { title: "Write tests", project: "Work", minutes: 50 },
@@ -106,10 +117,28 @@ test("has no parts when screen activity is missing, so nothing is placed in one"
 
 test("marks lists of unreachable sources as missing", () => {
   const unavailable = { ok: false, error: "unreachable" } as const;
-  const lists = inputs({ sp: unavailable, t3: unavailable, github: unavailable, calendar: unavailable });
-  for (const list of [lists.handedOffTasks, lists.settledThreads, lists.openThreads, lists.landedPrs, lists.appointments, lists.offComputerTasks]) {
+  const lists = inputs({ sp: unavailable, t3: unavailable, github: unavailable, closedPrs: unavailable, calendar: unavailable });
+  for (const list of [
+    lists.handedOffTasks,
+    lists.settledThreads,
+    lists.openThreads,
+    lists.landedPrs,
+    lists.closedPrs,
+    lists.appointments,
+    lists.trackedTasks,
+  ]) {
     expect(list).toEqual({ status: "missing", items: [] });
   }
+});
+
+test("marks closed pull requests partial when GitHub's search was incomplete, and keeps the landed ones", () => {
+  const closedPrs: Sources["closedPrs"] = { ok: true, value: { incomplete: true, prs: [] } };
+  const partial = inputs({ closedPrs });
+  expect(partial.closedPrs).toEqual({ status: "partial", items: [] });
+  expect(partial.landedPrs.status).toBe("complete");
+  expect(buildCollected(WINDOW, { ...sources, closedPrs }).problems).toContain(
+    "GitHub reported incomplete search results, so closed pull requests may be missing.",
+  );
 });
 
 test("marks appointments partial when an account failed", () => {
@@ -187,13 +216,14 @@ test("explains every gap in the collected problems", () => {
 
 test("prints each part's time range over everything placed in it", () => {
   const timeline = buildTimeline(WINDOW, sources);
-  const { parts, handedOffTasks, settledThreads, landedPrs, appointments } = buildReportInputs(WINDOW, sources, timeline);
+  const { parts, handedOffTasks, settledThreads, landedPrs, closedPrs, appointments } = buildReportInputs(WINDOW, sources, timeline);
   const bounds = partBounds(WINDOW, timeline);
   const instant = (part: number | null, what: string, iso: string) => ({ part, what, start: Date.parse(iso), end: Date.parse(iso) });
   const placed = [
     ...handedOffTasks.items.map((task) => instant(task.part, task.title, task.doneAt)),
     ...settledThreads.items.map((thread) => instant(thread.part, thread.title, thread.settledAt)),
     ...landedPrs.items.map((pr) => instant(pr.part, pr.title, pr.mergedAt)),
+    ...closedPrs.items.map((pr) => instant(pr.part, pr.title, pr.closedAt)),
     ...appointments.items.flatMap((event) =>
       event.start === null || event.end === null ? [] : [{ part: event.part, what: event.title, start: Date.parse(event.start), end: Date.parse(event.end) }],
     ),

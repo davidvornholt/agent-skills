@@ -22,7 +22,7 @@ const bin = join(directory, "bin");
 
 const key = (...command: string[]) => JSON.stringify(command);
 const sp = ["--host", "david-x1-nixos"];
-const query = `is:pr is:merged author:davidvornholt merged:${WINDOW.start}..${WINDOW.end}`;
+const search = (query: string) => key("gh", "api", "--method", "GET", "search/issues", "-f", `q=${query}`, "-f", "per_page=100", "-f", "page=1");
 const calendarCall = key("pim", "calendar", "events", "--from", DAY, "--to", "2026-10-30", "--limit", "1000");
 const sentSearch = (account: string, folder: string, limit: number) =>
   key("pim", "mail", "search", "--account", account, "--folder", folder, "--since", "2026-10-28", "--limit", String(limit));
@@ -78,14 +78,13 @@ const fixtures = {
   [key("activity-digest", DAY, "--summary-json")]: { stdout: summary },
   [key("sp", "tasks", "list", "--include-done", "--source", "all")]: { stderr: "TokenUnavailable", exitCode: 1 },
   [key("sp", "tasks", "list", ...sp, "--include-done", "--source", "all")]: { stdout: spTasks.map((task) => ({ ...task, notes: "SECRET-BODY", created: 0 })) },
-  [key("sp", "tags", "list", ...sp)]: { stdout: [{ id: "t-off", title: "off-computer", color: "#fff" }] },
   [key("sp", "projects", "list", ...sp)]: {
     stdout: [
       { id: "p-home", title: "Home" },
       { id: "p-work", title: "Work" },
     ],
   },
-  [key("gh", "api", "--method", "GET", "search/issues", "-f", `q=${query}`, "-f", "per_page=100", "-f", "page=1")]: {
+  [search(`is:pr author:davidvornholt is:merged merged:${WINDOW.start}..${WINDOW.end}`)]: {
     stdout: {
       total_count: 1,
       incomplete_results: false,
@@ -95,6 +94,21 @@ const fixtures = {
           title: "Add the day report",
           repository_url: "https://api.github.com/repos/davidvornholt/agent-skills",
           pull_request: { merged_at: "2026-10-29T15:00:00Z" },
+        },
+      ],
+    },
+  },
+  [search(`is:pr author:davidvornholt is:closed is:unmerged closed:${WINDOW.start}..${WINDOW.end}`)]: {
+    stdout: {
+      total_count: 1,
+      incomplete_results: false,
+      items: [
+        {
+          number: 43,
+          title: "Try a second parser",
+          repository_url: "https://api.github.com/repos/davidvornholt/sp-cli",
+          closed_at: "2026-10-29T10:45:00Z",
+          pull_request: { merged_at: null },
         },
       ],
     },
@@ -217,6 +231,11 @@ const spDownFixtures = {
   ...fixtures,
   [key("sp", "tasks", "list", "--include-done", "--source", "all")]: spError("AppUnreachable"),
   [key("sp", "tasks", "list", ...sp, "--include-done", "--source", "all")]: spError("Ssh"),
+  // The z890 still runs a copy of the skill without the t3 command.
+  [key("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "david@david-z890-nixos", "bun ~/.claude/skills/wrap/scripts/wrap.ts t3 2026-10-29")]: {
+    stderr: `${JSON.stringify({ error: "Unknown command: t3 2026-10-29" })}\nUsage:\n`,
+    exitCode: 1,
+  },
 };
 
 type Run = { readonly collected: Collected; readonly calls: string[][]; readonly stderr: string };
@@ -289,6 +308,10 @@ test("reads every source into the metrics", () => {
     { source: "calendar:work@example.com", status: "partial" },
   ]);
   expect(collected.reportInputs.landedPrs.items).toMatchObject([{ repository: "davidvornholt/agent-skills", title: "Add the day report" }]);
+  expect(collected.reportInputs.closedPrs).toEqual({
+    status: "complete",
+    items: [{ repository: "davidvornholt/sp-cli", title: "Try a second parser", closedAt: "2026-10-29T11:45:00+01:00", part: 0 }],
+  });
   expect(collected.reportInputs.settledThreads.items).toMatchObject([{ title: "Settled today", project: "postlude" }]);
   expect(collected.timeline.agentRuns).toEqual({
     status: "complete",
@@ -296,6 +319,20 @@ test("reads every source into the metrics", () => {
       { threadTitle: "Fix the parser", project: "~/dev/postlude", start: Date.parse("2026-10-29T08:30:00.000Z"), end: Date.parse("2026-10-29T09:15:00.000Z") },
     ],
   });
+});
+
+test("keeps only each part's own windows, not the summary's list of them", () => {
+  expect(collected.reportInputs.parts[1]?.windows).toContainEqual({ app: "org.example.Writer", title: "Garden plan - Writer", minutes: 70 });
+  const file = JSON.stringify(collected);
+  // Below the least time a part lists, and T3 Code's own window.
+  for (const title of ["Calculator", "T3 Code (Beta)"]) expect(file).not.toContain(title);
+  expect(Object.keys(collected.timeline)).not.toContain("windows");
+});
+
+test("says an older copy of the skill on the z890 is why T3 Code is missing", () => {
+  expect(spDown.collected.problems).toContain(
+    'T3 Code unavailable: ssh exited with 1: {"error":"Unknown command: t3 2026-10-29"} (collect ran `wrap.ts t3` on david-z890-nixos over SSH, so a usage error means the skill there is older)',
+  );
 });
 
 test("asks the z890 for Kontor's status from another host", () => {
@@ -331,7 +368,7 @@ test("only reads", () => {
     const [command, ...args] = call;
     const words = args.join(" ");
     if (command === "gh") return args[0] === "api" && args[1] === "--method" && args[2] === "GET" && args[3] === "search/issues";
-    if (command === "sp") return /^(tasks|tags|projects) list\b/.test(words);
+    if (command === "sp") return /^(tasks|projects) list\b/.test(words);
     if (command === "pim") return /^(accounts|calendar (events|get)|mail folders|mail search)\b/.test(words);
     if (command === "ssh") return ["bun ~/.claude/skills/wrap/scripts/wrap.ts t3 2026-10-29", "kontor status --json"].includes(args.at(-1) ?? "");
     return command === "activity-digest" && args.includes("--summary-json");
@@ -357,7 +394,6 @@ test("reads the other host's Super Productivity copy when the local one fails", 
   expect(calls.filter((call) => call[0] === "sp").map((call) => call.slice(1, 3).concat(call.includes("--host") ? ["remote"] : []))).toEqual([
     ["tasks", "list"],
     ["tasks", "list", "remote"],
-    ["tags", "list", "remote"],
     ["projects", "list", "remote"],
   ]);
 });

@@ -8,6 +8,8 @@ import { addDays, type DayWindow, eventOnDay } from "./day.ts";
 import type {
   CalendarAccount,
   CalendarEvent,
+  ClosedPr,
+  ClosedPrData,
   GithubData,
   LandedPr,
   Reading,
@@ -104,7 +106,6 @@ const parseTask = (item: unknown): SpTask => {
     projectId: stringOr(item.projectId, null),
     parentId: stringOr(item.parentId, null),
     subTaskIds: stringList(item.subTaskIds),
-    tagIds: stringList(item.tagIds),
     timeSpentOnDay,
   };
 };
@@ -117,11 +118,9 @@ const parseNamed = (item: unknown): { id: string; title: string } => {
 const readSpCopy = async (host: readonly string[]): Promise<Reading<SpData>> => {
   const tasks = parseList(await runJson(["sp", "tasks", "list", ...host, "--include-done", "--source", "all"]), "sp tasks", parseTask);
   if (!tasks.ok) return tasks;
-  const tags = parseList(await runJson(["sp", "tags", "list", ...host]), "sp tags", parseNamed);
-  if (!tags.ok) return tags;
   const projects = parseList(await runJson(["sp", "projects", "list", ...host]), "sp projects", parseNamed);
   if (!projects.ok) return projects;
-  return ok({ tasks: tasks.value, tags: tags.value, projects: projects.value });
+  return ok({ tasks: tasks.value, projects: projects.value });
 };
 
 // The local copy comes first. sp itself honours SP_HOST, and a host can't reach itself over SSH.
@@ -133,10 +132,13 @@ const readSp = async (localHost: string): Promise<Reading<SpData>> => {
   return remote.ok ? remote : failed(`${local.error}; on ${other}: ${remote.error}`);
 };
 
-const readGithub = async (window: DayWindow): Promise<Reading<GithubData>> => {
-  // The search range is inclusive and accepts offsets; metrics.ts drops a PR merged exactly at the end.
-  const query = `is:pr is:merged author:${GITHUB_ACCOUNT} merged:${window.start}..${window.end}`;
-  const prs: LandedPr[] = [];
+/** The user's pull requests a search finds, each parsed or null when it lacks a field. */
+const searchPrs = async <T>(
+  filter: string,
+  parse: (item: Record<string, unknown>, repository: string) => T | null,
+): Promise<Reading<{ prs: T[]; incomplete: boolean }>> => {
+  const query = `is:pr author:${GITHUB_ACCOUNT} ${filter}`;
+  const prs: T[] = [];
   let incomplete = false;
   // The search API returns at most ten pages of one hundred.
   for (let page = 1; page <= 10; page += 1) {
@@ -146,15 +148,27 @@ const readGithub = async (window: DayWindow): Promise<Reading<GithubData>> => {
     if (!isRecord(body) || !Array.isArray(body.items)) return failed("the GitHub search returned no items");
     if (body.incomplete_results === true) incomplete = true;
     for (const item of body.items) {
-      if (!isRecord(item) || !isRecord(item.pull_request) || typeof item.pull_request.merged_at !== "string" || typeof item.repository_url !== "string") {
-        return failed("a GitHub search result has no merge time or repository");
-      }
-      prs.push({ repository: item.repository_url.replace(/^.*\/repos\//, ""), title: stringOr(item.title, ""), mergedAt: item.pull_request.merged_at });
+      const pr = isRecord(item) && typeof item.repository_url === "string" ? parse(item, item.repository_url.replace(/^.*\/repos\//, "")) : null;
+      if (pr === null) return failed("a GitHub search result has no repository or time");
+      prs.push(pr);
     }
     if (body.items.length < 100) break;
   }
   return ok({ prs, incomplete });
 };
+
+// The search ranges are inclusive and accept offsets; metrics.ts and report-inputs.ts drop a PR exactly at the end.
+const readGithub = (window: DayWindow): Promise<Reading<GithubData>> =>
+  searchPrs(`is:merged merged:${window.start}..${window.end}`, (item, repository): LandedPr | null =>
+    isRecord(item.pull_request) && typeof item.pull_request.merged_at === "string"
+      ? { repository, title: stringOr(item.title, ""), mergedAt: item.pull_request.merged_at }
+      : null,
+  );
+
+const readClosedPrs = (window: DayWindow): Promise<Reading<ClosedPrData>> =>
+  searchPrs(`is:closed is:unmerged closed:${window.start}..${window.end}`, (item, repository): ClosedPr | null =>
+    typeof item.closed_at === "string" ? { repository, title: stringOr(item.title, ""), closedAt: item.closed_at } : null,
+  );
 
 type PimAccount = { readonly email: string; readonly mail: boolean; readonly calendar: boolean };
 
@@ -399,7 +413,7 @@ const readT3 = async (window: DayWindow, host: string): Promise<Reading<T3Data>>
     `david@${T3_HOST}`,
     `bun ~/.claude/skills/wrap/scripts/wrap.ts t3 ${window.day}`,
   ]);
-  if (!reading.ok) return reading;
+  if (!reading.ok) return failed(`${reading.error} (collect ran \`wrap.ts t3\` on ${T3_HOST} over SSH, so a usage error means the skill there is older)`);
   if (!isRecord(reading.value)) return failed("T3 Code from the z890 is not a JSON object");
   const threads = parseList(ok(reading.value.threads), "T3 threads from the z890", parseThread);
   if (!threads.ok) return threads;
@@ -416,13 +430,14 @@ const readKontor = (host: string): Promise<Reading<unknown>> =>
   );
 
 export const readSources = async (window: DayWindow, host: string): Promise<Sources> => {
-  const [summary, sp, github, pim, t3, kontor] = await Promise.all([
+  const [summary, sp, github, closedPrs, pim, t3, kontor] = await Promise.all([
     readSummary(window.day),
     readSp(host),
     readGithub(window),
+    readClosedPrs(window),
     readPim(window),
     readT3(window, host),
     readKontor(host),
   ]);
-  return { summary, sp, github, mail: pim.mail, calendar: pim.calendar, t3, kontor };
+  return { summary, sp, github, closedPrs, mail: pim.mail, calendar: pim.calendar, t3, kontor };
 };

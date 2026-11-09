@@ -7,7 +7,7 @@
 //
 // Definitions:
 // - Activity numbers and categories are copied from the activity summary. They are null when the summary is unavailable or every host is missing. Since summary version 7 (metrics version 5) they include the time David uses the Windows VM directly at the desk, not only while it is streamed. Since summary version 8 (metrics version 6) Learning also counts more school subjects, their topics and school course pages.
-// - offComputerMinutes: all time tracked in Super Productivity on the day, because the user tracks only time away from the computer there. Only tasks without subtasks count, because a parent's tracked time is the sum of its subtasks'. SP files time under its own date keys, which follow its "start of next day" setting rather than the 04:00 journal boundary.
+// - offComputerMinutes: all time tracked in Super Productivity on the day. Despite the name, the user tracks time at the computer there too. Only tasks without subtasks count, because a parent's tracked time is the sum of its subtasks'. SP files time under its own date keys, which follow its "start of next day" setting rather than the 04:00 journal boundary.
 // - appointmentMinutes: the union of all timed calendar events, clipped to the journal day, so overlapping events count once. All-day events, cancelled events, and meetings the account's own attendee entry declined don't count. A meeting whose answer couldn't be read is left out, and its calendar is partial.
 // - appointmentOffScreenMinutes: the part of that union outside the summary's activeIntervals. It needs every activity host complete, because screen time on a host that wasn't fully read would count as off screen.
 // - landedPrs: pull requests authored by the davidvornholt account and merged during the journal day, in any repository.
@@ -19,7 +19,7 @@ import { clip, type Interval, subtract, totalMinutes, union } from "./intervals.
 import type { CalendarEvent, Reading, SentMailData, Sources, SpData } from "./sources.ts";
 
 export const METRICS_VERSION = 7;
-export const SUMMARY_VERSION = 9;
+export const SUMMARY_VERSION = 10;
 
 export type CoverageStatus = "complete" | "partial" | "missing";
 export type Coverage = { readonly source: string; readonly status: CoverageStatus };
@@ -45,6 +45,8 @@ export type DayMetrics = {
 /** A stretch of the summary's timeline in which the category and the T3 project stay the same; null where the time has none. */
 export type TimelinePiece = Interval & { readonly category: string | null; readonly project: string | null };
 export type FocusBlock = Interval & { readonly category: string };
+/** A stretch in which the same window was in front: its app id, or the Windows guest's executable, and its title. Either is null when the log has none, and "<redacted>" when an exclude pattern matches. */
+export type WindowPiece = Interval & { readonly app: string | null; readonly title: string | null };
 
 export type Summary = {
   readonly hosts: readonly { readonly host: string; readonly status: CoverageStatus; readonly activeMinutes: number | null }[];
@@ -56,6 +58,8 @@ export type Summary = {
   readonly categories: readonly Category[];
   readonly activeIntervals: readonly Interval[] | null;
   readonly timeline: readonly TimelinePiece[];
+  /** Window titles, as input for one report: they must not be stored, because the focus logs they come from are deleted after 30 days. */
+  readonly windows: readonly WindowPiece[];
   readonly focusBlocks: readonly FocusBlock[];
 };
 
@@ -115,6 +119,10 @@ export const parseSummary = (raw: unknown, day: string): Summary => {
     category: textOrNull(entry.category, `${path}.category`),
     project: textOrNull(entry.project, `${path}.project`),
   }));
+  const windows = intervals(raw.windows, "windows", (entry, path) => ({
+    app: textOrNull(entry.app, `${path}.app`),
+    title: textOrNull(entry.title, `${path}.title`),
+  }));
   const focusBlocks = intervals(raw.focusBlocks, "focusBlocks", (entry, path) => {
     if (typeof entry.category !== "string") throw new Error(`${path}.category is not text`);
     return { category: entry.category };
@@ -129,6 +137,7 @@ export const parseSummary = (raw: unknown, day: string): Summary => {
     categories,
     activeIntervals,
     timeline,
+    windows,
     focusBlocks,
   };
 };

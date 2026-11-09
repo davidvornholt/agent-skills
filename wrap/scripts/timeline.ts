@@ -5,7 +5,7 @@
 import { compareText } from "./compare.ts";
 import { type DayWindow, toBerlinClock, toBerlinIso } from "./day.ts";
 import { clip, type Interval, joinGaps, totalMinutes, totalMs } from "./intervals.ts";
-import { type FocusBlock, parseSummary, type TimelinePiece } from "./metrics.ts";
+import { type FocusBlock, parseSummary, type Summary, type TimelinePiece, type WindowPiece } from "./metrics.ts";
 import type { ListStatus } from "./report-inputs.ts";
 import type { Sources } from "./sources.ts";
 
@@ -13,6 +13,14 @@ export const PART_GAP_MINUTES = 30;
 export const PART_MIN_MINUTES = 10;
 /** The threads listed per part, those with the most agent time first. */
 export const PART_THREADS = 12;
+/** The windows listed per part, those in front longest first, and the least time a window needs in a part to be listed. */
+export const PART_WINDOWS = 12;
+export const PART_WINDOW_MIN_MINUTES = 2;
+
+// T3 Code's own windows, as nix-config's activity-summary.json matches them under t3Windows. The part's threads already say what happened there.
+const T3_APP = /^(com\.t3tools\.T3Code|t3code)$/i;
+const T3_TITLE = /^T3 Code( \(Beta\))?$/i;
+const REDACTED = "<redacted>";
 
 export const UNCATEGORISED = "Not categorised";
 
@@ -36,6 +44,8 @@ export type DayPart = {
   readonly areas: readonly { readonly label: string; readonly minutes: number }[];
   readonly projects: readonly { readonly project: string; readonly screenMinutes: number; readonly agentMinutes: number }[];
   readonly threads: readonly { readonly title: string; readonly project: string; readonly agentMinutes: number }[];
+  /** The user's own windows, without T3 Code's and redacted ones. title is null for a Windows program. They hold window titles, so they are for the agent's text only and never reach the report or Postlude. */
+  readonly windows: readonly { readonly app: string | null; readonly title: string | null; readonly minutes: number }[];
 };
 
 /** A T3 project's name in the report: the last folder of its path. */
@@ -48,6 +58,21 @@ const clipped = <T extends Interval>(items: readonly T[], window: Interval): T[]
 
 const minutes = (ms: number): number => Math.round(ms / 60_000);
 
+/** The activity summary, or null when it is unusable or no host was read. */
+const usableSummary = (window: DayWindow, sources: Sources): Summary | null => {
+  if (!sources.summary.ok) return null;
+  try {
+    const summary = parseSummary(sources.summary.value, window.day);
+    return summary.hosts.every((host) => host.status === "missing") ? null : summary;
+  } catch {
+    return null;
+  }
+};
+
+/** The summary's windows within the journal day. They hold window titles, so they stay out of the timeline, which the collected file keeps. */
+export const dayWindows = (window: DayWindow, sources: Sources): WindowPiece[] =>
+  clipped(usableSummary(window, sources)?.windows ?? [], windowInterval(window));
+
 export const buildTimeline = (window: DayWindow, sources: Sources): Timeline => {
   const day = windowInterval(window);
   const agentRuns: Timeline["agentRuns"] = sources.t3.ok
@@ -59,15 +84,8 @@ export const buildTimeline = (window: DayWindow, sources: Sources): Timeline => 
         ),
       }
     : { status: "missing", items: [] };
-  const empty = { status: "missing", pieces: [], focusBlocks: [], categoryLabels: {}, agentRuns } as const;
-  if (!sources.summary.ok) return empty;
-  let summary: ReturnType<typeof parseSummary>;
-  try {
-    summary = parseSummary(sources.summary.value, window.day);
-  } catch {
-    return empty;
-  }
-  if (summary.hosts.every((host) => host.status === "missing")) return empty;
+  const summary = usableSummary(window, sources);
+  if (summary === null) return { status: "missing", pieces: [], focusBlocks: [], categoryLabels: {}, agentRuns };
   return {
     status: summary.hosts.every((host) => host.status === "complete") ? "complete" : "partial",
     pieces: clipped(summary.timeline, day),
@@ -114,7 +132,26 @@ const byMinutes = <T extends { readonly minutes: number; readonly label: string 
 /** When something placed in a part happened: an instant, with start equal to end, or an appointment. */
 export type Moment = Interval & { readonly part: number | null };
 
-export const buildParts = (timeline: Timeline, bounds: PartBounds, moments: readonly Moment[]): DayPart[] =>
+const ownWindow = ({ app, title }: WindowPiece): boolean =>
+  (app !== null || title !== null) && app !== REDACTED && title !== REDACTED && !T3_APP.test(app ?? "") && !T3_TITLE.test(title ?? "");
+
+const partWindows = (windows: readonly WindowPiece[], bound: Interval): DayPart["windows"] => {
+  const byWindow = new Map<string, { app: string | null; title: string | null; intervals: Interval[] }>();
+  for (const piece of clipped(windows.filter(ownWindow), bound)) {
+    const key = JSON.stringify([piece.app, piece.title]);
+    const entry = byWindow.get(key) ?? { app: piece.app, title: piece.title, intervals: [] };
+    byWindow.set(key, entry);
+    entry.intervals.push(piece);
+  }
+  return [...byWindow.values()]
+    .map((entry) => ({ ...entry, ms: totalMs(entry.intervals) }))
+    .filter((entry) => entry.ms >= PART_WINDOW_MIN_MINUTES * 60_000)
+    .toSorted((a, b) => b.ms - a.ms || compareText(a.app ?? "", b.app ?? "") || compareText(a.title ?? "", b.title ?? ""))
+    .slice(0, PART_WINDOWS)
+    .map(({ app, title, ms }) => ({ app, title, minutes: minutes(ms) }));
+};
+
+export const buildParts = (timeline: Timeline, bounds: PartBounds, moments: readonly Moment[], windows: readonly WindowPiece[]): DayPart[] =>
   bounds.map((bound, index): DayPart => {
     const pieces = clipped(timeline.pieces, bound);
     const runs = clipped(timeline.agentRuns.items, bound);
@@ -164,5 +201,6 @@ export const buildParts = (timeline: Timeline, bounds: PartBounds, moments: read
         .filter((thread) => thread.agentMinutes > 0)
         .toSorted((a, b) => b.agentMinutes - a.agentMinutes || compareText(a.title, b.title))
         .slice(0, PART_THREADS),
+      windows: partWindows(windows, bound),
     };
   });

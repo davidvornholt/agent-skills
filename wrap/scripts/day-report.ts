@@ -20,6 +20,10 @@ export const buildCollected = (window: DayWindow, sources: Sources): Collected =
   const timeline = buildTimeline(window, sources);
   const reportInputs = buildReportInputs(window, sources, timeline);
   const listProblems = [
+    ...(sources.closedPrs.ok ? [] : [`Pull requests closed without merging unavailable: ${sources.closedPrs.error}`]),
+    ...(sources.closedPrs.ok && sources.closedPrs.value.incomplete
+      ? ["GitHub reported incomplete search results, so closed pull requests may be missing."]
+      : []),
     ...(sources.t3.ok ? [] : [`T3 Code unavailable: ${sources.t3.error}`]),
     ...(sources.kontor.ok ? [] : [`Kontor status unavailable: ${sources.kontor.error}`]),
     ...(sources.kontor.ok && reportInputs.kontor.status === "missing" ? ["Kontor status has no approvalNeeded or lastSyncOutcome field."] : []),

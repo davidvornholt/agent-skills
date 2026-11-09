@@ -248,8 +248,8 @@ describe("renderTimeline", () => {
     expect(drawn).not.toContain("<script>");
   });
 
-  test("lists the time tracked away from the computer", () => {
-    expect(html).toContain('<h3>Tracked away from the computer</h3><ul class="items"><li>Write tests <span class="meta">· Work · 50 min</span></li>');
+  test("lists the time tracked in Super Productivity", () => {
+    expect(html).toContain('<h3>Tracked in Super Productivity</h3><ul class="items"><li>Write tests <span class="meta">· Work · 50 min</span></li>');
   });
 
   test("says what is missing, also on a day with nothing to draw", () => {

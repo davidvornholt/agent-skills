@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildCollected } from "./day-report.ts";
-import { sources, WINDOW } from "./testing/fixtures.ts";
+import { sources, summary, WINDOW } from "./testing/fixtures.ts";
 
 const directory = mkdtempSync(join(tmpdir(), "wrap-cli-"));
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
@@ -28,6 +28,24 @@ test("render prints the stdin for postlude agent-area put", async () => {
   expect(payload.metricsVersion).toBe(7);
   expect(payload.reportModel).toBe("Claude Opus 5.5");
   expect(payload.reportHtml).toContain('<p class="summary">A calm day.</p>');
+});
+
+test("render passes on no window title and no list of windows", async () => {
+  const result = await run(["render", collectedFile, "--model", "claude-opus-5-5"], TEXT);
+  expect(result.exitCode).toBe(0);
+  const payload = JSON.parse(result.stdout);
+  // The collected file holds some titles in its parts, so the test would notice if render passed them on.
+  expect(JSON.stringify(collected.reportInputs.parts)).toContain("Garden plan - Writer");
+  const keys = (value: unknown): string[] =>
+    typeof value === "object" && value !== null ? Object.entries(value).flatMap(([key, child]) => [key, ...keys(child)]) : [];
+  expect(keys(payload)).not.toContain("windows");
+  // Every made-up title and app id in the fixture; T3 Code's own and the redacted ones also appear in the report's own words.
+  const made = summary.windows
+    .flatMap((window) => [window.app, window.title])
+    .filter((text) => text !== null && !/^(T3 Code|t3code|com\.t3tools|<redacted>)/.test(text));
+  expect(made).toContain("Garden plan - Writer");
+  for (const text of new Set(made)) expect(result.stdout).not.toContain(text);
+  for (const text of new Set(made)) expect(payload.reportHtml).not.toContain(text);
 });
 
 test("render refuses a summary with digits and a paragraph count that doesn't match the parts", async () => {
