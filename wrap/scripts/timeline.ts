@@ -4,7 +4,7 @@
 
 import { compareText } from "./compare.ts";
 import { type DayWindow, toBerlinClock, toBerlinIso } from "./day.ts";
-import { clip, type Interval, totalMinutes, totalMs, union } from "./intervals.ts";
+import { clip, type Interval, joinGaps, totalMinutes, totalMs } from "./intervals.ts";
 import { type FocusBlock, parseSummary, type TimelinePiece } from "./metrics.ts";
 import type { ListStatus } from "./report-inputs.ts";
 import type { Sources } from "./sources.ts";
@@ -78,12 +78,7 @@ export const buildTimeline = (window: DayWindow, sources: Sources): Timeline => 
 };
 
 const stretches = (pieces: readonly TimelinePiece[]): Interval[] => {
-  const joined: Interval[] = [];
-  for (const piece of union(pieces)) {
-    const last = joined.at(-1);
-    if (last && piece.start - last.end < PART_GAP_MINUTES * 60_000) joined[joined.length - 1] = { start: last.start, end: piece.end };
-    else joined.push(piece);
-  }
+  const joined = joinGaps(pieces, PART_GAP_MINUTES * 60_000);
   // Unrounded, so a stretch of nine and a half minutes doesn't count as ten.
   const short = (stretch: Interval) => totalMs(clip(pieces, stretch)) < PART_MIN_MINUTES * 60_000;
   const kept: Interval[] = [];

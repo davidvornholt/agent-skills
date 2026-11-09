@@ -4,12 +4,14 @@ import { compareText } from "./compare.ts";
 import { toBerlinClock } from "./day.ts";
 import type { Collected } from "./day-report.ts";
 import { clockRange, escapeHtml, minutesText } from "./html.ts";
-import { clip, type Interval, totalMinutes, union } from "./intervals.ts";
+import { clip, type Interval, joinGaps, totalMinutes, totalMs, union } from "./intervals.ts";
 import type { List } from "./report-inputs.ts";
 import { type AgentRun, projectLabel, UNCATEGORISED } from "./timeline.ts";
 
 /** The T3 projects drawn as rows of their own; the rest share one row. */
 export const TIMELINE_PROJECTS = 6;
+/** A row's screen time draws as one mark across gaps shorter than this, because a day has hundreds of pieces, half of them shorter than ten seconds. */
+export const MARK_GAP_MINUTES = 2;
 /** The thread titles a tooltip names for a stretch of agent work. */
 const TIP_THREADS = 3;
 const HOUR_MS = 3_600_000;
@@ -18,11 +20,16 @@ type Mark = Interval & { readonly kind: "screen" | "focus" | "agent" | "appointm
 type Row = { readonly label: string; readonly marks: readonly Mark[] };
 type Group = { readonly title: string; readonly rows: readonly Row[]; readonly className?: string };
 
-const spanTip = (label: string, interval: Interval): string =>
-  `${label} · ${clockRange(interval.start, interval.end)} (${minutesText((interval.end - interval.start) / 60_000)})`;
+const spanTip = (label: string, interval: Interval, minutes = (interval.end - interval.start) / 60_000): string =>
+  `${label} · ${clockRange(interval.start, interval.end)} (${minutesText(minutes)})`;
 
+// The tooltip counts only the screen time in the mark, not the gaps it spans.
 const screenMarks = (label: string, intervals: readonly Interval[]): Mark[] =>
-  union(intervals).map((interval) => ({ ...interval, kind: "screen", tip: spanTip(label, interval) }));
+  joinGaps(intervals, MARK_GAP_MINUTES * 60_000).map((mark) => ({
+    ...mark,
+    kind: "screen",
+    tip: spanTip(label, mark, totalMs(clip(intervals, mark)) / 60_000),
+  }));
 
 const agentMarks = (runs: readonly AgentRun[]): Mark[] =>
   union(runs).map((interval) => {

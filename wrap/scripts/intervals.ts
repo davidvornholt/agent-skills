@@ -16,6 +16,17 @@ export const union = (intervals: readonly Interval[]): Interval[] => {
   return merged;
 };
 
+/** The union of the intervals, with neighbours also joined across gaps shorter than gapMs. */
+export const joinGaps = (intervals: readonly Interval[], gapMs: number): Interval[] => {
+  const joined: Interval[] = [];
+  for (const interval of union(intervals)) {
+    const last = joined.at(-1);
+    if (last && interval.start - last.end < gapMs) joined[joined.length - 1] = { start: last.start, end: interval.end };
+    else joined.push(interval);
+  }
+  return joined;
+};
+
 export const clip = (intervals: readonly Interval[], window: Interval): Interval[] =>
   intervals
     .map((interval) => ({ start: Math.max(interval.start, window.start), end: Math.min(interval.end, window.end) }))

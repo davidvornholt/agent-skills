@@ -13,7 +13,7 @@ import {
   renderReport,
   SUMMARY_MAX_LENGTH,
 } from "./render.ts";
-import { renderTimeline, TIMELINE_PROJECTS } from "./render-timeline.ts";
+import { MARK_GAP_MINUTES, renderTimeline, TIMELINE_PROJECTS } from "./render-timeline.ts";
 import { sources, WINDOW } from "./testing/fixtures.ts";
 
 const template = await loadTemplate();
@@ -209,6 +209,23 @@ describe("renderTimeline", () => {
     expect(drawn).toContain("--hours:1");
     expect(drawn).toContain('<span class="tl-mark tl-screen" style="left:0%;width:50%" data-tip="Code · 09:00–09:30 (30 min)"></span>');
     expect(drawn).toContain('<span style="left:0%">09:00</span>');
+  });
+
+  test(`joins a row's screen time across gaps shorter than ${MARK_GAP_MINUTES} minutes, and counts only the screen time`, () => {
+    const nine = at("2026-10-29T09:00:00+01:00");
+    // Forty pieces of half a minute, one minute apart.
+    const short = Array.from({ length: 40 }, (_, index) => ({ start: nine + index * 90_000, end: nine + index * 90_000 + 30_000 }));
+    // Begins exactly that gap after the last short piece ends, so it stays a mark of its own.
+    const apart = { start: at("2026-10-29T09:59:00+01:00") + MARK_GAP_MINUTES * 60_000, end: at("2026-10-29T10:05:00+01:00") };
+    const pieces = [...short, apart].map((piece) => ({ ...piece, category: "code", project: "~/dev/postlude" }));
+    const drawn = renderTimeline(withTimeline({ pieces, focusBlocks: [], agentRuns: { status: "complete", items: [] } }, quiet));
+    const tips = [...drawn.matchAll(/class="tl-mark tl-screen" style="[^"]*" data-tip="([^"]*)"/g)].map((match) => match[1]);
+    expect(tips).toEqual([
+      "Code · 09:00–09:59 (20 min)",
+      "Code · 10:01–10:05 (4 min)",
+      "You in postlude · 09:00–09:59 (20 min)",
+      "You in postlude · 10:01–10:05 (4 min)",
+    ]);
   });
 
   test("names at most three threads in an agent tooltip and counts the rest", () => {
