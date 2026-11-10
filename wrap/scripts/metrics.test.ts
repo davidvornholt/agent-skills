@@ -116,6 +116,11 @@ describe("activity", () => {
     expect(() => parseSummary(withoutIntervals, DAY)).toThrow(/activeIntervals is not a list/);
   });
 
+  test("rejects a category without the T3 projects filed under it, which the metrics then leave out", () => {
+    const categories = summary.categories.map(({ t3Projects: _, ...category }) => category);
+    expect(() => parseSummary({ ...summary, categories }, DAY)).toThrow(/categories\[0\] needs an id, a label, minutes, and a list of T3 projects/);
+  });
+
   test("reads the timeline and focus blocks as epoch milliseconds", () => {
     const parsed = parseSummary(summary, DAY);
     expect(parsed.timeline[0]).toEqual({

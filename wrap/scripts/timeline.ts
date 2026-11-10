@@ -1,17 +1,17 @@
-// The day's timeline and its parts. The report draws the timeline, and the agent writes one paragraph per part.
+// The day's timeline and its parts. The report draws the timeline, and the agent writes a title and a few lines per part.
 //
-// A part starts as a stretch of the user's screen time: the timeline's pieces joined across gaps shorter than PART_GAP_MINUTES. A stretch with less than PART_MIN_MINUTES of screen time joins the stretch before it, or the one after it when it comes first, so a short check at night doesn't need a paragraph of its own. Things that happened, such as a landed pull request or an agent's run, belong to the part whose bound holds them: from the start of its stretch to the start of the next one, the first part from the start of the journal day, and the last part to its end. A part's printed time range covers its screen time and everything placed in it, so it can begin before its stretch and end after it.
+// A part starts as a stretch of the user's screen time: the timeline's pieces joined across gaps shorter than PART_GAP_MINUTES. A stretch with less than PART_MIN_MINUTES of screen time joins the stretch before it, or the one after it when it comes first, so a short check at night doesn't need lines of its own. Things that happened, such as a landed pull request, a prompt or an agent's run, belong to the part whose bound holds them: from the start of its stretch to the start of the next one, the first part from the start of the journal day, and the last part to its end. A part's printed time range covers its screen time and everything placed in it, so it can begin before its stretch and end after it.
 
 import { compareText } from "./compare.ts";
 import { type DayWindow, toBerlinClock, toBerlinIso } from "./day.ts";
-import { clip, type Interval, joinGaps, totalMinutes, totalMs } from "./intervals.ts";
+import { clip, type Interval, joinGaps, totalMinutes, totalMs, union } from "./intervals.ts";
 import { type FocusBlock, parseSummary, type Summary, type TimelinePiece, type WindowPiece } from "./metrics.ts";
 import type { ListStatus } from "./report-inputs.ts";
 import type { Sources } from "./sources.ts";
 
 export const PART_GAP_MINUTES = 30;
 export const PART_MIN_MINUTES = 10;
-/** The threads listed per part, those with the most agent time first. */
+/** The threads listed per part, those with the most prompts and then the most agent time first. */
 export const PART_THREADS = 12;
 /** The windows listed per part, those in front longest first, and the least time a window needs in a part to be listed. */
 export const PART_WINDOWS = 12;
@@ -24,7 +24,19 @@ const REDACTED = "<redacted>";
 
 export const UNCATEGORISED = "Not categorised";
 
-export type AgentRun = Interval & { readonly project: string; readonly threadTitle: string };
+export type Prompt = { readonly at: number; readonly fromPhone: boolean };
+
+/** A T3 Code thread the user prompted or an agent ran in, with its subagents folded in. */
+export type TimelineThread = {
+  readonly id: string;
+  readonly title: string;
+  readonly project: string;
+  /** The summary category that files the thread's project, so the thread sits with the screen time it got; null when none does. */
+  readonly category: string | null;
+  /** When at least one agent of the thread was running. */
+  readonly runs: readonly Interval[];
+  readonly prompts: readonly Prompt[];
+};
 
 /** What the report draws; the agent doesn't need to read it. Times are epoch milliseconds, clipped to the journal day. */
 export type Timeline = {
@@ -32,18 +44,20 @@ export type Timeline = {
   readonly pieces: readonly TimelinePiece[];
   readonly focusBlocks: readonly FocusBlock[];
   readonly categoryLabels: Readonly<Record<string, string>>;
-  readonly agentRuns: { readonly status: ListStatus; readonly items: readonly AgentRun[] };
+  readonly threads: { readonly status: ListStatus; readonly items: readonly TimelineThread[] };
+  /** Send times only, from the mailboxes that could be read. */
+  readonly sentMail: { readonly status: ListStatus; readonly times: readonly number[] };
 };
 
 export type DayPart = {
   readonly start: string;
   readonly end: string;
-  /** start and end as clock times, such as "09:10–11:45": the first and last minute of the part's screen time, agent runs, and the tasks, threads, pull requests and appointments placed in it. */
+  /** start and end as clock times, such as "09:10–11:45": the first and last minute of the part's screen time, prompts, agent runs, and the tasks, threads, pull requests and appointments placed in it. */
   readonly clock: string;
   readonly screenMinutes: number;
   readonly areas: readonly { readonly label: string; readonly minutes: number }[];
   readonly projects: readonly { readonly project: string; readonly screenMinutes: number; readonly agentMinutes: number }[];
-  readonly threads: readonly { readonly title: string; readonly project: string; readonly agentMinutes: number }[];
+  readonly threads: readonly { readonly title: string; readonly project: string; readonly prompts: number; readonly agentMinutes: number }[];
   /** The user's own windows, without T3 Code's and redacted ones. title is null for a Windows program. They hold window titles, so they are for the agent's text only and never reach the report or Postlude. */
   readonly windows: readonly { readonly app: string | null; readonly title: string | null; readonly minutes: number }[];
 };
@@ -57,6 +71,8 @@ const clipped = <T extends Interval>(items: readonly T[], window: Interval): T[]
   items.flatMap((item) => clip([item], window).map((interval) => ({ ...item, ...interval })));
 
 const minutes = (ms: number): number => Math.round(ms / 60_000);
+
+const inDay = (ms: number, day: Interval): boolean => ms >= day.start && ms < day.end;
 
 /** The activity summary, or null when it is unusable or no host was read. */
 const usableSummary = (window: DayWindow, sources: Sources): Summary | null => {
@@ -73,25 +89,58 @@ const usableSummary = (window: DayWindow, sources: Sources): Summary | null => {
 export const dayWindows = (window: DayWindow, sources: Sources): WindowPiece[] =>
   clipped(usableSummary(window, sources)?.windows ?? [], windowInterval(window));
 
+const dayThreads = (window: DayWindow, sources: Sources, summary: Summary | null): Timeline["threads"] => {
+  if (!sources.t3.ok) return { status: "missing", items: [] };
+  const day = windowInterval(window);
+  const { dayThreads: threads, runs, prompts } = sources.t3.value;
+  const categories = new Map<string, string>();
+  for (const category of summary?.categories ?? []) for (const project of category.t3Projects) categories.set(project, category.id);
+  const items = threads.map((thread) => ({
+    id: thread.id,
+    title: thread.title,
+    project: thread.project,
+    category: categories.get(thread.project) ?? null,
+    runs: union(
+      clip(
+        runs.filter((run) => run.threadId === thread.id).map((run) => ({ start: Date.parse(run.start), end: Date.parse(run.end) })),
+        day,
+      ),
+    ),
+    prompts: prompts
+      .filter((prompt) => prompt.threadId === thread.id)
+      .map((prompt) => ({ at: Date.parse(prompt.at), fromPhone: prompt.fromPhone }))
+      .filter((prompt) => inDay(prompt.at, day))
+      .toSorted((a, b) => a.at - b.at),
+  }));
+  return { status: "complete", items: items.filter((thread) => thread.runs.length > 0 || thread.prompts.length > 0) };
+};
+
+const sentMail = (window: DayWindow, sources: Sources): Timeline["sentMail"] => {
+  if (!sources.mail.ok) return { status: "missing", times: [] };
+  const day = windowInterval(window);
+  const read = sources.mail.value.flatMap(({ reading }) => (reading.ok ? [reading.value] : []));
+  const times = read
+    .flatMap((mailbox) => mailbox.sentAt.map((sentAt) => Date.parse(sentAt)))
+    .filter((ms) => inDay(ms, day))
+    .toSorted((a, b) => a - b);
+  const status =
+    read.length === 0 ? "missing" : read.length < sources.mail.value.length || read.some((mailbox) => mailbox.limitReached) ? "partial" : "complete";
+  return { status, times };
+};
+
 export const buildTimeline = (window: DayWindow, sources: Sources): Timeline => {
   const day = windowInterval(window);
-  const agentRuns: Timeline["agentRuns"] = sources.t3.ok
-    ? {
-        status: "complete",
-        items: clipped(
-          sources.t3.value.runs.map((run) => ({ start: Date.parse(run.start), end: Date.parse(run.end), project: run.project, threadTitle: run.threadTitle })),
-          day,
-        ),
-      }
-    : { status: "missing", items: [] };
   const summary = usableSummary(window, sources);
-  if (summary === null) return { status: "missing", pieces: [], focusBlocks: [], categoryLabels: {}, agentRuns };
+  const threads = dayThreads(window, sources, summary);
+  const mail = sentMail(window, sources);
+  if (summary === null) return { status: "missing", pieces: [], focusBlocks: [], categoryLabels: {}, threads, sentMail: mail };
   return {
     status: summary.hosts.every((host) => host.status === "complete") ? "complete" : "partial",
     pieces: clipped(summary.timeline, day),
     focusBlocks: clipped(summary.focusBlocks, day),
     categoryLabels: Object.fromEntries(summary.categories.map((category) => [category.id, category.label])),
-    agentRuns,
+    threads,
+    sentMail: mail,
   };
 };
 
@@ -154,13 +203,21 @@ const partWindows = (windows: readonly WindowPiece[], bound: Interval): DayPart[
 export const buildParts = (timeline: Timeline, bounds: PartBounds, moments: readonly Moment[], windows: readonly WindowPiece[]): DayPart[] =>
   bounds.map((bound, index): DayPart => {
     const pieces = clipped(timeline.pieces, bound);
-    const runs = clipped(timeline.agentRuns.items, bound);
+    const threads = timeline.threads.items.map((thread) => ({
+      thread,
+      runs: clip(thread.runs, bound),
+      prompts: thread.prompts.filter((prompt) => inDay(prompt.at, bound)),
+    }));
     // An appointment can begin before the journal day or run into the next part, so only its time within this part's bound counts.
     const placed = moments
       .filter((moment) => moment.part === index)
       .map((moment) => ({ start: Math.max(moment.start, bound.start), end: Math.min(moment.end, bound.end) }));
     // Every part has screen time, so the range is never empty.
-    const covered = [...pieces, ...runs, ...placed];
+    const covered = [
+      ...pieces,
+      ...threads.flatMap((entry) => [...entry.runs, ...entry.prompts.map((prompt) => ({ start: prompt.at, end: prompt.at }))]),
+      ...placed,
+    ];
     const start = Math.min(...covered.map((interval) => interval.start));
     const end = Math.max(...covered.map((interval) => interval.end));
     const areas = new Map<string, number>();
@@ -175,14 +232,7 @@ export const buildParts = (timeline: Timeline, bounds: PartBounds, moments: read
       areas.set(label, (areas.get(label) ?? 0) + piece.end - piece.start);
       if (piece.project !== null) project(piece.project).screen.push(piece);
     }
-    const threads = new Map<string, { title: string; project: string; runs: Interval[] }>();
-    for (const run of runs) {
-      project(run.project).agent.push(run);
-      const key = JSON.stringify([run.project, run.threadTitle]);
-      const thread = threads.get(key) ?? { title: run.threadTitle, project: run.project, runs: [] };
-      threads.set(key, thread);
-      thread.runs.push(run);
-    }
+    for (const entry of threads) project(entry.thread.project).agent.push(...entry.runs);
     return {
       start: toBerlinIso(start),
       end: toBerlinIso(end),
@@ -196,10 +246,15 @@ export const buildParts = (timeline: Timeline, bounds: PartBounds, moments: read
         .map(([path, time]) => ({ project: projectLabel(path), screenMinutes: totalMinutes(time.screen), agentMinutes: totalMinutes(time.agent) }))
         .filter((entry) => entry.screenMinutes + entry.agentMinutes > 0)
         .toSorted((a, b) => b.screenMinutes + b.agentMinutes - (a.screenMinutes + a.agentMinutes) || compareText(a.project, b.project)),
-      threads: [...threads.values()]
-        .map((thread) => ({ title: thread.title, project: projectLabel(thread.project), agentMinutes: totalMinutes(thread.runs) }))
-        .filter((thread) => thread.agentMinutes > 0)
-        .toSorted((a, b) => b.agentMinutes - a.agentMinutes || compareText(a.title, b.title))
+      threads: threads
+        .map((entry) => ({
+          title: entry.thread.title,
+          project: projectLabel(entry.thread.project),
+          prompts: entry.prompts.length,
+          agentMinutes: totalMinutes(entry.runs),
+        }))
+        .filter((thread) => thread.prompts > 0 || thread.agentMinutes > 0)
+        .toSorted((a, b) => b.prompts - a.prompts || b.agentMinutes - a.agentMinutes || compareText(a.title, b.title))
         .slice(0, PART_THREADS),
       windows: partWindows(windows, bound),
     };

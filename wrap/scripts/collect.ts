@@ -18,6 +18,9 @@ import type {
   SpData,
   SpTask,
   T3Data,
+  T3DayThread,
+  T3Prompt,
+  T3PullRequest,
   T3Run,
   T3Thread,
 } from "./sources.ts";
@@ -79,6 +82,7 @@ export const runJson = async (command: readonly string[]): Promise<Reading<unkno
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const stringOr = <T>(value: unknown, fallback: T): string | T => (typeof value === "string" ? value : fallback);
 const stringList = (value: unknown): string[] => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
+const numberOr = <T>(value: unknown, fallback: T): number | T => (typeof value === "number" && Number.isFinite(value) ? value : fallback);
 
 const parseList = <T>(reading: Reading<unknown>, what: string, parse: (item: unknown) => T): Reading<T[]> => {
   if (!reading.ok) return reading;
@@ -107,6 +111,11 @@ const parseTask = (item: unknown): SpTask => {
     parentId: stringOr(item.parentId, null),
     subTaskIds: stringList(item.subTaskIds),
     timeSpentOnDay,
+    dueDay: stringOr(item.dueDay, null),
+    dueWithTime: numberOr(item.dueWithTime, null),
+    deadlineDay: stringOr(item.deadlineDay, null),
+    deadlineWithTime: numberOr(item.deadlineWithTime, null),
+    wontDoOn: numberOr(item.wontDoOn, null),
   };
 };
 
@@ -148,7 +157,7 @@ const searchPrs = async <T>(
     if (body.incomplete_results === true) incomplete = true;
     for (const item of body.items) {
       const pr = isRecord(item) && typeof item.repository_url === "string" ? parse(item, item.repository_url.replace(/^.*\/repos\//, "")) : null;
-      if (pr === null) return failed("a GitHub search result has no repository or time");
+      if (pr === null) return failed("a GitHub search result has no repository, number, or time");
       prs.push(pr);
     }
     if (body.items.length < 100) break;
@@ -159,14 +168,16 @@ const searchPrs = async <T>(
 // The search ranges are inclusive and accept offsets; metrics.ts and report-inputs.ts drop a PR exactly at the end.
 const readGithub = (window: DayWindow): Promise<Reading<GithubData>> =>
   searchPrs(`is:merged merged:${window.start}..${window.end}`, (item, repository): LandedPr | null =>
-    isRecord(item.pull_request) && typeof item.pull_request.merged_at === "string"
-      ? { repository, title: stringOr(item.title, ""), mergedAt: item.pull_request.merged_at }
+    isRecord(item.pull_request) && typeof item.pull_request.merged_at === "string" && typeof item.number === "number"
+      ? { repository, number: item.number, title: stringOr(item.title, ""), mergedAt: item.pull_request.merged_at }
       : null,
   );
 
 const readClosedPrs = (window: DayWindow): Promise<Reading<ClosedPrData>> =>
   searchPrs(`is:closed is:unmerged closed:${window.start}..${window.end}`, (item, repository): ClosedPr | null =>
-    typeof item.closed_at === "string" ? { repository, title: stringOr(item.title, ""), closedAt: item.closed_at } : null,
+    typeof item.closed_at === "string" && typeof item.number === "number"
+      ? { repository, number: item.number, title: stringOr(item.title, ""), closedAt: item.closed_at }
+      : null,
   );
 
 type PimAccount = { readonly email: string; readonly mail: boolean; readonly calendar: boolean };
@@ -333,60 +344,152 @@ const parseThread = (item: unknown): T3Thread => {
 };
 
 type ProjectRow = { readonly project_id: string; readonly title: string; readonly workspace_root: string; readonly deleted_at: string | null };
-type RunRow = { readonly thread_title: string; readonly project_id: string; readonly started_at: string; readonly completed_at: string | null };
+type ThreadRow = {
+  readonly thread_id: string;
+  readonly title: string;
+  readonly project_id: string;
+  readonly parent_id: string | null;
+  readonly relationship: string | null;
+};
+type RunRow = { readonly thread_id: string; readonly status: string; readonly started_at: string; readonly completed_at: string | null };
+type PromptRow = { readonly thread_id: string; readonly created_at: string; readonly source: string };
 
 /** Writes the home folder as "~", as the activity summary does for T3 projects. */
 export const homeRelative = (path: string, home: string): string => (path === home ? "~" : path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path);
 
-const parseRun = (item: unknown): T3Run => {
-  if (!isRecord(item) || typeof item.project !== "string" || typeof item.start !== "string" || typeof item.end !== "string") {
-    throw new Error("a run has no project, start, or end");
+// T3 also stores messages it writes for the user, with creationSource "server"; only what the user typed on the computer ("web") or the phone ("mobile") is a prompt.
+const PROMPTS = `m.role = 'user' and json_extract(m.payload_json, '$.createdBy') = 'user' and json_extract(m.payload_json, '$.creationSource') in ('web', 'mobile')`;
+
+const PR_STATES = new Set(["open", "merged", "closed"]);
+
+const parsePullRequest = (item: unknown): T3PullRequest => {
+  if (!isRecord(item) || typeof item.repository !== "string" || typeof item.number !== "number" || typeof item.linkedAt !== "string") {
+    throw new Error("a pull request has no repository, number, or link time");
   }
+  if (typeof item.state !== "string" || !PR_STATES.has(item.state)) throw new Error("a pull request has no state");
   return {
-    threadTitle: stringOr(item.threadTitle, ""),
-    project: item.project,
-    start: item.start,
-    end: item.end,
+    repository: item.repository,
+    number: item.number,
+    title: stringOr(item.title, ""),
+    linkedAt: item.linkedAt,
+    state: item.state as T3PullRequest["state"],
+    isDraft: item.isDraft === true,
+    mergedAt: stringOr(item.mergedAt, null),
+    closedAt: stringOr(item.closedAt, null),
   };
 };
 
+/** A link from a thread's payload, which keeps the pull request's state in a snapshot; null for a link T3 hasn't synced. */
+const linkedPullRequest = (link: unknown): T3PullRequest | null => {
+  if (!isRecord(link) || !isRecord(link.snapshot)) return null;
+  const { snapshot } = link;
+  try {
+    return parsePullRequest({ ...link, ...snapshot, linkedAt: link.linkedAt });
+  } catch {
+    return null;
+  }
+};
+
+/** The thread a thread's runs and pull requests count under: the nearest ancestor that isn't a subagent. */
+const foldInto = (threads: ReadonlyMap<string, ThreadRow>, id: string): string => {
+  const seen = new Set<string>();
+  let current = id;
+  for (;;) {
+    const row = threads.get(current);
+    if (row?.relationship !== "subagent" || row.parent_id === null || !threads.has(row.parent_id) || seen.has(current)) return current;
+    seen.add(current);
+    current = row.parent_id;
+  }
+};
+
 /**
- * Reads this machine's T3 Code threads and the agent runs that overlap the journal day, child threads included.
- * The CLI lists neither projects nor runs, so both come from T3's state database, opened read-only. A run that never started has no time and is left out.
+ * Reads this machine's T3 Code threads, and the threads the user prompted or agents ran in during the journal day with those runs and prompts.
+ * The CLI lists neither projects, runs nor messages, so they come from T3's state database, opened read-only. A run that never started has no time and is left out.
  */
 export const readLocalT3 = async (window: DayWindow, nowMs: number): Promise<Reading<T3Data>> => {
+  const home = homedir();
   let projects: ProjectRow[];
+  let threadRows: ThreadRow[];
   let runRows: RunRow[];
+  let promptRows: PromptRow[];
+  let dayThreads: T3DayThread[];
   try {
-    const database = new Database(join(homedir(), ".t3/userdata/statev2.sqlite"), { readonly: true });
+    const database = new Database(join(home, ".t3/userdata/statev2.sqlite"), { readonly: true });
     try {
       projects = database.query("select project_id, title, workspace_root, deleted_at from projection_projects order by project_id").all() as ProjectRow[];
+      threadRows = database
+        .query(
+          `select thread_id, title, project_id, json_extract(payload_json, '$.lineage.parentThreadId') as parent_id,
+             json_extract(payload_json, '$.lineage.relationshipToParent') as relationship
+           from orchestration_v2_projection_threads`,
+        )
+        .all() as ThreadRow[];
       // T3 writes its times with toISOString, so they compare as text.
+      const [start, end] = [new Date(window.startMs).toISOString(), new Date(window.endMs).toISOString()];
       runRows = database
         .query(
-          `select t.title as thread_title, t.project_id, json_extract(r.payload_json, '$.startedAt') as started_at, json_extract(r.payload_json, '$.completedAt') as completed_at
-           from orchestration_v2_projection_runs r join orchestration_v2_projection_threads t on t.thread_id = r.thread_id
-           where started_at < ?1 and (completed_at >= ?2 or (completed_at is null and r.status = 'running'))`,
+          `select thread_id, status, json_extract(payload_json, '$.startedAt') as started_at, json_extract(payload_json, '$.completedAt') as completed_at
+           from orchestration_v2_projection_runs
+           where started_at < ?1 and (completed_at >= ?2 or (completed_at is null and status = 'running'))`,
         )
-        .all(new Date(window.endMs).toISOString(), new Date(window.startMs).toISOString()) as RunRow[];
+        .all(end, start) as RunRow[];
+      promptRows = database
+        .query(
+          `select m.thread_id, m.created_at, json_extract(m.payload_json, '$.creationSource') as source
+           from orchestration_v2_projection_messages m where m.created_at >= ?1 and m.created_at < ?2 and ${PROMPTS}`,
+        )
+        .all(start, end) as PromptRow[];
+      const byThread = new Map(threadRows.map((row) => [row.thread_id, row]));
+      const fold = (id: string) => foldInto(byThread, id);
+      const ids = [...new Set([...runRows, ...promptRows].map((row) => fold(row.thread_id)))].toSorted(compareText);
+      const members = new Map<string, string[]>(ids.map((id) => [id, []]));
+      for (const row of threadRows) members.get(fold(row.thread_id))?.push(row.thread_id);
+      const projectRoots = new Map(projects.map((project) => [project.project_id, homeRelative(project.workspace_root, home)]));
+      const firstPrompt = database.query(`select min(m.created_at) as at from orchestration_v2_projection_messages m where m.thread_id = ?1 and ${PROMPTS}`);
+      const links = database.query(
+        `select json_extract(payload_json, '$.pullRequests') as links from orchestration_v2_projection_threads where thread_id in (select value from json_each(?1))`,
+      );
+      dayThreads = ids.map((id) => {
+        const row = byThread.get(id);
+        const pullRequests = new Map<string, T3PullRequest>();
+        for (const { links: raw } of links.all(JSON.stringify(members.get(id) ?? [id])) as { links: string | null }[]) {
+          const parsed: unknown = raw === null ? [] : JSON.parse(raw);
+          for (const pr of (Array.isArray(parsed) ? parsed : []).map(linkedPullRequest)) {
+            if (pr === null) continue;
+            const key = `${pr.repository}#${pr.number}`;
+            const known = pullRequests.get(key);
+            if (known === undefined || compareText(pr.linkedAt, known.linkedAt) < 0) pullRequests.set(key, pr);
+          }
+        }
+        return {
+          id,
+          title: row?.title ?? "",
+          project: projectRoots.get(row?.project_id ?? "") ?? "-",
+          firstPromptAt: (firstPrompt.get(id) as { at: string | null } | null)?.at ?? null,
+          pullRequests: [...pullRequests.values()].toSorted(
+            (a, b) => compareText(a.linkedAt, b.linkedAt) || compareText(a.repository, b.repository) || a.number - b.number,
+          ),
+        };
+      });
+      runRows = runRows.map((row) => ({ ...row, thread_id: fold(row.thread_id) }));
+      promptRows = promptRows.map((row) => ({ ...row, thread_id: fold(row.thread_id) }));
     } finally {
       database.close();
     }
   } catch (error) {
     return failed(`T3 state unreadable: ${messageOf(error)}`);
   }
-  const byId = new Map(projects.map((project) => [project.project_id, project]));
-  const runs = runRows
-    .map((row) => {
-      const project = byId.get(row.project_id);
-      return {
-        threadTitle: row.thread_title,
-        project: project === undefined ? "-" : homeRelative(project.workspace_root, homedir()),
-        start: row.started_at,
-        end: row.completed_at ?? new Date(nowMs).toISOString(),
-      };
-    })
-    .toSorted((a, b) => compareText(a.start, b.start) || compareText(a.threadTitle, b.threadTitle));
+  const runs: T3Run[] = runRows
+    .map((row) => ({
+      threadId: row.thread_id,
+      start: row.started_at,
+      end: row.completed_at ?? new Date(nowMs).toISOString(),
+      running: row.completed_at === null,
+    }))
+    .toSorted((a, b) => compareText(a.start, b.start) || compareText(a.threadId, b.threadId));
+  const prompts: T3Prompt[] = promptRows
+    .map((row) => ({ threadId: row.thread_id, at: row.created_at, fromPhone: row.source === "mobile" }))
+    .toSorted((a, b) => compareText(a.at, b.at) || compareText(a.threadId, b.threadId));
   const live = projects.filter((project) => project.deleted_at === null);
   const perProject = await mapLimited(live, T3_CONCURRENCY, async (project) =>
     parseList(await runJson(["t3", "thread", "list", "--project", project.project_id, "--json"]), `threads of ${project.title}`, (item) =>
@@ -398,7 +501,32 @@ export const readLocalT3 = async (window: DayWindow, nowMs: number): Promise<Rea
     if (!reading.ok) return reading;
     threads.push(...reading.value);
   }
-  return ok({ threads, runs });
+  return ok({ threads, dayThreads, runs, prompts });
+};
+
+const parseDayThread = (item: unknown): T3DayThread => {
+  if (!isRecord(item) || typeof item.id !== "string" || typeof item.project !== "string" || !Array.isArray(item.pullRequests)) {
+    throw new Error("a day thread has no id, project, or pull requests");
+  }
+  return {
+    id: item.id,
+    title: stringOr(item.title, ""),
+    project: item.project,
+    firstPromptAt: stringOr(item.firstPromptAt, null),
+    pullRequests: item.pullRequests.map(parsePullRequest),
+  };
+};
+
+const parseRun = (item: unknown): T3Run => {
+  if (!isRecord(item) || typeof item.threadId !== "string" || typeof item.start !== "string" || typeof item.end !== "string") {
+    throw new Error("a run has no thread, start, or end");
+  }
+  return { threadId: item.threadId, start: item.start, end: item.end, running: item.running === true };
+};
+
+const parsePrompt = (item: unknown): T3Prompt => {
+  if (!isRecord(item) || typeof item.threadId !== "string" || typeof item.at !== "string") throw new Error("a prompt has no thread or time");
+  return { threadId: item.threadId, at: item.at, fromPhone: item.fromPhone === true };
 };
 
 const readT3 = async (window: DayWindow, host: string): Promise<Reading<T3Data>> => {
@@ -412,13 +540,22 @@ const readT3 = async (window: DayWindow, host: string): Promise<Reading<T3Data>>
     `david@${T3_HOST}`,
     `bun ~/.claude/skills/wrap/scripts/wrap.ts t3 ${window.day}`,
   ]);
-  if (!reading.ok) return failed(`${reading.error} (collect ran \`wrap.ts t3\` on ${T3_HOST} over SSH, so a usage error means the skill there is older)`);
-  if (!isRecord(reading.value)) return failed("T3 Code from the z890 is not a JSON object");
-  const threads = parseList(ok(reading.value.threads), "T3 threads from the z890", parseThread);
+  const older = `collect ran \`wrap.ts t3\` on ${T3_HOST} over SSH, so a usage error or an unexpected shape means the skill there is older`;
+  if (!reading.ok) return failed(`${reading.error} (${older})`);
+  const value = isRecord(reading.value) ? reading.value : {};
+  const list = <T>(key: string, parse: (item: unknown) => T): Reading<T[]> => {
+    const parsed = parseList(ok(value[key]), `T3 ${key} from the z890`, parse);
+    return parsed.ok ? parsed : failed(`${parsed.error} (${older})`);
+  };
+  const threads = list("threads", parseThread);
   if (!threads.ok) return threads;
-  const runs = parseList(ok(reading.value.runs), "T3 runs from the z890", parseRun);
+  const dayThreads = list("dayThreads", parseDayThread);
+  if (!dayThreads.ok) return dayThreads;
+  const runs = list("runs", parseRun);
   if (!runs.ok) return runs;
-  return ok({ threads: threads.value, runs: runs.value });
+  const prompts = list("prompts", parsePrompt);
+  if (!prompts.ok) return prompts;
+  return ok({ threads: threads.value, dayThreads: dayThreads.value, runs: runs.value, prompts: prompts.value });
 };
 
 const readKontor = (host: string): Promise<Reading<unknown>> =>

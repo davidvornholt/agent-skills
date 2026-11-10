@@ -213,7 +213,28 @@ const fixtures = {
       threads: [
         { title: "Settled today", project: "postlude", settledAt: "2026-10-29T16:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-28T10:00:00.000Z" },
       ],
-      runs: [{ threadTitle: "Fix the parser", project: "~/dev/postlude", start: "2026-10-29T08:30:00.000Z", end: "2026-10-29T09:15:00.000Z" }],
+      dayThreads: [
+        {
+          id: "t-parser",
+          title: "Fix the parser",
+          project: "~/dev/postlude",
+          firstPromptAt: "2026-10-29T08:20:00.000Z",
+          pullRequests: [
+            {
+              repository: "davidvornholt/postlude",
+              number: 14,
+              title: "Parse dates",
+              linkedAt: "2026-10-29T09:00:00.000Z",
+              state: "open",
+              isDraft: false,
+              mergedAt: null,
+              closedAt: null,
+            },
+          ],
+        },
+      ],
+      runs: [{ threadId: "t-parser", start: "2026-10-29T08:30:00.000Z", end: "2026-10-29T09:15:00.000Z", running: false }],
+      prompts: [{ threadId: "t-parser", at: "2026-10-29T08:20:00.000Z", fromPhone: true }],
     },
   },
   // A Kontor that has never attempted a sync.
@@ -310,15 +331,23 @@ test("reads every source into the metrics", () => {
   expect(collected.reportInputs.landedPrs.items).toMatchObject([{ repository: "davidvornholt/agent-skills", title: "Add the day report" }]);
   expect(collected.reportInputs.closedPrs).toEqual({
     status: "complete",
-    items: [{ repository: "davidvornholt/sp-cli", title: "Try a second parser", closedAt: "2026-10-29T11:45:00+01:00", part: 0 }],
+    items: [{ repository: "davidvornholt/sp-cli", number: 43, ref: "sp-cli#43", title: "Try a second parser", closedAt: "2026-10-29T11:45:00+01:00", part: 0 }],
   });
   expect(collected.reportInputs.settledThreads.items).toMatchObject([{ title: "Settled today", project: "postlude" }]);
-  expect(collected.timeline.agentRuns).toEqual({
+  expect(collected.timeline.threads).toEqual({
     status: "complete",
     items: [
-      { threadTitle: "Fix the parser", project: "~/dev/postlude", start: Date.parse("2026-10-29T08:30:00.000Z"), end: Date.parse("2026-10-29T09:15:00.000Z") },
+      {
+        id: "t-parser",
+        title: "Fix the parser",
+        project: "~/dev/postlude",
+        category: "code",
+        runs: [{ start: Date.parse("2026-10-29T08:30:00.000Z"), end: Date.parse("2026-10-29T09:15:00.000Z") }],
+        prompts: [{ at: Date.parse("2026-10-29T08:20:00.000Z"), fromPhone: true }],
+      },
     ],
   });
+  expect(collected.reportInputs.looseEnds.waitingPrs.items).toMatchObject([{ ref: "postlude#14", thread: "Fix the parser" }]);
 });
 
 test("keeps only each part's own windows, not the summary's list of them", () => {
@@ -331,7 +360,7 @@ test("keeps only each part's own windows, not the summary's list of them", () =>
 
 test("says an older copy of the skill on the z890 is why T3 Code is missing", () => {
   expect(spDown.collected.problems).toContain(
-    'T3 Code unavailable: ssh exited with 1: {"error":"Unknown command: t3 2026-10-29"} (collect ran `wrap.ts t3` on david-z890-nixos over SSH, so a usage error means the skill there is older)',
+    'T3 Code unavailable: ssh exited with 1: {"error":"Unknown command: t3 2026-10-29"} (collect ran `wrap.ts t3` on david-z890-nixos over SSH, so a usage error or an unexpected shape means the skill there is older)',
   );
 });
 

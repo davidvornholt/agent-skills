@@ -21,7 +21,8 @@ const timeline = (pieces: Timeline["pieces"]): Timeline => ({
   pieces,
   focusBlocks: [],
   categoryLabels: { code: "Code" },
-  agentRuns: { status: "complete", items: [] },
+  threads: { status: "complete", items: [] },
+  sentMail: { status: "complete", times: [] },
 });
 const clocks = (pieces: Timeline["pieces"]) => {
   const built = timeline(pieces);
@@ -132,17 +133,70 @@ describe("part windows", () => {
 });
 
 describe("buildTimeline", () => {
-  test("is partial when an activity host wasn't fully read, and clips agent runs to the journal day", () => {
+  const utc = (iso: string): number => Date.parse(`2026-10-29T${iso}:00.000Z`);
+
+  test("is partial when an activity host wasn't fully read", () => {
     const built = buildTimeline(WINDOW, sources);
     expect(built.status).toBe("partial");
     expect(built.categoryLabels).toEqual({ mail: "Mail", code: "Code", admin: "Admin" });
-    expect(built.agentRuns.items[0]).toMatchObject({ threadTitle: "Night build", start: WINDOW.startMs });
   });
 
-  test("is missing without a usable summary, but keeps the agent runs", () => {
+  test("files each thread under the area of its project, with its runs clipped to the journal day and its prompts", () => {
+    const { items } = buildTimeline(WINDOW, sources).threads;
+    expect(items.map((thread) => [thread.id, thread.category])).toEqual([
+      ["t-night", null],
+      ["t-parser", "code"],
+      ["t-tidy", "code"],
+      ["t-docs", "code"],
+      ["t-deploy", null],
+    ]);
+    expect(items[0]?.runs).toEqual([{ start: WINDOW.startMs, end: utc("03:30") }]);
+    expect(items[4]?.runs).toEqual([{ start: Date.parse("2026-10-30T02:00:00.000Z"), end: WINDOW.endMs }]);
+    expect(items[1]?.prompts).toEqual([
+      { at: utc("08:20"), fromPhone: false },
+      { at: utc("09:25"), fromPhone: true },
+    ]);
+  });
+
+  test("leaves out a thread with neither a run nor a prompt within the day", () => {
+    const t3 = sources.t3.ok ? sources.t3.value : null;
+    if (t3 === null) throw new Error("The fixture has T3 Code data.");
+    const runs = t3.runs.filter((run) => run.threadId !== "t-docs");
+    expect(buildTimeline(WINDOW, { ...sources, t3: { ok: true, value: { ...t3, runs } } }).threads.items.map((thread) => thread.id)).not.toContain("t-docs");
+  });
+
+  test("keeps the send times of the mailboxes it could read, within the day, and is partial when one failed or hit its limit", () => {
+    const { sentMail } = buildTimeline(WINDOW, sources);
+    expect(sentMail.status).toBe("partial");
+    expect(sentMail.times.map((ms) => new Date(ms).toISOString())).toEqual([
+      "2026-10-29T08:00:00.000Z",
+      "2026-10-29T18:00:00.000Z",
+      "2026-10-29T19:00:00.000Z",
+      "2026-10-30T01:00:00.000Z",
+    ]);
+  });
+
+  test("is missing without a usable summary, but keeps the threads", () => {
     const built = buildTimeline(WINDOW, { ...sources, summary: { ok: true, value: { ...summary, summaryVersion: 8 } } });
     expect(built).toMatchObject({ status: "missing", pieces: [], focusBlocks: [] });
-    expect(built.agentRuns.items).toHaveLength(3);
-    expect(buildTimeline(WINDOW, { ...sources, t3: { ok: false, error: "unreachable" } }).agentRuns).toEqual({ status: "missing", items: [] });
+    // Without the summary's categories no thread has an area.
+    expect(built.threads.items.map((thread) => thread.category)).toEqual([null, null, null, null, null]);
+    expect(buildTimeline(WINDOW, { ...sources, t3: { ok: false, error: "unreachable" } }).threads).toEqual({ status: "missing", items: [] });
+  });
+});
+
+describe("part threads", () => {
+  test("list each thread's prompts and agent time within the part, the most prompts first", () => {
+    const built = buildTimeline(WINDOW, sources);
+    const [first, second] = buildParts(built, partBounds(WINDOW, built), [], []).map((part) => part.threads);
+    expect(first).toEqual([
+      { title: "Fix the parser", project: "postlude", prompts: 2, agentMinutes: 80 },
+      { title: "Night build", project: "nix-config", prompts: 0, agentMinutes: 30 },
+    ]);
+    expect(second).toEqual([
+      { title: "Tidy tests", project: "sp-cli", prompts: 2, agentMinutes: 55 },
+      { title: "Watch the deploy", project: "nix-config", prompts: 0, agentMinutes: 60 },
+      { title: "Write docs", project: "sp-cli", prompts: 0, agentMinutes: 10 },
+    ]);
   });
 });

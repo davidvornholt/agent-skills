@@ -45,6 +45,8 @@ export type DayMetrics = {
 /** A stretch of the summary's timeline in which the category and the T3 project stay the same; null where the time has none. */
 export type TimelinePiece = Interval & { readonly category: string | null; readonly project: string | null };
 export type FocusBlock = Interval & { readonly category: string };
+/** A category with the T3 projects the summary files under it, spelled as the timeline's projects are. */
+export type SummaryCategory = Category & { readonly t3Projects: readonly string[] };
 /** A stretch in which the same window was in front: its app id, or the Windows guest's executable, and its title. Either is null when the log has none, and "<redacted>" when an exclude pattern matches. */
 export type WindowPiece = Interval & { readonly app: string | null; readonly title: string | null };
 
@@ -55,7 +57,7 @@ export type Summary = {
   readonly lastActivityAt: string | null;
   readonly focusMinutes: number | null;
   readonly scatteredMinutes: number | null;
-  readonly categories: readonly Category[];
+  readonly categories: readonly SummaryCategory[];
   readonly activeIntervals: readonly Interval[] | null;
   readonly timeline: readonly TimelinePiece[];
   /** Window titles, as input for one report: they must not be stored, because the focus logs they come from are deleted after 30 days. */
@@ -109,10 +111,17 @@ export const parseSummary = (raw: unknown, day: string): Summary => {
   });
   if (!Array.isArray(raw.categories)) throw new Error("categories is not a list");
   const categories = raw.categories.map((category, index) => {
-    if (!isRecord(category) || typeof category.id !== "string" || typeof category.label !== "string" || !isMinutes(category.minutes)) {
-      throw new Error(`categories[${index}] needs an id, a label, and minutes`);
+    if (
+      !isRecord(category) ||
+      typeof category.id !== "string" ||
+      typeof category.label !== "string" ||
+      !isMinutes(category.minutes) ||
+      !Array.isArray(category.t3Projects) ||
+      !category.t3Projects.every((project) => typeof project === "string")
+    ) {
+      throw new Error(`categories[${index}] needs an id, a label, minutes, and a list of T3 projects`);
     }
-    return { id: category.id, label: category.label, minutes: category.minutes };
+    return { id: category.id, label: category.label, minutes: category.minutes, t3Projects: category.t3Projects as string[] };
   });
   const activeIntervals = intervals(raw.activeIntervals, "activeIntervals", () => ({}));
   const timeline = intervals(raw.timeline, "timeline", (entry, path) => ({
@@ -283,7 +292,10 @@ export const computeDayMetrics = (window: DayWindow, sources: Sources): Computed
     lastActivityAt: summary?.lastActivityAt ?? null,
     focusMinutes: summary?.focusMinutes ?? null,
     scatteredMinutes: summary?.scatteredMinutes ?? null,
-    categories: (summary?.categories ?? []).toSorted((a, b) => b.minutes - a.minutes || compareText(a.id, b.id)),
+    // Postlude stores only the minutes per category, not which projects the user files under it.
+    categories: (summary?.categories ?? [])
+      .map(({ id, label, minutes }) => ({ id, label, minutes }))
+      .toSorted((a, b) => b.minutes - a.minutes || compareText(a.id, b.id)),
     offComputerMinutes: sp.value,
     appointmentMinutes: appointments === null ? null : totalMinutes(appointments),
     appointmentOffScreenMinutes: appointments === null || activeIntervals === null ? null : totalMinutes(subtract(appointments, activeIntervals)),

@@ -4,7 +4,7 @@ import { clip } from "./intervals.ts";
 import { buildReportInputs } from "./report-inputs.ts";
 import type { Sources } from "./sources.ts";
 import { event, sources, WINDOW } from "./testing/fixtures.ts";
-import { buildTimeline, partBounds } from "./timeline.ts";
+import { buildTimeline, partAt, partBounds } from "./timeline.ts";
 
 const inputs = (changes: Partial<Sources> = {}) => {
   const all = { ...sources, ...changes };
@@ -25,13 +25,13 @@ test("builds the parts and lists of a day with all sources", () => {
           { label: "Mail", minutes: 30 },
         ],
         projects: [
-          { project: "postlude", screenMinutes: 210, agentMinutes: 45 },
+          { project: "postlude", screenMinutes: 210, agentMinutes: 80 },
           // The run began before the journal day, so only its last half hour counts.
           { project: "nix-config", screenMinutes: 0, agentMinutes: 30 },
         ],
         threads: [
-          { title: "Fix the parser", project: "postlude", agentMinutes: 45 },
-          { title: "Night build", project: "nix-config", agentMinutes: 30 },
+          { title: "Fix the parser", project: "postlude", prompts: 2, agentMinutes: 80 },
+          { title: "Night build", project: "nix-config", prompts: 0, agentMinutes: 30 },
         ],
         // Without T3 Code's own windows, redacted ones, and the calculator's single minute; the mail windows add up across the redacted one.
         windows: [{ app: "org.example.Mail", title: "Inbox - Mail", minutes: 24 }],
@@ -47,8 +47,16 @@ test("builds the parts and lists of a day with all sources", () => {
           { label: "Not categorised", minutes: 90 },
           { label: "Admin", minutes: 60 },
         ],
-        projects: [{ project: "sp-cli", screenMinutes: 180, agentMinutes: 40 }],
-        threads: [{ title: "Tidy tests", project: "sp-cli", agentMinutes: 40 }],
+        // Two threads' agents overlapping in a project count once.
+        projects: [
+          { project: "sp-cli", screenMinutes: 180, agentMinutes: 55 },
+          { project: "nix-config", screenMinutes: 0, agentMinutes: 60 },
+        ],
+        threads: [
+          { title: "Tidy tests", project: "sp-cli", prompts: 2, agentMinutes: 55 },
+          { title: "Watch the deploy", project: "nix-config", prompts: 0, agentMinutes: 60 },
+          { title: "Write docs", project: "sp-cli", prompts: 0, agentMinutes: 10 },
+        ],
         windows: [
           { app: "org.example.Writer", title: "Garden plan - Writer", minutes: 70 },
           // A Windows program has no title.
@@ -77,13 +85,13 @@ test("builds the parts and lists of a day with all sources", () => {
       status: "complete",
       items: [
         // Before the first stretch of screen time, so it belongs to the first part.
-        { repository: "davidvornholt/postlude", title: "Start of day", mergedAt: "2026-10-29T04:00:00+01:00", part: 0 },
-        { repository: "davidvornholt/sp-cli", title: "Afternoon", mergedAt: "2026-10-29T16:00:00+01:00", part: 1 },
+        { repository: "davidvornholt/postlude", number: 12, ref: "postlude#12", title: "Start of day", mergedAt: "2026-10-29T04:00:00+01:00", part: 0 },
+        { repository: "davidvornholt/sp-cli", number: 7, ref: "sp-cli#7", title: "Afternoon", mergedAt: "2026-10-29T16:00:00+01:00", part: 1 },
       ],
     },
     closedPrs: {
       status: "complete",
-      items: [{ repository: "davidvornholt/sp-cli", title: "Try a second parser", closedAt: "2026-10-29T11:45:00+01:00", part: 0 }],
+      items: [{ repository: "davidvornholt/sp-cli", number: 8, ref: "sp-cli#8", title: "Try a second parser", closedAt: "2026-10-29T11:45:00+01:00", part: 0 }],
     },
     appointments: {
       status: "complete",
@@ -106,7 +114,82 @@ test("builds the parts and lists of a day with all sources", () => {
       ],
     },
     kontor: { status: "missing", attempted: null, approvalNeeded: null },
+    looseEnds: {
+      waitingPrs: {
+        status: "complete",
+        // Not the pull request linked only after the day, nor those merged or closed within it.
+        items: [
+          { repository: "davidvornholt/nix-config", number: 5, ref: "nix-config#5", title: "Build at night", isDraft: true, thread: "Night build" },
+          { repository: "davidvornholt/pim", number: 3, ref: "pim#3", title: "End of day belongs to the next day", isDraft: false, thread: "Fix the parser" },
+          { repository: "davidvornholt/postlude", number: 14, ref: "postlude#14", title: "Parse dates", isDraft: false, thread: "Fix the parser" },
+        ],
+      },
+      dueTasks: {
+        status: "complete",
+        // Not the task done before the day ended, the one marked won't do, or the one due after the next day.
+        items: [
+          { title: "Pay the bill", project: "Home", day: "2026-10-27", kind: "due", when: "overdue" },
+          { title: "Call the plumber", project: "Home", day: "2026-10-29", kind: "due", when: "today" },
+          { title: "Next day", project: "Home", day: "2026-10-29", kind: "due", when: "today" },
+          { title: "Pack", project: "Home", day: "2026-10-30", kind: "deadline", when: "tomorrow" },
+        ],
+      },
+      runningThreads: { status: "complete", items: [{ title: "Watch the deploy", project: "nix-config" }] },
+    },
+    facts: {
+      prompts: { count: 4, fromPhone: 1, threads: 2 },
+      // Each thread's agent time adds up, so overlapping threads count twice; the time any agent ran counts them once.
+      agents: { minutes: 235, wallMinutes: 225, threads: 5, peak: { count: 2, at: "2026-10-29T15:20:00+01:00" } },
+      followUp: { medianSeconds: 450, count: 2 },
+      leadTimes: {
+        status: "complete",
+        items: [
+          {
+            thread: "Tidy tests",
+            project: "sp-cli",
+            prs: 1,
+            firstPromptAt: "2026-10-29T14:50:00+01:00",
+            mergedAt: "2026-10-29T16:00:00+01:00",
+            minutes: 70,
+          },
+        ],
+      },
+      focus: { blocks: 1, longest: { minutes: 200, start: "2026-10-29T08:12:00+01:00", end: "2026-10-29T11:32:00+01:00", area: "Code" } },
+      dueToday: { count: 3, done: 1 },
+      promptsByArea: [{ area: "Code", prompts: 4 }],
+    },
   });
+});
+
+test("writes a pull request's ref with its owner when two of the day's repositories share its name", () => {
+  const github: Sources["github"] = {
+    ok: true,
+    value: {
+      incomplete: false,
+      prs: [
+        { repository: "davidvornholt/postlude", number: 12, title: "Start of day", mergedAt: "2026-10-29T03:00:00Z" },
+        { repository: "someone/postlude", number: 4, title: "A fork", mergedAt: "2026-10-29T09:00:00Z" },
+      ],
+    },
+  };
+  const { landedPrs, looseEnds } = inputs({ github });
+  expect(landedPrs.items.map((pr) => pr.ref)).toEqual(["davidvornholt/postlude#12", "someone/postlude#4"]);
+  expect(looseEnds.waitingPrs.items.map((pr) => pr.ref)).toEqual(["nix-config#5", "pim#3", "davidvornholt/postlude#14"]);
+});
+
+test("counts a reply only when the user prompted before an agent started in the thread again", () => {
+  const t3 = sources.t3.ok ? sources.t3.value : null;
+  if (t3 === null) throw new Error("The fixture has T3 Code data.");
+  const value = {
+    ...t3,
+    runs: [
+      { threadId: "t-parser", start: "2026-10-29T10:00:00.000Z", end: "2026-10-29T10:10:00.000Z", running: false },
+      { threadId: "t-parser", start: "2026-10-29T10:20:00.000Z", end: "2026-10-29T10:30:00.000Z", running: false },
+    ],
+    // Sent while the second run was going, so it doesn't answer the first.
+    prompts: [{ threadId: "t-parser", at: "2026-10-29T10:25:00.000Z", fromPhone: false }],
+  };
+  expect(inputs({ t3: { ok: true, value } }).facts.followUp).toBeNull();
 });
 
 test("has no parts when screen activity is missing, so nothing is placed in one", () => {
@@ -126,9 +209,14 @@ test("marks lists of unreachable sources as missing", () => {
     lists.closedPrs,
     lists.appointments,
     lists.trackedTasks,
+    lists.looseEnds.waitingPrs,
+    lists.looseEnds.dueTasks,
+    lists.looseEnds.runningThreads,
+    lists.facts.leadTimes,
   ]) {
     expect(list).toEqual({ status: "missing", items: [] });
   }
+  expect(lists.facts).toMatchObject({ prompts: null, agents: null, followUp: null, dueToday: null, promptsByArea: [] });
 });
 
 test("marks closed pull requests partial when GitHub's search was incomplete, and keeps the landed ones", () => {
@@ -227,8 +315,11 @@ test("prints each part's time range over everything placed in it", () => {
     ...appointments.items.flatMap((event) =>
       event.start === null || event.end === null ? [] : [{ part: event.part, what: event.title, start: Date.parse(event.start), end: Date.parse(event.end) }],
     ),
-    // An agent run belongs to every part whose bound it overlaps.
-    ...timeline.agentRuns.items.flatMap((run) => bounds.map((_, index) => ({ part: index, what: run.threadTitle, start: run.start, end: run.end }))),
+    // An agent run belongs to every part whose bound it overlaps, and a prompt to the part it falls in.
+    ...timeline.threads.items.flatMap((thread) => [
+      ...thread.runs.flatMap((run) => bounds.map((_, index) => ({ part: index, what: thread.title, ...run }))),
+      ...thread.prompts.map((prompt) => ({ part: partAt(bounds, prompt.at), what: thread.title, start: prompt.at, end: prompt.at })),
+    ]),
   ];
   const outside = placed.flatMap(({ part, what, start, end }) => {
     const bound = part === null ? undefined : bounds[part];

@@ -12,7 +12,8 @@ const collectedFile = join(directory, "collected.json");
 const collected = buildCollected(WINDOW, sources);
 writeFileSync(collectedFile, JSON.stringify(collected));
 
-const TEXT = JSON.stringify({ summary: "A calm day.", parts: ["A quiet morning.", "A quiet afternoon."] });
+const PART = { title: "Quiet", lines: ["Reviews.", "Tests."] };
+const TEXT = JSON.stringify({ summary: "A calm day.", parts: [PART, PART] });
 
 const run = async (args: string[], stdin = "") => {
   const child = Bun.spawn([process.execPath, join(import.meta.dir, "wrap.ts"), ...args], { stdin: new Blob([stdin]), stdout: "pipe", stderr: "pipe" });
@@ -48,13 +49,13 @@ test("render passes on no window title and no list of windows", async () => {
   for (const text of new Set(made)) expect(payload.reportHtml).not.toContain(text);
 });
 
-test("render refuses a summary with digits and a paragraph count that doesn't match the parts", async () => {
-  const digits = await run(["render", collectedFile, "--model", "claude-opus-5-5"], JSON.stringify({ summary: "Wrote 3 tests.", parts: ["A", "B"] }));
+test("render refuses a summary with digits and a part count that doesn't match the day's", async () => {
+  const digits = await run(["render", collectedFile, "--model", "claude-opus-5-5"], JSON.stringify({ summary: "Wrote 3 tests.", parts: [PART, PART] }));
   expect(digits.exitCode).toBe(1);
   expect(JSON.parse(digits.stderr.split("\n")[0] ?? "").error).toMatch(/digits/);
-  const count = await run(["render", collectedFile, "--model", "claude-opus-5-5"], JSON.stringify({ summary: "A calm day.", parts: ["A"] }));
+  const count = await run(["render", collectedFile, "--model", "claude-opus-5-5"], JSON.stringify({ summary: "A calm day.", parts: [PART] }));
   expect(count.exitCode).toBe(1);
-  expect(JSON.parse(count.stderr.split("\n")[0] ?? "").error).toMatch(/one paragraph per entry of reportInputs\.parts/);
+  expect(JSON.parse(count.stderr.split("\n")[0] ?? "").error).toMatch(/one entry per entry of reportInputs\.parts/);
 });
 
 test("render refuses a collected file of another metrics version", async () => {

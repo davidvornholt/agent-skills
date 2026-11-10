@@ -9,6 +9,14 @@ export type SpTask = {
   readonly parentId: string | null;
   readonly subTaskIds: readonly string[];
   readonly timeSpentOnDay: Readonly<Record<string, number>>;
+  /** The day the task is planned for, as YYYY-MM-DD, or the time it is due at, in epoch milliseconds. */
+  readonly dueDay: string | null;
+  readonly dueWithTime: number | null;
+  /** The task's deadline, kept apart from its due day, as a day or a time. */
+  readonly deadlineDay: string | null;
+  readonly deadlineWithTime: number | null;
+  /** When the user marked it as won't do, which also marks it done. */
+  readonly wontDoOn: number | null;
 };
 
 export type SpData = {
@@ -16,11 +24,11 @@ export type SpData = {
   readonly projects: readonly { readonly id: string; readonly title: string }[];
 };
 
-export type LandedPr = { readonly repository: string; readonly title: string; readonly mergedAt: string };
+export type LandedPr = { readonly repository: string; readonly number: number; readonly title: string; readonly mergedAt: string };
 
 export type GithubData = { readonly prs: readonly LandedPr[]; readonly incomplete: boolean };
 
-export type ClosedPr = { readonly repository: string; readonly title: string; readonly closedAt: string };
+export type ClosedPr = { readonly repository: string; readonly number: number; readonly title: string; readonly closedAt: string };
 
 export type ClosedPrData = { readonly prs: readonly ClosedPr[]; readonly incomplete: boolean };
 
@@ -50,16 +58,47 @@ export type T3Thread = {
   readonly createdAt: string;
 };
 
-/** A run of an agent in a T3 Code thread, which ran from start to end; a run still going ends at the time it was read. */
-export type T3Run = {
-  readonly threadTitle: string;
-  /** The project's folder with the home folder written as "~", spelled as the activity summary's timeline spells it. */
-  readonly project: string;
-  readonly start: string;
-  readonly end: string;
+/** A pull request linked to a T3 Code thread, as T3 last synced it. repository is "owner/name". */
+export type T3PullRequest = {
+  readonly repository: string;
+  readonly number: number;
+  readonly title: string;
+  readonly linkedAt: string;
+  readonly state: "open" | "merged" | "closed";
+  readonly isDraft: boolean;
+  readonly mergedAt: string | null;
+  readonly closedAt: string | null;
 };
 
-export type T3Data = { readonly threads: readonly T3Thread[]; readonly runs: readonly T3Run[] };
+/**
+ * A T3 Code thread as the report draws it: one the user prompted or an agent ran in during the journal day.
+ * Subagents' threads fold into the thread that started them, with their runs and pull requests. Forks and delegated tasks stay threads of their own, because T3 keeps no link from a delegated task to the thread that asked for it.
+ */
+export type T3DayThread = {
+  readonly id: string;
+  readonly title: string;
+  /** The project's folder with the home folder written as "~", spelled as the activity summary spells T3 projects; "-" when the project is gone. */
+  readonly project: string;
+  /** The user's first prompt in the thread, on any day; null when the user never prompted it. */
+  readonly firstPromptAt: string | null;
+  /** Each pull request once, with the earliest link among the thread and its subagents. */
+  readonly pullRequests: readonly T3PullRequest[];
+};
+
+/** A run of an agent, which ran from start to end; a run still going ends at the time it was read. */
+export type T3Run = { readonly threadId: string; readonly start: string; readonly end: string; readonly running: boolean };
+
+/** A message the user wrote in T3 Code, on the computer or the phone; T3's own messages and agents' don't count. */
+export type T3Prompt = { readonly threadId: string; readonly at: string; readonly fromPhone: boolean };
+
+export type T3Data = {
+  readonly threads: readonly T3Thread[];
+  readonly dayThreads: readonly T3DayThread[];
+  /** The runs that overlap the journal day, child threads included, each under the day thread it folds into. */
+  readonly runs: readonly T3Run[];
+  /** The prompts within the journal day. */
+  readonly prompts: readonly T3Prompt[];
+};
 
 export type Sources = {
   /** The raw `activity-digest --summary-json` object, validated in metrics.ts. */
