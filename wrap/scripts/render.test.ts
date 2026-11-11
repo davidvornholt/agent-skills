@@ -22,8 +22,11 @@ const collected = buildCollected(WINDOW, sources);
 const TEXT: AgentText = {
   summary: "A quiet day of reviews and garden work.",
   parts: [
-    { title: "The parser", text: "You had agents fix how the journal reads dates. The fix for the morning page landed at 04:00." },
-    { title: "Tidying tests", text: "You tidied the tests of the task tool. You dropped a second way of reading the task list." },
+    { title: "The parser", paragraphs: ["You had agents fix how the journal reads dates. The fix for the morning page landed at 04:00."] },
+    {
+      title: "Tidying tests",
+      paragraphs: ["You tidied the tests of the task tool.", "You dropped a second way of reading the task list, because nothing <used> it."],
+    },
   ],
 };
 const TITLES = TEXT.parts.map((part) => part.title);
@@ -43,19 +46,24 @@ describe("parseAgentText", () => {
   test("reads the summary and a title and paragraph per part, with the white space tidied", () => {
     expect(
       parse({
-        summary: " A calm day. ",
+        summary: " A calm day.\n\nYou wrote. ",
         parts: [
           { title: " Morning ", text: "You read the news.\n  Then you wrote." },
           { title: "Afternoon", text: "You wrote tests." },
         ],
       }),
     ).toEqual({
-      summary: "A calm day.",
+      summary: "A calm day. You wrote.",
       parts: [
-        { title: "Morning", text: "You read the news. Then you wrote." },
-        { title: "Afternoon", text: "You wrote tests." },
+        { title: "Morning", paragraphs: ["You read the news. Then you wrote."] },
+        { title: "Afternoon", paragraphs: ["You wrote tests."] },
       ],
     });
+  });
+
+  test("splits a part's text into paragraphs at blank lines and drops the empty ones", () => {
+    const text = "\n\nYou read the news.\n  Then you wrote.\n\nYou went for a walk.\r\n \t \r\nYou cooked.\n\n\n \n\nYou slept.\n\n";
+    expect(parse(withText(text)).parts[0]?.paragraphs).toEqual(["You read the news. Then you wrote.", "You went for a walk.", "You cooked.", "You slept."]);
   });
 
   test("refuses text that isn't the expected JSON", () => {
@@ -77,6 +85,7 @@ describe("parseAgentText", () => {
   test("refuses empty text and a long title", () => {
     expect(() => parse(withText(morning, morning, " \n "))).toThrow(/summary is empty/);
     expect(() => parse(withText(" "))).toThrow(/text of part 1 is empty/);
+    expect(() => parse(withText("\n\n \n\n"))).toThrow(/text of part 1 is empty/);
     const long = withText(morning);
     expect(() => parse({ ...long, parts: [{ title: "a".repeat(PART_TITLE_MAX_LENGTH + 1), text: morning }, long.parts[1]] })).toThrow(/title of part 1 has/);
   });
@@ -116,9 +125,12 @@ describe("renderReport", () => {
     expect(notice).not.toMatch(/\$\{|\p{Nd}/u);
   });
 
-  test("shows each part's number, title and time range over its paragraph", () => {
+  test("shows each part's number, title and time range over its paragraphs", () => {
     expect(html).toContain(
-      `<h2>The day in parts</h2><ol class="arcs"><li class="arc"><h3><span class="no">1</span><span>The parser</span><span class="when">04:00–13:00</span></h3><p>${TEXT.parts[0]?.text}</p></li><li class="arc"><h3><span class="no">2</span>`,
+      `<h2>The day in parts</h2><ol class="arcs"><li class="arc"><h3><span class="no">1</span><span>The parser</span><span class="when">04:00–13:00</span></h3><p>${TEXT.parts[0]?.paragraphs[0]}</p></li><li class="arc"><h3><span class="no">2</span>`,
+    );
+    expect(html).toContain(
+      "</h3><p>You tidied the tests of the task tool.</p><p>You dropped a second way of reading the task list, because nothing &lt;used&gt; it.</p></li>",
     );
   });
 

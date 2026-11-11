@@ -1,4 +1,4 @@
-// The template reads the day's figures from Postlude's message, and the times, minutes and counts this script prints come from the collected data. The agent writes only the prose: a summary, and a title and paragraph per part.
+// The template reads the day's figures from Postlude's message, and the times, minutes and counts this script prints come from the collected data. The agent writes only the prose: a summary, and a title and one or more paragraphs per part.
 
 import { compareText } from "./compare.ts";
 import { toBerlinClock } from "./day.ts";
@@ -15,18 +15,30 @@ export const WAITING_PRS_LISTED = 3;
 
 const TEMPLATE_URL = new URL("../report/template.html", import.meta.url);
 
-export type AgentPart = { readonly title: string; readonly text: string };
+export type AgentPart = { readonly title: string; readonly paragraphs: readonly string[] };
 
-/** What the agent writes: a summary of the day, and a title and a paragraph per part, in order. */
+/** What the agent writes: a summary of the day, and a title and one or more paragraphs per part, in order. */
 export type AgentText = { readonly summary: string; readonly parts: readonly AgentPart[] };
 
 const TEXT_SHAPE = '{"summary": "...", "parts": [{"title": "...", "text": "..."}, ...]}';
 
+const tidy = (text: string): string => text.trim().replace(/\s+/g, " ");
+
 const cleanText = (name: string, text: unknown): string => {
   if (typeof text !== "string") throw new Error(`The ${name} is not a string.`);
-  const clean = text.trim().replace(/\s+/g, " ");
+  const clean = tidy(text);
   if (clean.length === 0) throw new Error(`The ${name} is empty.`);
   return clean;
+};
+
+/** Splits a part's text into paragraphs at blank lines, tidies the white space within each, and drops the empty ones. */
+const cleanParagraphs = (name: string, text: string): string[] => {
+  const paragraphs = text
+    .split(/\n[^\S\n]*\n/)
+    .map(tidy)
+    .filter((paragraph) => paragraph.length > 0);
+  if (paragraphs.length === 0) throw new Error(`The ${name} is empty.`);
+  return paragraphs;
 };
 
 const checkPart = (part: unknown, index: number): AgentPart => {
@@ -36,7 +48,7 @@ const checkPart = (part: unknown, index: number): AgentPart => {
   const cleanTitle = cleanText(`title of ${label}`, title);
   if (cleanTitle.length > PART_TITLE_MAX_LENGTH)
     throw new Error(`The title of ${label} has ${cleanTitle.length} characters; the limit is ${PART_TITLE_MAX_LENGTH}.`);
-  return { title: cleanTitle, text: cleanText(`text of ${label}`, text) };
+  return { title: cleanTitle, paragraphs: cleanParagraphs(`text of ${label}`, text) };
 };
 
 /** Reads the agent's JSON from stdin and checks that it has one entry per part of the collected day. */
@@ -127,8 +139,9 @@ const renderParts = (collected: Collected, text: AgentText): string => {
   const { parts } = collected.reportInputs;
   if (parts.length === 0) return "";
   const items = parts.map((part, index) => {
-    const own = text.parts[index] ?? { title: "", text: "" };
-    return `<li class="arc"><h3><span class="no">${index + 1}</span><span>${escapeHtml(own.title)}</span><span class="when">${part.clock}</span></h3><p>${escapeHtml(own.text)}</p></li>`;
+    const own = text.parts[index] ?? { title: "", paragraphs: [] };
+    const paragraphs = own.paragraphs.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join("");
+    return `<li class="arc"><h3><span class="no">${index + 1}</span><span>${escapeHtml(own.title)}</span><span class="when">${part.clock}</span></h3>${paragraphs}</li>`;
   });
   return `<section><h2>The day in parts</h2><ol class="arcs">${items.join("")}</ol></section>`;
 };

@@ -9,7 +9,7 @@ argument-hint: [yesterday | YYYY-MM-DD]
 
 A journal day runs from 04:00 to 04:00 Europe/Berlin. Postlude keeps the user's journal text, scripture, and rating in their own area, which this skill never writes.
 
-You write the summary and a paragraph for each part of the day. The scripts produce every figure, so take any number you mention from the collected data rather than computing it.
+You write the summary and the text for each part of the day. The scripts produce every figure, so take any number you mention from the collected data rather than computing it.
 
 ## Run it
 
@@ -29,18 +29,18 @@ You write the summary and a paragraph for each part of the day. The scripts prod
    jq -r '.conversations.items[] | "# \(.title) (\(.project), parts: \(.parts | map(tostring) | join(", ")))", .messages[], ""' "/tmp/wrap-$DAY.json" > "/tmp/wrap-$DAY.txt"
    ```
 
-4. Write a `summary` of the day in two or three sentences. For each entry of `reportInputs.parts`, in order, write a short `title` and a paragraph `text` about that entry and everything whose `part` is its index.
+4. Write a `summary` of the day in two or three sentences. For each entry of `reportInputs.parts`, in order, write a short `title` and a `text` about that entry and everything whose `part` is its index. A `text` may hold several short paragraphs separated by a blank line, for example one per thread of work.
 
    Tell a reader who no longer remembers the day what happened, concretely: what the user asked for, what the agents found, built or decided, and what came of it. A ticked-off task or a thread that was worked on isn't news by itself, and tasks mainly show what the work was about. Look up whatever else you need to understand the day.
 
-   It's the user's day, not the agents', so write agent work as work the user had agents do. Describe the user's `windows` and `sentMail` in your own words, never by a window's title, an app id or a mail subject, because the report is stored.
+   Address the user as "you", because they read the report themselves. It's their day, not the agents', so write agent work as work they had agents do. Describe the user's `windows` and `sentMail` in your own words, never by a window's title, an app id or a mail subject, because the report is stored.
 
    Don't rate, judge, or advise, and don't guess why something happened, how it felt, or what happened away from the computer, because the user adds that after reading the report.
 5. Render and store. Re-running for a day replaces only the agent area, so it's safe after fixing a source.
 
    ```sh
    bun ~/.claude/skills/wrap/scripts/wrap.ts render "/tmp/wrap-$DAY.json" --model <your model id> <<'EOF' | postlude agent-area put "$DAY"
-   {"summary": "<summary>", "parts": [{"title": "<title>", "text": "<text>"}]}
+   {"summary": "<summary>", "parts": [{"title": "<title>", "text": "<paragraph>\n\n<paragraph>"}]}
    EOF
    ```
 
