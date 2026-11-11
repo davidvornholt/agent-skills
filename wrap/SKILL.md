@@ -31,7 +31,7 @@ You write the summary and the text for each part of the day. The scripts produce
 
 4. Write a `summary` in a few short paragraphs about what the parts can't show:
 
-   - the shape of the day: start and stop, the main stretches, and the split between the user's own work, steering agents (`t3Minutes`) and agents running alone (`agentsAloneMinutes`)
+   - the shape of the day: start and stop, the main stretches, and how the screen time split between steering agents (`t3Minutes`) and everything else the user did, which the windows show, and how long agents ran alone (`agentsAloneMinutes`)
    - patterns worth noticing
    - what is waiting for the user
    - at most one or two outcomes that defined the day
