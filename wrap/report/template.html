@@ -89,6 +89,14 @@
   .bar-value { color: var(--ink-secondary); text-align: right; white-space: nowrap; }
   [data-tip] { cursor: default; }
   [data-tip]:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .section-head { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; }
+  .section-head h2 { margin: 0; }
+  /* Shown only when Postlude says it can widen the frame; it reaches above and below the heading's line, so showing it moves nothing. */
+  .width-toggle { display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px; margin-block: -3px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--ink-muted); }
+  .width-toggle:hover { background: var(--surface-sunken); color: var(--ink); }
+  .width-toggle[hidden] { display: none; }
+  .width-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .width-toggle[data-wide="true"] .widen, .width-toggle:not([data-wide="true"]) .narrow { display: none; }
   details { margin-top: 10px; font-size: 13px; color: var(--ink-secondary); }
   summary { cursor: pointer; }
   table { border-collapse: collapse; margin-top: 6px; }
@@ -398,18 +406,10 @@
     window.parent.postMessage({ type: "postlude:report-height", height: Math.ceil(document.body.getBoundingClientRect().height) }, "*");
   };
 
-  window.addEventListener("message", (event) => {
-    if (event.source !== window.parent) return;
-    const data = event.data;
-    if (typeof data !== "object" || data === null || data.type !== "postlude:day-metrics") return;
-    if (typeof data.dayMetrics !== "object" || data.dayMetrics === null) return;
-    document.documentElement.dataset.theme = data.theme === "dark" ? "dark" : "light";
-    fill(data.metricsVersion, data.dayMetrics);
-    postHeight();
-  });
-
   const tooltip = document.querySelector(".tooltip");
+  let tipTarget = null;
   const place = (target, x, y) => {
+    tipTarget = target;
     tooltip.textContent = target.dataset.tip;
     tooltip.hidden = false;
     const width = tooltip.offsetWidth;
@@ -432,6 +432,42 @@
   };
   document.addEventListener("focusout", hideTooltip);
   document.addEventListener("pointerleave", hideTooltip);
+
+  // A report with a width button says so, and Postlude widens only such a report. Postlude then says whether it can show the report wide, which needs a screen with room for it, and whether it does; a Postlude that says nothing never shows the button. A press asks Postlude for the other width, and the button changes when Postlude says the frame has.
+  const widthToggle = document.querySelector("[data-width-toggle]");
+  if (widthToggle) window.parent.postMessage({ type: "postlude:report-width-control" }, "*");
+  const showWidth = (available, wide) => {
+    if (!widthToggle) return;
+    const label = wide ? "Narrow the timeline" : "Widen the timeline";
+    widthToggle.hidden = !available;
+    widthToggle.dataset.wide = String(wide);
+    widthToggle.dataset.tip = label;
+    widthToggle.setAttribute("aria-label", label);
+    if (tipTarget !== widthToggle || tooltip.hidden) return;
+    // The frame moves under a pointer that stays still, so only a button focused from the keyboard keeps its tooltip, with the new label.
+    if (available && widthToggle.matches(":focus-visible")) {
+      const box = widthToggle.getBoundingClientRect();
+      place(widthToggle, box.left, box.top);
+    } else tooltip.hidden = true;
+  };
+  widthToggle?.addEventListener("click", () => {
+    window.parent.postMessage({ type: "postlude:report-width-request", wide: widthToggle.dataset.wide !== "true" }, "*");
+  });
+
+  window.addEventListener("message", (event) => {
+    if (event.source !== window.parent) return;
+    const data = event.data;
+    if (typeof data !== "object" || data === null) return;
+    if (data.type === "postlude:report-width") {
+      if (typeof data.available === "boolean" && typeof data.wide === "boolean") showWidth(data.available, data.wide);
+      return;
+    }
+    if (data.type !== "postlude:day-metrics") return;
+    if (typeof data.dayMetrics !== "object" || data.dayMetrics === null) return;
+    document.documentElement.dataset.theme = data.theme === "dark" ? "dark" : "light";
+    fill(data.metricsVersion, data.dayMetrics);
+    postHeight();
+  });
 
   new ResizeObserver(postHeight).observe(document.body);
 </script>

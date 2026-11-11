@@ -152,11 +152,23 @@ describe("renderReport", () => {
   });
 
   test("lets the timeline use the full width and keeps every other section in the text column", () => {
-    const sections = [...html.matchAll(/<section( class="wide")?[^>]*>\s*<h2>([^<]*)<\/h2>/g)].map((match) => [match[2], match[1] !== undefined]);
+    const sections = [...html.matchAll(/<section( class="wide")?[^>]*>\s*(?:<div class="section-head">)?<h2>([^<]*)<\/h2>/g)].map((match) => [
+      match[2],
+      match[1] !== undefined,
+    ]);
     expect(sections.filter(([, wide]) => wide)).toEqual([["Timeline", true]]);
     expect(sections.map(([heading]) => heading)).toContain("Tracked in Super Productivity");
     expect(template).toMatch(/main > \* \{ max-width: 720px; margin-inline: auto; \}/);
     expect(template).toMatch(/main > \.wide \{ max-width: none; \}/);
+  });
+
+  test("says it has a width button, shows it only when Postlude says it can widen the report, and asks Postlude for the other width", () => {
+    expect(template).toMatch(/\.width-toggle\[hidden\] \{ display: none; \}/);
+    expect(template).toContain('if (widthToggle) window.parent.postMessage({ type: "postlude:report-width-control" }, "*");');
+    expect(template).toContain('if (data.type === "postlude:report-width") {');
+    expect(template).toContain('if (typeof data.available === "boolean" && typeof data.wide === "boolean") showWidth(data.available, data.wide);');
+    expect(template).toContain("widthToggle.hidden = !available;");
+    expect(template).toContain('{ type: "postlude:report-width-request", wide: widthToggle.dataset.wide !== "true" }');
   });
 
   test("leaves the pull requests' summaries to the agent", () => {
@@ -362,6 +374,15 @@ describe("renderTimeline", () => {
     expect(html).toContain('role="img"');
     // The tooltip keeps the T3 title of a thread the agent named, so it can still be found in T3 Code.
     expect(html).toContain('<span class="tl-label" data-tip="Tidy tests · sp-cli">Task tool tests</span>');
+  });
+
+  test("puts a width button beside the timeline's heading, hidden until Postlude can widen the report, and none on a day with nothing to draw", () => {
+    expect(html).toMatch(
+      /<div class="section-head"><h2>Timeline<\/h2><button type="button" class="width-toggle" data-width-toggle aria-label="Widen the timeline" data-tip="Widen the timeline" hidden><svg class="widen" viewBox="0 0 16 16" aria-hidden="true">.*?<\/svg><svg class="narrow" viewBox="0 0 16 16" aria-hidden="true">.*?<\/svg><\/button><\/div>/,
+    );
+    const empty = renderTimeline(withTimeline(bare, quiet), [], NO_NAMES);
+    expect(empty).toContain("Nothing recorded.");
+    expect(empty).not.toContain("data-width-toggle");
   });
 
   test("numbers the parts with their titles, and divides every row where a part begins", () => {

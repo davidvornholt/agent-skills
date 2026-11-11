@@ -163,6 +163,11 @@ const renderTracked = (tasks: List<{ readonly title: string; readonly project: s
   return `<section>${heading}<ul class="items">${items.join("")}</ul></section>`;
 };
 
+/**
+ * Asks Postlude to widen or narrow the report's frame, so the timeline gets the room it can use. It stays hidden until Postlude says the screen has room, and the template's script then keeps its icon and label to the frame's width. Outward arrows widen, inward arrows narrow.
+ */
+const WIDTH_TOGGLE = `<button type="button" class="width-toggle" data-width-toggle aria-label="Widen the timeline" data-tip="Widen the timeline" hidden><svg class="widen" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M6 8H1.5M3.5 6 1.5 8l2 2M10 8h4.5M12.5 6l2 2-2 2"/></svg><svg class="narrow" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M1.5 8H6M4 6l2 2-2 2M14.5 8H10M12 6l-2 2 2 2"/></svg></button>`;
+
 const LEGEND: readonly (readonly [string, string])[] = [
   ["tl-screen", "Your screen time"],
   ["tl-focus", "Focus"],
@@ -231,7 +236,7 @@ export const renderTimeline = (collected: Collected, titles: readonly string[], 
     .join("");
   const legend = LEGEND.map(([kind, label]) => `<li><span class="swatch ${kind}"></span>${label}</li>`).join("");
   return `<section class="wide">
-    <h2>Timeline</h2>
+    <div class="section-head"><h2>Timeline</h2>${WIDTH_TOGGLE}</div>
     <div class="timeline" role="img" aria-label="A timeline of the day; the day in parts describes it in words." style="--hours:${hours}">${renderAxis(axis)}${body}</div>
     <ul class="legend">${legend}</ul>${partial}${threadsMissing}
   </section>
