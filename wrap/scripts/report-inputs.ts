@@ -1,6 +1,7 @@
 import { compareText } from "./compare.ts";
-import { type DayWindow, eventOnDay, toBerlinClock, toBerlinDate } from "./day.ts";
-import type { CalendarEvent, Sources } from "./sources.ts";
+import { type DayWindow, eventOnDay, toBerlinDate, toBerlinIso } from "./day.ts";
+import type { CalendarEvent, Sources, SpData, SpTask } from "./sources.ts";
+import { buildParts, type DayPart, type Moment, type PartBounds, partAt, partBounds, type Timeline } from "./timeline.ts";
 
 /** A thread counts as open for several days once it was created this many days before the end of the journal day. */
 export const OPEN_THREAD_DAYS = 3;
@@ -8,12 +9,19 @@ export const OPEN_THREAD_DAYS = 3;
 export type ListStatus = "complete" | "partial" | "missing";
 export type List<T> = { readonly status: ListStatus; readonly items: readonly T[] };
 
+/** The index into `parts` of the part something happened in; null when the day has no parts or it has no time of day. */
+type InPart = { readonly part: number | null };
+
 export type ReportInputs = {
-  readonly handedOffTasks: List<{ readonly title: string; readonly project: string | null }>;
-  readonly settledThreads: List<{ readonly title: string; readonly project: string }>;
+  readonly parts: readonly DayPart[];
+  readonly handedOffTasks: List<{ readonly title: string; readonly project: string | null; readonly doneAt: string } & InPart>;
+  readonly settledThreads: List<{ readonly title: string; readonly project: string; readonly settledAt: string } & InPart>;
   readonly openThreads: List<{ readonly title: string; readonly project: string; readonly openSince: string }>;
-  readonly landedPrs: List<{ readonly repository: string; readonly title: string }>;
-  readonly appointments: List<{ readonly time: string | null; readonly title: string }>;
+  readonly landedPrs: List<{ readonly repository: string; readonly title: string; readonly mergedAt: string } & InPart>;
+  /** start and end are null for an all-day event. */
+  readonly appointments: List<{ readonly title: string; readonly start: string | null; readonly end: string | null } & InPart>;
+  /** Super Productivity tasks with time tracked on the day, the most time first. SP keeps only a total per day, so they have no time of day. */
+  readonly offComputerTasks: List<{ readonly title: string; readonly project: string | null; readonly minutes: number }>;
   /**
    * Only whether Kontor has ever attempted a sync and whether the bank connection needs a new approval; never amounts.
    * Until its first attempt (lastSyncOutcome null) Kontor always reports approvalNeeded. An attempt that stopped early may leave lastSyncAt null.
@@ -25,37 +33,54 @@ const missing = <T>(): List<T> => ({ status: "missing", items: [] });
 
 const inWindow = (ms: number, window: DayWindow): boolean => ms >= window.startMs && ms < window.endMs;
 
-const handedOffTasks = (reading: Sources["sp"], window: DayWindow): ReportInputs["handedOffTasks"] => {
+const spTaskNames = (sp: SpData) => {
+  const tasks = new Map(sp.tasks.map((task) => [task.id, task]));
+  const projects = new Map(sp.projects.map((project) => [project.id, project.title]));
+  return (task: SpTask) => {
+    const parent = task.parentId === null ? undefined : tasks.get(task.parentId);
+    const projectId = task.projectId ?? parent?.projectId ?? null;
+    return { title: parent ? `${parent.title} › ${task.title}` : task.title, project: projectId === null ? null : (projects.get(projectId) ?? null) };
+  };
+};
+
+const handedOffTasks = (reading: Sources["sp"], window: DayWindow, bounds: PartBounds): ReportInputs["handedOffTasks"] => {
   if (!reading.ok) return missing();
-  const tasks = new Map(reading.value.tasks.map((task) => [task.id, task]));
-  const projects = new Map(reading.value.projects.map((project) => [project.id, project.title]));
+  const name = spTaskNames(reading.value);
   const items = reading.value.tasks
-    .filter((task) => task.isDone && task.doneOn !== null && inWindow(task.doneOn, window))
-    .toSorted((a, b) => (a.doneOn ?? 0) - (b.doneOn ?? 0) || compareText(a.id, b.id))
-    .map((task) => {
-      const parent = task.parentId === null ? undefined : tasks.get(task.parentId);
-      const projectId = task.projectId ?? parent?.projectId ?? null;
-      return {
-        title: parent ? `${parent.title} › ${task.title}` : task.title,
-        project: projectId === null ? null : (projects.get(projectId) ?? null),
-      };
-    });
+    .filter((task): task is SpTask & { doneOn: number } => task.isDone && task.doneOn !== null && inWindow(task.doneOn, window))
+    .toSorted((a, b) => a.doneOn - b.doneOn || compareText(a.id, b.id))
+    .map((task) => ({ ...name(task), doneAt: toBerlinIso(task.doneOn), part: partAt(bounds, task.doneOn) }));
   return { status: "complete", items };
 };
 
-const settledThreads = (reading: Sources["t3"], window: DayWindow): ReportInputs["settledThreads"] => {
+const offComputerTasks = (reading: Sources["sp"], day: string): ReportInputs["offComputerTasks"] => {
   if (!reading.ok) return missing();
-  const items = reading.value
-    .filter((thread) => thread.settledAt !== null && inWindow(Date.parse(thread.settledAt), window))
-    .toSorted((a, b) => Date.parse(a.settledAt ?? "") - Date.parse(b.settledAt ?? "") || compareText(a.title, b.title))
-    .map((thread) => ({ title: thread.title, project: thread.project }));
+  const name = spTaskNames(reading.value);
+  const ids = new Set(reading.value.tasks.map((task) => task.id));
+  const items = reading.value.tasks
+    .filter((task) => !task.subTaskIds.some((id) => ids.has(id)))
+    .map((task) => ({ ...name(task), minutes: Math.round((task.timeSpentOnDay[day] ?? 0) / 60_000) }))
+    .filter((task) => task.minutes > 0)
+    .toSorted((a, b) => b.minutes - a.minutes || compareText(a.title, b.title));
+  return { status: "complete", items };
+};
+
+const settledThreads = (reading: Sources["t3"], window: DayWindow, bounds: PartBounds): ReportInputs["settledThreads"] => {
+  if (!reading.ok) return missing();
+  const items = reading.value.threads
+    .flatMap((thread) => {
+      const settledMs = thread.settledAt === null ? Number.NaN : Date.parse(thread.settledAt);
+      return inWindow(settledMs, window) ? [{ thread, settledMs }] : [];
+    })
+    .toSorted((a, b) => a.settledMs - b.settledMs || compareText(a.thread.title, b.thread.title))
+    .map(({ thread, settledMs }) => ({ title: thread.title, project: thread.project, settledAt: toBerlinIso(settledMs), part: partAt(bounds, settledMs) }));
   return { status: "complete", items };
 };
 
 const openThreads = (reading: Sources["t3"], window: DayWindow): ReportInputs["openThreads"] => {
   if (!reading.ok) return missing();
   const openedBefore = window.endMs - OPEN_THREAD_DAYS * 24 * 60 * 60_000;
-  const items = reading.value
+  const items = reading.value.threads
     .filter((thread) => {
       const createdAt = Date.parse(thread.createdAt);
       const stillOpen = thread.settledAt === null || Date.parse(thread.settledAt) >= window.endMs;
@@ -67,16 +92,17 @@ const openThreads = (reading: Sources["t3"], window: DayWindow): ReportInputs["o
   return { status: "complete", items };
 };
 
-const landedPrs = (reading: Sources["github"], window: DayWindow): ReportInputs["landedPrs"] => {
+const landedPrs = (reading: Sources["github"], window: DayWindow, bounds: PartBounds): ReportInputs["landedPrs"] => {
   if (!reading.ok) return missing();
   const items = reading.value.prs
-    .filter((pr) => inWindow(Date.parse(pr.mergedAt), window))
-    .toSorted((a, b) => Date.parse(a.mergedAt) - Date.parse(b.mergedAt) || compareText(a.repository, b.repository))
-    .map((pr) => ({ repository: pr.repository, title: pr.title }));
+    .map((pr) => ({ pr, mergedMs: Date.parse(pr.mergedAt) }))
+    .filter(({ mergedMs }) => inWindow(mergedMs, window))
+    .toSorted((a, b) => a.mergedMs - b.mergedMs || compareText(a.pr.repository, b.pr.repository))
+    .map(({ pr, mergedMs }) => ({ repository: pr.repository, title: pr.title, mergedAt: toBerlinIso(mergedMs), part: partAt(bounds, mergedMs) }));
   return { status: reading.value.incomplete ? "partial" : "complete", items };
 };
 
-const appointments = (reading: Sources["calendar"], window: DayWindow): ReportInputs["appointments"] => {
+const appointments = (reading: Sources["calendar"], window: DayWindow, bounds: PartBounds): ReportInputs["appointments"] => {
   if (!reading.ok) return missing();
   const accounts = reading.value.accounts;
   const reachable = accounts.filter((account) => account.failure === null || account.events.length > 0);
@@ -99,10 +125,17 @@ const appointments = (reading: Sources["calendar"], window: DayWindow): ReportIn
   }
   const items = events
     .toSorted((a, b) => Number(b.allDay) - Number(a.allDay) || Date.parse(a.start) - Date.parse(b.start) || compareText(a.summary, b.summary))
-    .map((event) => ({
-      time: event.allDay ? null : `${toBerlinClock(Date.parse(event.start))}–${toBerlinClock(Date.parse(event.end))}`,
-      title: event.summary,
-    }));
+    .map((event) => {
+      if (event.allDay) return { title: event.summary, start: null, end: null, part: null };
+      const startMs = Date.parse(event.start);
+      // An event that began before the journal day belongs to its first part.
+      return {
+        title: event.summary,
+        start: toBerlinIso(startMs),
+        end: toBerlinIso(Date.parse(event.end)),
+        part: partAt(bounds, Math.max(startMs, window.startMs)),
+      };
+    });
   const complete = accounts.every((account) => account.failure === null) && !reading.value.limitReached && !unanswered;
   return { status: complete ? "complete" : "partial", items };
 };
@@ -115,11 +148,33 @@ const kontor = (reading: Sources["kontor"]): ReportInputs["kontor"] => {
   return { status: "complete", attempted: lastSyncOutcome !== null, approvalNeeded };
 };
 
-export const buildReportInputs = (window: DayWindow, sources: Sources): ReportInputs => ({
-  handedOffTasks: handedOffTasks(sources.sp, window),
-  settledThreads: settledThreads(sources.t3, window),
-  openThreads: openThreads(sources.t3, window),
-  landedPrs: landedPrs(sources.github, window),
-  appointments: appointments(sources.calendar, window),
-  kontor: kontor(sources.kontor),
-});
+type Placed = Pick<ReportInputs, "handedOffTasks" | "settledThreads" | "landedPrs" | "appointments">;
+
+const moments = (placed: Placed): Moment[] => {
+  const instant = (part: number | null, iso: string): Moment => ({ part, start: Date.parse(iso), end: Date.parse(iso) });
+  return [
+    ...placed.handedOffTasks.items.map((task) => instant(task.part, task.doneAt)),
+    ...placed.settledThreads.items.map((thread) => instant(thread.part, thread.settledAt)),
+    ...placed.landedPrs.items.map((pr) => instant(pr.part, pr.mergedAt)),
+    ...placed.appointments.items.flatMap((event) =>
+      event.start === null || event.end === null ? [] : [{ part: event.part, start: Date.parse(event.start), end: Date.parse(event.end) }],
+    ),
+  ];
+};
+
+export const buildReportInputs = (window: DayWindow, sources: Sources, timeline: Timeline): ReportInputs => {
+  const bounds = partBounds(window, timeline);
+  const placed: Placed = {
+    handedOffTasks: handedOffTasks(sources.sp, window, bounds),
+    settledThreads: settledThreads(sources.t3, window, bounds),
+    landedPrs: landedPrs(sources.github, window, bounds),
+    appointments: appointments(sources.calendar, window, bounds),
+  };
+  return {
+    parts: buildParts(timeline, bounds, moments(placed)),
+    ...placed,
+    openThreads: openThreads(sources.t3, window),
+    offComputerTasks: offComputerTasks(sources.sp, window.day),
+    kontor: kontor(sources.kontor),
+  };
+};

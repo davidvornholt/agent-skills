@@ -48,6 +48,17 @@ export type T3Thread = {
   readonly createdAt: string;
 };
 
+/** A run of an agent in a T3 Code thread, which ran from start to end; a run still going ends at the time it was read. */
+export type T3Run = {
+  readonly threadTitle: string;
+  /** The project's folder with the home folder written as "~", spelled as the activity summary's timeline spells it. */
+  readonly project: string;
+  readonly start: string;
+  readonly end: string;
+};
+
+export type T3Data = { readonly threads: readonly T3Thread[]; readonly runs: readonly T3Run[] };
+
 export type Sources = {
   /** The raw `activity-digest --summary-json` object, validated in metrics.ts. */
   readonly summary: Reading<unknown>;
@@ -55,7 +66,7 @@ export type Sources = {
   readonly github: Reading<GithubData>;
   readonly mail: Reading<readonly { readonly mailbox: string; readonly reading: Reading<SentMailData> }[]>;
   readonly calendar: Reading<CalendarData>;
-  readonly t3: Reading<readonly T3Thread[]>;
+  readonly t3: Reading<T3Data>;
   /** The raw `kontor status --json` object. */
   readonly kontor: Reading<unknown>;
 };
