@@ -197,7 +197,7 @@ const githubPart = (reading: Sources["github"], window: DayWindow): Part<number 
 const mailboxCount = (mailbox: string, reading: Reading<SentMailData>, window: DayWindow): Part<number | null> => {
   const source = `mail:${mailbox}`;
   if (!reading.ok) return { value: null, coverage: [{ source, status: "missing" }], problems: [`Sent mail of ${mailbox} unavailable: ${reading.error}`] };
-  const times = reading.value.sentAt.map((sentAt) => Date.parse(sentAt));
+  const times = reading.value.sent.map((mail) => Date.parse(mail.at));
   const valid = times.filter((ms) => !Number.isNaN(ms));
   const problems: string[] = [];
   if (valid.length < times.length) problems.push(`Some sent mail of ${mailbox} has no readable date.`);

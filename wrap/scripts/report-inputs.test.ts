@@ -111,6 +111,16 @@ test("builds the parts and lists of a day with all sources", () => {
         },
       ],
     },
+    // Partial, because one mailbox failed and another filled its page.
+    sentMail: {
+      status: "partial",
+      items: [
+        { mailbox: "b@example.com", subject: "Garden plan for Saturday", sentAt: "2026-10-29T09:00:00+01:00", part: 0 },
+        { mailbox: "c@example.com", subject: "Invoice for October", sentAt: "2026-10-29T19:00:00+01:00", part: 1 },
+        { mailbox: "c@example.com", subject: "Re: Invoice for October", sentAt: "2026-10-29T20:00:00+01:00", part: 1 },
+        { mailbox: "b@example.com", subject: "Late reply", sentAt: "2026-10-30T02:00:00+01:00", part: 1 },
+      ],
+    },
     appointments: {
       status: "complete",
       items: [
@@ -218,8 +228,9 @@ test("has no parts when screen activity is missing, so nothing is placed in one"
 
 test("marks lists of unreachable sources as missing", () => {
   const unavailable = { ok: false, error: "unreachable" } as const;
-  const lists = inputs({ sp: unavailable, t3: unavailable, github: unavailable, closedPrs: unavailable, calendar: unavailable });
+  const lists = inputs({ sp: unavailable, t3: unavailable, github: unavailable, closedPrs: unavailable, mail: unavailable, calendar: unavailable });
   for (const list of [
+    lists.sentMail,
     lists.handedOffTasks,
     lists.settledThreads,
     lists.openThreads,

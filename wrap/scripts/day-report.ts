@@ -1,14 +1,17 @@
+import { buildConversations, type Conversation } from "./conversations.ts";
 import type { DayWindow } from "./day.ts";
 import { computeDayMetrics, type DayMetrics } from "./metrics.ts";
-import { buildReportInputs, type ReportInputs } from "./report-inputs.ts";
+import { buildReportInputs, type List, type ReportInputs } from "./report-inputs.ts";
 import type { Sources } from "./sources.ts";
-import { buildTimeline, type Timeline } from "./timeline.ts";
+import { buildTimeline, partBounds, type Timeline } from "./timeline.ts";
 
 export type Collected = {
   readonly day: string;
   readonly window: { readonly start: string; readonly end: string };
   readonly dayMetrics: DayMetrics;
   readonly reportInputs: ReportInputs;
+  /** The day's T3 Code threads in full, for the agent to read; never stored. */
+  readonly conversations: List<Conversation>;
   /** What the report draws, for render only. */
   readonly timeline: Timeline;
   /** Why a source is missing or partial, for the agent; never stored. */
@@ -33,6 +36,7 @@ export const buildCollected = (window: DayWindow, sources: Sources): Collected =
     window: { start: window.start, end: window.end },
     dayMetrics,
     reportInputs,
+    conversations: buildConversations(window, sources.t3, partBounds(window, timeline)),
     timeline,
     problems: [...problems, ...listProblems],
   };

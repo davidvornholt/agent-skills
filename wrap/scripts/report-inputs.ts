@@ -11,6 +11,7 @@ import {
   partAt,
   partBounds,
   projectLabel,
+  sentMails,
   type Timeline,
   type TimelineThread,
   UNCATEGORISED,
@@ -84,6 +85,8 @@ export type ReportInputs = {
   /** summary is the start of the pull request's description, for the agent to say what it changed; the report shows only the title. */
   readonly landedPrs: List<Ref & { readonly title: string; readonly summary: string | null; readonly mergedAt: string } & InPart>;
   readonly closedPrs: List<Ref & { readonly title: string; readonly summary: string | null; readonly closedAt: string } & InPart>;
+  /** The mail the user sent, for the agent to describe in its own words; subjects never reach the report or Postlude. */
+  readonly sentMail: List<{ readonly mailbox: string; readonly subject: string; readonly sentAt: string } & InPart>;
   /** start and end are null for an all-day event. */
   readonly appointments: List<{ readonly title: string; readonly start: string | null; readonly end: string | null } & InPart>;
   /** Super Productivity tasks with time tracked on the day, the most time first. SP keeps only a total per day, so they have no time of day. */
@@ -419,6 +422,11 @@ const appointments = (reading: Sources["calendar"], window: DayWindow, bounds: P
   return { status: complete ? "complete" : "partial", items };
 };
 
+const sentMail = (window: DayWindow, sources: Sources, bounds: PartBounds): ReportInputs["sentMail"] => {
+  const { status, items } = sentMails(window, sources);
+  return { status, items: items.map(({ mailbox, subject, at }) => ({ mailbox, subject, sentAt: toBerlinIso(at), part: partAt(bounds, at) })) };
+};
+
 const kontor = (reading: Sources["kontor"]): ReportInputs["kontor"] => {
   const unknown = { status: "missing", attempted: null, approvalNeeded: null } as const;
   if (!reading.ok || typeof reading.value !== "object" || reading.value === null) return unknown;
@@ -455,6 +463,7 @@ export const buildReportInputs = (window: DayWindow, sources: Sources, timeline:
   return {
     parts: buildParts(timeline, bounds, moments(placed), dayWindows(window, sources)),
     ...placed,
+    sentMail: sentMail(window, sources, bounds),
     openThreads: openThreads(sources.t3, window),
     trackedTasks: trackedTasks(sources.sp, window.day),
     kontor: kontor(sources.kontor),

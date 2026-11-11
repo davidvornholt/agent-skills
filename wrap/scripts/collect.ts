@@ -18,8 +18,10 @@ import type {
   Sources,
   SpData,
   SpTask,
+  T3Author,
   T3Data,
   T3DayThread,
+  T3Message,
   T3Prompt,
   T3PullRequest,
   T3Run,
@@ -213,10 +215,12 @@ const readSentMail = async (email: string, window: DayWindow): Promise<Reading<S
     if (!result.ok) return result;
     if (!isRecord(result.value) || !Array.isArray(result.value.hits)) return failed("pim mail search returned no hits");
     if (Array.isArray(result.value.failures) && result.value.failures.length > 0) return failed(PIM_FAILURE);
-    const sentAt = result.value.hits.map((hit) => (isRecord(hit) ? stringOr(hit.date, "") : ""));
-    const limitReached = sentAt.length >= limit;
-    const oldest = Math.min(...sentAt.map((date) => Date.parse(date)).filter((ms) => !Number.isNaN(ms)));
-    if (!limitReached || oldest < window.startMs || limit >= MAX_MAIL_LIMIT) return ok({ sentAt, limitReached });
+    const mails = result.value.hits.map((hit) =>
+      isRecord(hit) ? { at: stringOr(hit.date, ""), subject: stringOr(hit.subject, "") } : { at: "", subject: "" },
+    );
+    const limitReached = mails.length >= limit;
+    const oldest = Math.min(...mails.map((mail) => Date.parse(mail.at)).filter((ms) => !Number.isNaN(ms)));
+    if (!limitReached || oldest < window.startMs || limit >= MAX_MAIL_LIMIT) return ok({ sent: mails, limitReached });
   }
 };
 
@@ -354,6 +358,16 @@ type ThreadRow = {
 };
 type RunRow = { readonly thread_id: string; readonly status: string; readonly started_at: string; readonly completed_at: string | null };
 type PromptRow = { readonly thread_id: string; readonly created_at: string; readonly source: string };
+type MessageRow = {
+  readonly thread_id: string;
+  readonly created_at: string;
+  readonly role: string;
+  readonly text: string | null;
+  readonly created_by: string | null;
+  readonly source: string | null;
+  readonly delegated: number;
+  readonly scheduled: number;
+};
 
 /** Writes the home folder as "~", as the activity summary does for T3 projects. */
 export const homeRelative = (path: string, home: string): string => (path === home ? "~" : path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path);
@@ -362,6 +376,19 @@ export const homeRelative = (path: string, home: string): string => (path === ho
 const PROMPTS = `m.role = 'user' and json_extract(m.payload_json, '$.createdBy') = 'user' and json_extract(m.payload_json, '$.creationSource') in ('web', 'mobile')`;
 
 const PR_STATES = new Set(["open", "merged", "closed"]);
+
+/** Who wrote a message, or null for T3's notices that background work finished and the messages it writes for the user. */
+const authorOf = (row: MessageRow): T3Author | null => {
+  if (row.role === "assistant") return "agent";
+  if (row.role === "user" && row.created_by === "user" && (row.source === "web" || row.source === "mobile")) return row.source === "mobile" ? "phone" : "user";
+  if (row.created_by !== "agent") return null;
+  if (row.delegated === 1) return "delegates";
+  if (row.source === "mcp") return row.scheduled === 1 ? "schedule" : "thread";
+  return null;
+};
+
+// T3 heads each delegate's report with the task's long node id, as "Delegated task node:delegated-task:… (Title) [completed]:".
+const DELEGATE_NODE_ID = /^Delegated task \S+ \(/gm;
 
 const parsePullRequest = (item: unknown): T3PullRequest => {
   if (!isRecord(item) || typeof item.repository !== "string" || typeof item.number !== "number" || typeof item.linkedAt !== "string") {
@@ -404,7 +431,7 @@ const foldInto = (threads: ReadonlyMap<string, ThreadRow>, id: string): string =
 };
 
 /**
- * Reads this machine's T3 Code threads, and the threads the user prompted or agents ran in during the journal day with those runs and prompts.
+ * Reads this machine's T3 Code threads, and the threads the user prompted or agents ran in during the journal day with those runs, prompts and messages.
  * The CLI lists neither projects, runs nor messages, so they come from T3's state database, opened read-only. A run that never started has no time and is left out.
  */
 export const readLocalT3 = async (window: DayWindow, nowMs: number): Promise<Reading<T3Data>> => {
@@ -413,6 +440,7 @@ export const readLocalT3 = async (window: DayWindow, nowMs: number): Promise<Rea
   let threadRows: ThreadRow[];
   let runRows: RunRow[];
   let promptRows: PromptRow[];
+  let messages: T3Message[];
   let dayThreads: T3DayThread[];
   try {
     const database = new Database(join(home, ".t3/userdata/statev2.sqlite"), { readonly: true });
@@ -472,6 +500,25 @@ export const readLocalT3 = async (window: DayWindow, nowMs: number): Promise<Rea
           ),
         };
       });
+      const dayIds = new Set(ids);
+      messages = (
+        database
+          .query(
+            `select m.thread_id, m.created_at, m.role, json_extract(m.payload_json, '$.text') as text,
+               json_extract(m.payload_json, '$.createdBy') as created_by, json_extract(m.payload_json, '$.creationSource') as source,
+               json_extract(m.payload_json, '$.delegatedCompletion') is not null as delegated,
+               json_extract(m.payload_json, '$.scheduledTaskId') is not null as scheduled
+             from orchestration_v2_projection_messages m where m.created_at >= ?1 and m.created_at < ?2 order by m.created_at, m.rowid`,
+          )
+          .all(start, end) as MessageRow[]
+      ).flatMap((row) => {
+        const author = authorOf(row);
+        const text = (row.text ?? "").trim();
+        if (author === null || text === "" || !dayIds.has(row.thread_id)) return [];
+        return [
+          { threadId: row.thread_id, at: row.created_at, author, text: author === "delegates" ? text.replace(DELEGATE_NODE_ID, "Delegated task (") : text },
+        ];
+      });
       runRows = runRows.map((row) => ({ ...row, thread_id: fold(row.thread_id) }));
       promptRows = promptRows.map((row) => ({ ...row, thread_id: fold(row.thread_id) }));
     } finally {
@@ -502,7 +549,7 @@ export const readLocalT3 = async (window: DayWindow, nowMs: number): Promise<Rea
     if (!reading.ok) return reading;
     threads.push(...reading.value);
   }
-  return ok({ threads, dayThreads, runs, prompts });
+  return ok({ threads, dayThreads, runs, prompts, messages });
 };
 
 const parseDayThread = (item: unknown): T3DayThread => {
@@ -528,6 +575,16 @@ const parseRun = (item: unknown): T3Run => {
 const parsePrompt = (item: unknown): T3Prompt => {
   if (!isRecord(item) || typeof item.threadId !== "string" || typeof item.at !== "string") throw new Error("a prompt has no thread or time");
   return { threadId: item.threadId, at: item.at, fromPhone: item.fromPhone === true };
+};
+
+const AUTHORS = new Set<string>(["user", "phone", "agent", "delegates", "schedule", "thread"] satisfies T3Author[]);
+
+const parseMessage = (item: unknown): T3Message => {
+  if (!isRecord(item) || typeof item.threadId !== "string" || typeof item.at !== "string" || typeof item.text !== "string") {
+    throw new Error("a message has no thread, time, or text");
+  }
+  if (typeof item.author !== "string" || !AUTHORS.has(item.author)) throw new Error("a message has no author");
+  return { threadId: item.threadId, at: item.at, author: item.author as T3Author, text: item.text };
 };
 
 const readT3 = async (window: DayWindow, host: string): Promise<Reading<T3Data>> => {
@@ -556,7 +613,9 @@ const readT3 = async (window: DayWindow, host: string): Promise<Reading<T3Data>>
   if (!runs.ok) return runs;
   const prompts = list("prompts", parsePrompt);
   if (!prompts.ok) return prompts;
-  return ok({ threads: threads.value, dayThreads: dayThreads.value, runs: runs.value, prompts: prompts.value });
+  const messages = list("messages", parseMessage);
+  if (!messages.ok) return messages;
+  return ok({ threads: threads.value, dayThreads: dayThreads.value, runs: runs.value, prompts: prompts.value, messages: messages.value });
 };
 
 const readKontor = (host: string): Promise<Reading<unknown>> =>

@@ -49,6 +49,17 @@ test("render passes on no window title and no list of windows", async () => {
   for (const text of new Set(made)) expect(payload.reportHtml).not.toContain(text);
 });
 
+test("render passes on no mail subject and no message of a thread", async () => {
+  const result = await run(["render", collectedFile, "--model", "claude-opus-5-5"], TEXT);
+  expect(result.exitCode).toBe(0);
+  const subjects = collected.reportInputs.sentMail.items.map((mail) => mail.subject);
+  const messages = sources.t3.ok ? sources.t3.value.messages.map((message) => message.text.split("\n")[0] ?? "") : [];
+  expect(subjects).toContain("Garden plan for Saturday");
+  expect(messages).toContain("Merge it once the checks pass.");
+  expect(JSON.stringify(collected.conversations)).toContain("Merge it once the checks pass.");
+  for (const text of [...subjects, ...messages]) expect(result.stdout).not.toContain(text);
+});
+
 test("render refuses text whose part count doesn't match the day's", async () => {
   const count = await run(["render", collectedFile, "--model", "claude-opus-5-5"], JSON.stringify({ summary: "A calm day.", parts: [PART] }));
   expect(count.exitCode).toBe(1);

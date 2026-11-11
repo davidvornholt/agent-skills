@@ -115,17 +115,26 @@ const dayThreads = (window: DayWindow, sources: Sources, summary: Summary | null
   return { status: "complete", items: items.filter((thread) => thread.runs.length > 0 || thread.prompts.length > 0) };
 };
 
-const sentMail = (window: DayWindow, sources: Sources): Timeline["sentMail"] => {
-  if (!sources.mail.ok) return { status: "missing", times: [] };
+/** The mail sent within the journal day from the mailboxes that could be read, the earliest first. */
+export const sentMails = (
+  window: DayWindow,
+  sources: Sources,
+): { readonly status: ListStatus; readonly items: readonly { readonly mailbox: string; readonly at: number; readonly subject: string }[] } => {
+  if (!sources.mail.ok) return { status: "missing", items: [] };
   const day = windowInterval(window);
-  const read = sources.mail.value.flatMap(({ reading }) => (reading.ok ? [reading.value] : []));
-  const times = read
-    .flatMap((mailbox) => mailbox.sentAt.map((sentAt) => Date.parse(sentAt)))
-    .filter((ms) => inDay(ms, day))
-    .toSorted((a, b) => a - b);
+  const read = sources.mail.value.flatMap(({ mailbox, reading }) => (reading.ok ? [{ mailbox, ...reading.value }] : []));
+  const items = read
+    .flatMap(({ mailbox, sent }) => sent.map((mail) => ({ mailbox, at: Date.parse(mail.at), subject: mail.subject })))
+    .filter((mail) => inDay(mail.at, day))
+    .toSorted((a, b) => a.at - b.at || compareText(a.mailbox, b.mailbox));
   const status =
     read.length === 0 ? "missing" : read.length < sources.mail.value.length || read.some((mailbox) => mailbox.limitReached) ? "partial" : "complete";
-  return { status, times };
+  return { status, items };
+};
+
+const sentMail = (window: DayWindow, sources: Sources): Timeline["sentMail"] => {
+  const { status, items } = sentMails(window, sources);
+  return { status, times: items.map((mail) => mail.at) };
 };
 
 export const buildTimeline = (window: DayWindow, sources: Sources): Timeline => {

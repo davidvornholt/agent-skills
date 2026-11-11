@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -5,9 +6,9 @@ import { join } from "node:path";
 import type { Collected } from "./day-report.ts";
 import { DAY, spTasks, summary, WINDOW } from "./testing/fixtures.ts";
 
-const COMMANDS = ["activity-digest", "sp", "gh", "pim", "ssh"];
+const COMMANDS = ["activity-digest", "sp", "gh", "pim", "ssh", "t3"];
+const SUBJECT = "Garden plan for Saturday";
 const SECRETS = [
-  "SECRET-SUBJECT",
   "secret-recipient@example.com",
   "SECRET-BODY",
   "SECRET-CALENDAR-LINE",
@@ -26,7 +27,7 @@ const search = (query: string) => key("gh", "api", "--method", "GET", "search/is
 const calendarCall = key("pim", "calendar", "events", "--from", DAY, "--to", "2026-10-30", "--limit", "1000");
 const sentSearch = (account: string, folder: string, limit: number) =>
   key("pim", "mail", "search", "--account", account, "--folder", folder, "--since", "2026-10-28", "--limit", String(limit));
-const hit = (date: string) => ({ date, subject: "SECRET-SUBJECT", from: "me@example.com", to: ["secret-recipient@example.com"], preview: "SECRET-BODY" });
+const hit = (date: string) => ({ date, subject: SUBJECT, from: "me@example.com", to: ["secret-recipient@example.com"], preview: "SECRET-BODY" });
 const standup = {
   account: "me@example.com",
   calendar: "Personal",
@@ -237,7 +238,14 @@ const fixtures = {
       ],
       runs: [{ threadId: "t-parser", start: "2026-10-29T08:30:00.000Z", end: "2026-10-29T09:15:00.000Z", running: false }],
       prompts: [{ threadId: "t-parser", at: "2026-10-29T08:20:00.000Z", fromPhone: true }],
+      messages: [
+        { threadId: "t-parser", at: "2026-10-29T08:20:00.000Z", author: "phone", text: "The parser drops dates without a year." },
+        { threadId: "t-parser", at: "2026-10-29T09:15:00.000Z", author: "agent", text: "They parse now, and postlude#14 tests them." },
+      ],
     },
+  },
+  [key("t3", "thread", "list", "--project", "p-garden", "--json")]: {
+    stdout: [{ title: "Plan the garden", settledAt: null, snoozedUntil: null, createdAt: "2026-10-28T10:00:00.000Z" }],
   },
   // A Kontor that has never attempted a sync.
   [key("ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "david@david-z890-nixos", "kontor status --json")]: {
@@ -259,6 +267,47 @@ const spDownFixtures = {
     stderr: `${JSON.stringify({ error: "Unknown command: t3 2026-10-29" })}\nUsage:\n`,
     exitCode: 1,
   },
+};
+
+/** T3 Code's state database on the z890, with a day thread, its subagent, and every kind of message T3 stores. */
+const writeT3State = () => {
+  mkdirSync(join(directory, ".t3/userdata"), { recursive: true });
+  const database = new Database(join(directory, ".t3/userdata/statev2.sqlite"));
+  database.run("create table projection_projects (project_id text, title text, workspace_root text, deleted_at text)");
+  database.run("create table orchestration_v2_projection_threads (thread_id text, title text, project_id text, payload_json text)");
+  database.run("create table orchestration_v2_projection_runs (thread_id text, status text, payload_json text)");
+  database.run("create table orchestration_v2_projection_messages (message_id text, thread_id text, role text, created_at text, payload_json text)");
+  database.run("insert into projection_projects values ('p-garden', 'Garden', ?1, null)", [join(directory, "dev/garden")]);
+  const thread = database.prepare("insert into orchestration_v2_projection_threads values (?1, ?2, 'p-garden', ?3)");
+  thread.run("t-garden", "Plan the garden", JSON.stringify({ lineage: { parentThreadId: null, relationshipToParent: null } }));
+  thread.run("t-helper", "Measure the beds", JSON.stringify({ lineage: { parentThreadId: "t-garden", relationshipToParent: "subagent" } }));
+  const run = database.prepare("insert into orchestration_v2_projection_runs values (?1, 'completed', ?2)");
+  run.run("t-garden", JSON.stringify({ startedAt: "2026-10-29T08:00:30.000Z", completedAt: "2026-10-29T08:10:00.000Z" }));
+  run.run("t-helper", JSON.stringify({ startedAt: "2026-10-29T08:02:00.000Z", completedAt: "2026-10-29T08:04:00.000Z" }));
+  const message = database.prepare("insert into orchestration_v2_projection_messages values (?1, ?2, ?3, ?4, ?5)");
+  const add = (threadId: string, role: string, at: string, payload: object) => message.run(`m-${at}`, threadId, role, at, JSON.stringify(payload));
+  add("t-garden", "assistant", "2026-10-29T02:00:00.000Z", { text: "Before the day." });
+  add("t-garden", "user", "2026-10-29T08:00:00.000Z", { createdBy: "user", creationSource: "web", text: "Plan the garden beds." });
+  add("t-garden", "assistant", "2026-10-29T08:01:00.000Z", { createdBy: "agent", text: "I'll have a helper measure the beds first." });
+  add("t-helper", "assistant", "2026-10-29T08:02:00.000Z", { createdBy: "agent", text: "Measuring the first bed." });
+  add("t-garden", "user", "2026-10-29T08:04:00.000Z", {
+    createdBy: "agent",
+    creationSource: "server",
+    delegatedCompletion: { taskIds: ["node:delegated-task:command%3Amcp%3Aa1"] },
+    text: "Delegated task node:delegated-task:command%3Amcp%3Aa1 (Measure the beds) [completed]:\nBoth beds are two metres wide.",
+  });
+  add("t-garden", "user", "2026-10-29T08:05:00.000Z", {
+    createdBy: "agent",
+    creationSource: "provider",
+    notification: {},
+    text: "Background command finished.",
+  });
+  add("t-garden", "user", "2026-10-29T08:06:00.000Z", { createdBy: "user", creationSource: "server", text: "Written by T3 for the user." });
+  add("t-garden", "assistant", "2026-10-29T08:07:00.000Z", { createdBy: "agent", text: "  " });
+  add("t-garden", "user", "2026-10-29T08:08:00.000Z", { createdBy: "agent", creationSource: "mcp", scheduledTaskId: "s1", text: "Water the beds." });
+  add("t-garden", "user", "2026-10-29T08:09:00.000Z", { createdBy: "agent", creationSource: "mcp", senderThreadId: "t-other", text: "The seeds arrived." });
+  add("t-garden", "user", "2026-10-29T08:10:00.000Z", { createdBy: "user", creationSource: "mobile", text: "Add tomatoes." });
+  database.close();
 };
 
 type Run = { readonly collected: Collected; readonly calls: string[][]; readonly stderr: string };
@@ -295,6 +344,7 @@ beforeAll(async () => {
     writeFileSync(shim, `#!/bin/sh\nexec "${process.execPath}" "${join(import.meta.dir, "testing/fake-cli.ts")}" ${command} "$@"\n`);
     chmodSync(shim, 0o755);
   }
+  writeT3State();
   [{ collected, calls, stderr }, spDown, onZ890] = await Promise.all([
     collect("all", fixtures),
     collect("sp-down", spDownFixtures),
@@ -362,6 +412,43 @@ test("reads every source into the metrics", () => {
     ],
   });
   expect(collected.reportInputs.looseEnds.waitingPrs.items).toMatchObject([{ ref: "postlude#14", thread: "Fix the parser" }]);
+  expect(collected.conversations).toEqual({
+    status: "complete",
+    items: [
+      {
+        id: "t-parser",
+        title: "Fix the parser",
+        project: "~/dev/postlude",
+        parts: [0],
+        messages: ["09:20 User, on the phone: The parser drops dates without a year.", "10:15 Agent: They parse now, and postlude#14 tests them."],
+      },
+    ],
+  });
+});
+
+test("reads the day thread's own messages on the z890, with its delegates' reports, but not its subagents' steps or T3's notices", () => {
+  expect(onZ890.collected.problems.filter((problem) => problem.startsWith("T3"))).toEqual([]);
+  expect(onZ890.collected.conversations).toEqual({
+    status: "complete",
+    items: [
+      {
+        id: "t-garden",
+        title: "Plan the garden",
+        project: "~/dev/garden",
+        parts: [0],
+        messages: [
+          "09:00 User: Plan the garden beds.",
+          "09:01 Agent: I'll have a helper measure the beds first.",
+          "09:04 Reports of delegated tasks: Delegated task (Measure the beds) [completed]:\nBoth beds are two metres wide.",
+          "09:08 Scheduled prompt: Water the beds.",
+          "09:09 From another thread: The seeds arrived.",
+          "09:10 User, on the phone: Add tomatoes.",
+        ],
+      },
+    ],
+  });
+  // The subagent's run counts under the thread that started it.
+  expect(onZ890.collected.timeline.threads.items.map((thread) => [thread.id, thread.prompts.length, thread.runs.length])).toEqual([["t-garden", 2, 1]]);
 });
 
 test("keeps only each part's own windows, not the summary's list of them", () => {
@@ -400,10 +487,15 @@ test("says where pim failed but withholds its error text", () => {
   );
 });
 
-test("never passes on mail subjects, recipients, notes, or pim's or sp's error text", () => {
+test("passes mail subjects on only in the list of sent mail, and never recipients, notes, or pim's or sp's error text", () => {
+  expect(collected.reportInputs.sentMail.status).toBe("partial");
+  expect(collected.reportInputs.sentMail.items).toHaveLength(201);
+  expect(collected.reportInputs.sentMail.items[0]).toEqual({ mailbox: "me@example.com", subject: SUBJECT, sentAt: "2026-10-29T09:00:00+01:00", part: 0 });
+  const withoutSentMail = (run: Collected) => JSON.stringify({ ...run, reportInputs: { ...run.reportInputs, sentMail: null } });
   for (const output of [JSON.stringify(collected), stderr, JSON.stringify(spDown.collected), spDown.stderr]) {
     for (const secret of SECRETS) expect(output).not.toContain(secret);
   }
+  for (const output of [withoutSentMail(collected), stderr, withoutSentMail(spDown.collected), spDown.stderr]) expect(output).not.toContain(SUBJECT);
 });
 
 test("only reads", () => {

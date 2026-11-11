@@ -194,7 +194,16 @@ describe("sent mail", () => {
       value: [
         {
           mailbox: "c@example.com",
-          reading: { ok: true as const, value: { sentAt: ["2026-10-29T20:00:00+01:00", "2026-10-28T19:00:00+01:00"], limitReached: true } },
+          reading: {
+            ok: true as const,
+            value: {
+              sent: [
+                { at: "2026-10-29T20:00:00+01:00", subject: "Today" },
+                { at: "2026-10-28T19:00:00+01:00", subject: "Yesterday" },
+              ],
+              limitReached: true,
+            },
+          },
         },
       ],
     };
@@ -205,7 +214,21 @@ describe("sent mail", () => {
   test("marks unreadable send dates as partial", () => {
     const mail = {
       ok: true as const,
-      value: [{ mailbox: "d@example.com", reading: { ok: true as const, value: { sentAt: ["", "2026-10-29T20:00:00+01:00"], limitReached: false } } }],
+      value: [
+        {
+          mailbox: "d@example.com",
+          reading: {
+            ok: true as const,
+            value: {
+              sent: [
+                { at: "", subject: "No date" },
+                { at: "2026-10-29T20:00:00+01:00", subject: "Today" },
+              ],
+              limitReached: false,
+            },
+          },
+        },
+      ],
     };
     expect(metrics({ mail }).dayMetrics.sentMails).toEqual([{ mailbox: "d@example.com", count: 1 }]);
     expect(coverageOf({ mail }, "mail")).toEqual([{ source: "mail:d@example.com", status: "partial" }]);

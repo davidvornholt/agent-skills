@@ -1,3 +1,4 @@
+import { CODE_BLOCK_MAX_LINES } from "../conversations.ts";
 import { dayWindow } from "../day.ts";
 import type { CalendarEvent, Sources, SpTask, T3PullRequest } from "../sources.ts";
 
@@ -167,10 +168,32 @@ export const sources: Sources = {
     value: [
       {
         mailbox: "b@example.com",
-        reading: { ok: true, value: { sentAt: ["2026-10-29T09:00:00+01:00", "2026-10-30T02:00:00+01:00", "2026-10-28T23:00:00+01:00"], limitReached: false } },
+        reading: {
+          ok: true,
+          value: {
+            sent: [
+              { at: "2026-10-29T09:00:00+01:00", subject: "Garden plan for Saturday" },
+              { at: "2026-10-30T02:00:00+01:00", subject: "Late reply" },
+              { at: "2026-10-28T23:00:00+01:00", subject: "Sent the day before" },
+            ],
+            limitReached: false,
+          },
+        },
       },
       { mailbox: "a@example.com", reading: { ok: false, error: "login failed" } },
-      { mailbox: "c@example.com", reading: { ok: true, value: { sentAt: ["2026-10-29T20:00:00+01:00", "2026-10-29T19:00:00+01:00"], limitReached: true } } },
+      {
+        mailbox: "c@example.com",
+        reading: {
+          ok: true,
+          value: {
+            sent: [
+              { at: "2026-10-29T20:00:00+01:00", subject: "Re: Invoice for October" },
+              { at: "2026-10-29T19:00:00+01:00", subject: "Invoice for October" },
+            ],
+            limitReached: true,
+          },
+        },
+      },
     ],
   },
   calendar: {
@@ -275,6 +298,32 @@ export const sources: Sources = {
         { threadId: "t-parser", at: "2026-10-29T09:25:00.000Z", fromPhone: true },
         { threadId: "t-tidy", at: "2026-10-29T13:50:00.000Z", fromPhone: false },
         { threadId: "t-tidy", at: "2026-10-29T14:45:00.000Z", fromPhone: false },
+      ],
+      messages: [
+        // Before the journal day.
+        { threadId: "t-night", at: "2026-10-29T02:45:00.000Z", author: "agent", text: "The night build is green." },
+        { threadId: "t-parser", at: "2026-10-29T08:20:00.000Z", author: "user", text: "The parser drops dates like 29.10. without a year. Can you fix that?" },
+        {
+          threadId: "t-parser",
+          at: "2026-10-29T09:10:00.000Z",
+          author: "agent",
+          text: "Dates without a year now parse, and postlude#14 adds a test for them.",
+        },
+        { threadId: "t-parser", at: "2026-10-29T09:25:00.000Z", author: "phone", text: "Merge it once the checks pass." },
+        { threadId: "t-tidy", at: "2026-10-29T13:50:00.000Z", author: "user", text: "Split the task list tests by command." },
+        {
+          threadId: "t-tidy",
+          at: "2026-10-29T14:30:00.000Z",
+          author: "delegates",
+          text: "Delegated task (Split the tests) [completed]:\nThe tests now sit in one file per command.",
+        },
+        {
+          threadId: "t-tidy",
+          at: "2026-10-29T14:40:00.000Z",
+          author: "agent",
+          text: `The old helper is gone:\n\n\`\`\`ts\n${Array.from({ length: CODE_BLOCK_MAX_LINES + 1 }, (_, index) => `const line${index} = ${index};`).join("\n")}\n\`\`\`\n\nA short block stays:\n\n\`\`\`sh\nbun test\n\`\`\``,
+        },
+        { threadId: "t-deploy", at: "2026-10-30T02:00:00.000Z", author: "schedule", text: "Check whether the deploy finished." },
       ],
       threads: [
         { title: "Settled today", project: "postlude", settledAt: "2026-10-29T16:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-28T10:00:00.000Z" },

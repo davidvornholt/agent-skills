@@ -45,8 +45,8 @@ export type ClosedPr = {
 
 export type ClosedPrData = { readonly prs: readonly ClosedPr[]; readonly incomplete: boolean };
 
-/** Send times only: recipients and subjects never leave the mail reader. */
-export type SentMailData = { readonly sentAt: readonly string[]; readonly limitReached: boolean };
+/** Each sent mail's time and subject; recipients and bodies never leave the mail reader. */
+export type SentMailData = { readonly sent: readonly { readonly at: string; readonly subject: string }[]; readonly limitReached: boolean };
 
 export type CalendarEvent = {
   readonly summary: string;
@@ -104,6 +104,15 @@ export type T3Run = { readonly threadId: string; readonly start: string; readonl
 /** A message the user wrote in T3 Code, on the computer or the phone; T3's own messages and agents' don't count. */
 export type T3Prompt = { readonly threadId: string; readonly at: string; readonly fromPhone: boolean };
 
+/**
+ * Who wrote a message in a T3 Code thread: the user on the computer or the phone, the thread's agent, T3 passing on the reports of the tasks the agent delegated, a scheduled task, or another thread's agent.
+ * T3's notices that background work finished don't count.
+ */
+export type T3Author = "user" | "phone" | "agent" | "delegates" | "schedule" | "thread";
+
+/** A message in a day thread itself. Its subagents' own messages are left out, because what they did comes back as the delegates' reports. */
+export type T3Message = { readonly threadId: string; readonly at: string; readonly author: T3Author; readonly text: string };
+
 export type T3Data = {
   readonly threads: readonly T3Thread[];
   readonly dayThreads: readonly T3DayThread[];
@@ -111,6 +120,8 @@ export type T3Data = {
   readonly runs: readonly T3Run[];
   /** The prompts within the journal day. */
   readonly prompts: readonly T3Prompt[];
+  /** The day threads' messages within the journal day, the oldest first. */
+  readonly messages: readonly T3Message[];
 };
 
 export type Sources = {
