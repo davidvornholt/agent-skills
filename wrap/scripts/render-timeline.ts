@@ -134,26 +134,29 @@ const renderMark = (mark: Mark, axis: Interval): string => {
   return `<span class="tl-mark tl-${mark.kind}" style="left:${left}${width}" data-tip="${escapeHtml(mark.tip)}">${escapeHtml(mark.text ?? "")}</span>`;
 };
 
+// A label every hour or two where the report is wide, and fewer where it is narrow: the template shows the minor labels only from its wide breakpoint.
 const renderAxis = (axis: Interval): string => {
   const hours = (axis.end - axis.start) / HOUR_MS;
-  const step = hours <= 8 ? 1 : hours <= 16 ? 2 : 3;
+  const wideStep = hours <= 16 ? 1 : 2;
+  const step = hours <= 8 ? 1 : hours <= 16 ? 2 : 4;
   const labels: string[] = [];
-  for (let hour = 0; hour < hours; hour += step) {
+  for (let hour = 0; hour < hours; hour += wideStep) {
     const at = axis.start + hour * HOUR_MS;
-    labels.push(`<span style="left:${percent((hour / hours) * 100)}">${toBerlinClock(at)}</span>`);
+    const minor = hour % step === 0 ? "" : ' class="minor"';
+    labels.push(`<span${minor} style="left:${percent((hour / hours) * 100)}">${toBerlinClock(at)}</span>`);
   }
   return `<div class="tl-row tl-axis"><span></span><span class="tl-ticks">${labels.join("")}</span></div>`;
 };
 
 const renderTracked = (tasks: List<{ readonly title: string; readonly project: string | null; readonly minutes: number }>): string => {
-  const heading = "<h3>Tracked in Super Productivity</h3>";
-  if (tasks.status === "missing") return `${heading}<p class="empty">Super Productivity was not available.</p>`;
-  if (tasks.items.length === 0) return `${heading}<p class="empty">Nothing tracked.</p>`;
+  const heading = "<h2>Tracked in Super Productivity</h2>";
+  if (tasks.status === "missing") return `<section>${heading}<p class="empty">Super Productivity was not available.</p></section>`;
+  if (tasks.items.length === 0) return `<section>${heading}<p class="empty">Nothing tracked.</p></section>`;
   const items = tasks.items.map((task) => {
     const meta = [task.project, minutesText(task.minutes)].filter((part) => part !== null).join(" · ");
     return `<li>${escapeHtml(task.title)} <span class="meta">· ${escapeHtml(meta)}</span></li>`;
   });
-  return `${heading}<ul class="items">${items.join("")}</ul>`;
+  return `<section>${heading}<ul class="items">${items.join("")}</ul></section>`;
 };
 
 const LEGEND: readonly (readonly [string, string])[] = [
@@ -167,7 +170,7 @@ const LEGEND: readonly (readonly [string, string])[] = [
   ["tl-mail", "Mail sent"],
 ];
 
-/** titles holds the agent's title for each part, in order. */
+/** The timeline, as a section that may use the report's full width, and the time tracked in Super Productivity, which has no time of day, below it. titles holds the agent's title for each part, in order. */
 export const renderTimeline = (collected: Collected, titles: readonly string[]): string => {
   const areas = areaGroup(collected);
   const partRow: Row = {
@@ -196,7 +199,7 @@ export const renderTimeline = (collected: Collected, titles: readonly string[]):
         ? `<p class="meta">Screen activity was not available.</p>`
         : "";
   const threadsMissing = collected.timeline.threads.status === "missing" ? `<p class="meta">T3 Code was not available, so its threads are missing.</p>` : "";
-  if (marks.length === 0) return `<section><h2>Timeline</h2><p class="empty">Nothing recorded.</p>${partial}${threadsMissing}${tracked}</section>`;
+  if (marks.length === 0) return `<section class="wide"><h2>Timeline</h2><p class="empty">Nothing recorded.</p>${partial}${threadsMissing}</section>${tracked}`;
   // Whole hours from the first to the last mark, within the journal day.
   const first = Math.min(...marks.map((mark) => mark.start));
   const last = Math.max(...marks.map((mark) => mark.end));
@@ -222,10 +225,10 @@ export const renderTimeline = (collected: Collected, titles: readonly string[]):
     )
     .join("");
   const legend = LEGEND.map(([kind, label]) => `<li><span class="swatch ${kind}"></span>${label}</li>`).join("");
-  return `<section>
+  return `<section class="wide">
     <h2>Timeline</h2>
     <div class="timeline" role="img" aria-label="A timeline of the day; the day in parts describes it in words." style="--hours:${hours}">${renderAxis(axis)}${body}</div>
     <ul class="legend">${legend}</ul>${partial}${threadsMissing}
-    ${tracked}
-  </section>`;
+  </section>
+  ${tracked}`;
 };

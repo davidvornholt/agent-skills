@@ -25,7 +25,7 @@ export type List<T> = { readonly status: ListStatus; readonly items: readonly T[
 /** The index into `parts` of the part something happened in; null when the day has no parts or it has no time of day. */
 type InPart = { readonly part: number | null };
 
-/** How the report and the agent's text refer to a pull request: "name#12", or "owner/name#12" when two of the day's repositories share the name. */
+/** How the report refers to a pull request: "name#12", or "owner/name#12" when two of the day's repositories share the name. */
 type Ref = { readonly repository: string; readonly number: number; readonly ref: string };
 
 /** What was left open at the end of the day, as the sources recorded it. */
@@ -81,8 +81,9 @@ export type ReportInputs = {
   readonly handedOffTasks: List<{ readonly title: string; readonly project: string | null; readonly doneAt: string } & InPart>;
   readonly settledThreads: List<{ readonly title: string; readonly project: string; readonly settledAt: string } & InPart>;
   readonly openThreads: List<{ readonly title: string; readonly project: string; readonly openSince: string }>;
-  readonly landedPrs: List<Ref & { readonly title: string; readonly mergedAt: string } & InPart>;
-  readonly closedPrs: List<Ref & { readonly title: string; readonly closedAt: string } & InPart>;
+  /** summary is the start of the pull request's description, for the agent to say what it changed; the report shows only the title. */
+  readonly landedPrs: List<Ref & { readonly title: string; readonly summary: string | null; readonly mergedAt: string } & InPart>;
+  readonly closedPrs: List<Ref & { readonly title: string; readonly summary: string | null; readonly closedAt: string } & InPart>;
   /** start and end are null for an all-day event. */
   readonly appointments: List<{ readonly title: string; readonly start: string | null; readonly end: string | null } & InPart>;
   /** Super Productivity tasks with time tracked on the day, the most time first. SP keeps only a total per day, so they have no time of day. */
@@ -172,6 +173,7 @@ const landedPrs = (reading: Sources["github"], window: DayWindow, bounds: PartBo
       number: pr.number,
       ref: ref(pr.repository, pr.number),
       title: pr.title,
+      summary: pr.summary,
       mergedAt: toBerlinIso(mergedMs),
       part: partAt(bounds, mergedMs),
     }));
@@ -189,6 +191,7 @@ const closedPrs = (reading: Sources["closedPrs"], window: DayWindow, bounds: Par
       number: pr.number,
       ref: ref(pr.repository, pr.number),
       title: pr.title,
+      summary: pr.summary,
       closedAt: toBerlinIso(closedMs),
       part: partAt(bounds, closedMs),
     }));
@@ -224,7 +227,9 @@ const waitingPrs = (reading: Sources["t3"], window: DayWindow, ref: RefFor): Loo
   return { status: "complete", items };
 };
 
-/** The pull requests of the day's lists, so that the refs the report prints and the agent writes name each of them once. */
+const repoName = (repository: string): string => repository.split("/").at(-1) ?? repository;
+
+/** The pull requests of the day's lists, so that each ref the report prints names one of them. */
 const refsFor = (sources: Sources, window: DayWindow): RefFor => {
   const repositories = new Set<string>();
   if (sources.github.ok) for (const pr of sources.github.value.prs) repositories.add(pr.repository);
@@ -235,8 +240,6 @@ const refsFor = (sources: Sources, window: DayWindow): RefFor => {
   for (const repository of repositories) named.set(repoName(repository), (named.get(repoName(repository)) ?? 0) + 1);
   return (repository, number) => `${named.get(repoName(repository)) === 1 ? repoName(repository) : repository}#${number}`;
 };
-
-export const repoName = (repository: string): string => repository.split("/").at(-1) ?? repository;
 
 const spTaskDay = (task: SpTask, kind: "due" | "deadline"): string | null => {
   const [day, time] = kind === "due" ? [task.dueDay, task.dueWithTime] : [task.deadlineDay, task.deadlineWithTime];

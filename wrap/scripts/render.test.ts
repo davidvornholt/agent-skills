@@ -8,11 +8,12 @@ import {
   durationText,
   loadTemplate,
   modelDisplayName,
-  PART_LINE_MAX_LENGTH,
+  PART_TEXT_MAX_WORDS,
   PART_TITLE_MAX_LENGTH,
   parseAgentText,
   renderReport,
-  SUMMARY_MAX_LENGTH,
+  SENTENCE_MAX_WORDS,
+  SUMMARY_MAX_WORDS,
   WAITING_PRS_LISTED,
 } from "./render.ts";
 import { MARK_GAP_MINUTES, renderTimeline, THREADS_PER_AREA } from "./render-timeline.ts";
@@ -24,38 +25,39 @@ const collected = buildCollected(WINDOW, sources);
 const TEXT: AgentText = {
   summary: "A quiet day of reviews and garden work.",
   parts: [
-    { title: "The parser", lines: ["Fixed the date parser for postlude#14.", "Landed postlude#12 at 04:00."] },
-    { title: "Tidying tests", lines: ["Tidied the tests in the task tool.", "Closed sp-cli#8 and landed sp-cli#7."] },
+    { title: "The parser", text: "You had agents fix how the journal reads dates. The fix for the morning page landed at 04:00." },
+    { title: "Tidying tests", text: "You tidied the tests of the task tool. You dropped a second way of reading the task list." },
   ],
 };
 const TITLES = TEXT.parts.map((part) => part.title);
 const at = (iso: string) => Date.parse(iso);
+const sentence = (words: number) => `${Array.from({ length: words }, () => "word").join(" ")}.`;
 
 describe("parseAgentText", () => {
   const parse = (value: unknown, day: Collected = collected) => parseAgentText(typeof value === "string" ? value : JSON.stringify(value), day);
-  const lines = ["Morning.", "Reviews."];
-  const withLines = (first: readonly string[], second: readonly string[] = lines) => ({
-    summary: "A calm day.",
+  const morning = "You read the news.";
+  const withText = (first: string, second = "You wrote tests.", summary = "A calm day.") => ({
+    summary,
     parts: [
-      { title: "Morning", lines: first },
-      { title: "Afternoon", lines: second },
+      { title: "Morning", text: first },
+      { title: "Afternoon", text: second },
     ],
   });
 
-  test("reads the summary and a title and lines per part", () => {
+  test("reads the summary and a title and paragraph per part, with the white space tidied", () => {
     expect(
       parse({
         summary: " A calm day. ",
         parts: [
-          { title: " Morning ", lines: ["Reviews.", "The parser\n again."] },
-          { title: "Afternoon", lines: ["Tests.", "Docs."] },
+          { title: " Morning ", text: "You read the news.\n  Then you wrote." },
+          { title: "Afternoon", text: "You wrote tests." },
         ],
       }),
     ).toEqual({
       summary: "A calm day.",
       parts: [
-        { title: "Morning", lines: ["Reviews.", "The parser again."] },
-        { title: "Afternoon", lines: ["Tests.", "Docs."] },
+        { title: "Morning", text: "You read the news. Then you wrote." },
+        { title: "Afternoon", text: "You wrote tests." },
       ],
     });
   });
@@ -63,58 +65,68 @@ describe("parseAgentText", () => {
   test("refuses text that isn't the expected JSON", () => {
     expect(() => parse("A calm day.")).toThrow(/not JSON/);
     expect(() => parse({ summary: "A calm day." })).toThrow(/no parts list/);
-    expect(() => parse({ summary: "A calm day.", parts: [{ title: "Only one", lines }] })).toThrow(/has 1 parts, but the day has 2/);
-    expect(() => parse({ summary: "A calm day.", parts: [{ title: "Morning", lines }, "Afternoon."] })).toThrow(/part 2 needs a title and 2 to 5 lines/);
-    expect(() => parse(withLines(["Only one."]))).toThrow(/part 1 needs a title and 2 to 5 lines/);
-    expect(() => parse(withLines(["One.", "Two.", "Three.", "Four.", "Five.", "Six."]))).toThrow(/part 1 needs/);
-    expect(() => parse(withLines(["Morning.", 3 as unknown as string]))).toThrow(/line 2 of part 1 is not a string/);
+    expect(() => parse({ summary: "A calm day.", parts: [{ title: "Only one", text: morning }] })).toThrow(/has 1 parts, but the day has 2/);
+    expect(() => parse({ summary: "A calm day.", parts: [{ title: "Morning", text: morning }, "Afternoon."] })).toThrow(/part 2 needs a title and a text/);
+    expect(() =>
+      parse({
+        summary: "A calm day.",
+        parts: [
+          { title: "Morning", lines: [morning] },
+          { title: "Afternoon", text: morning },
+        ],
+      }),
+    ).toThrow(/part 1 needs a title and a text/);
   });
 
-  test("refuses empty and long text", () => {
-    expect(() => parse({ ...withLines(lines), summary: " \n " })).toThrow(/summary is empty/);
-    expect(() => parse({ ...withLines(lines), summary: "a".repeat(SUMMARY_MAX_LENGTH + 1) })).toThrow(/limit/);
-    expect(() => parse(withLines(["Morning.", " "]))).toThrow(/line 2 of part 1 is empty/);
-    expect(() => parse(withLines(["Morning.", "a".repeat(PART_LINE_MAX_LENGTH + 1)]))).toThrow(/line 2 of part 1 has/);
-    const longTitle = withLines(lines);
-    expect(() => parse({ ...longTitle, parts: [{ title: "a".repeat(PART_TITLE_MAX_LENGTH + 1), lines }, longTitle.parts[1]] })).toThrow(/title of part 1 has/);
+  test("refuses empty text and a long title", () => {
+    expect(() => parse(withText(morning, morning, " \n "))).toThrow(/summary is empty/);
+    expect(() => parse(withText(" "))).toThrow(/text of part 1 is empty/);
+    const long = withText(morning);
+    expect(() => parse({ ...long, parts: [{ title: "a".repeat(PART_TITLE_MAX_LENGTH + 1), text: morning }, long.parts[1]] })).toThrow(/title of part 1 has/);
   });
 
-  test("refuses digits in any script in the summary, because the report prints every number itself", () => {
-    expect(() => parse({ ...withLines(lines), summary: "Three meetings and 2 reviews." })).toThrow(/summary contains digits/);
-    expect(() => parse({ ...withLines(lines), summary: "Meetings: ٣" })).toThrow(/digits/);
-    expect(() => parse({ ...withLines(lines), summary: "From 13:00 on." })).toThrow(/summary contains digits/);
+  test("asks for whole, short sentences in short paragraphs", () => {
+    expect(() => parse(withText(sentence(SENTENCE_MAX_WORDS)))).not.toThrow();
+    expect(() => parse(withText(`You read. ${sentence(SENTENCE_MAX_WORDS + 1)}`))).toThrow(
+      new RegExp(`Sentence 2 of the text of part 1 has ${SENTENCE_MAX_WORDS + 1} words; the limit is ${SENTENCE_MAX_WORDS}`),
+    );
+    expect(() => parse(withText(morning, morning, `A calm day; ${sentence(SENTENCE_MAX_WORDS)}`))).toThrow(/Sentence 1 of the summary has/);
+    const paragraph = (words: number) =>
+      [...Array.from({ length: Math.floor(words / 10) }, () => sentence(10)), ...(words % 10 === 0 ? [] : [sentence(words % 10)])].join(" ");
+    expect(() => parse(withText(paragraph(PART_TEXT_MAX_WORDS)))).not.toThrow();
+    expect(() => parse(withText(paragraph(PART_TEXT_MAX_WORDS + 1)))).toThrow(new RegExp(`text of part 1 has ${PART_TEXT_MAX_WORDS + 1} words`));
+    expect(() => parse(withText(morning, morning, paragraph(SUMMARY_MAX_WORDS + 1)))).toThrow(/summary has \d+ words; the limit is/);
+    expect(() => parse(withText("Read the news; wrote tests"))).toThrow(/doesn't end a sentence/);
+    // A quote or a bracket may close the last sentence.
+    expect(() => parse(withText('You read the "news."'))).not.toThrow();
   });
 
-  test("lets a part name clock times within it, and no other digits", () => {
+  test("refuses digits in any script in the summary and titles, because the report prints every number itself", () => {
+    expect(() => parse(withText(morning, morning, "Three meetings and 2 reviews."))).toThrow(/summary contains digits/);
+    expect(() => parse(withText(morning, morning, "Meetings: ٣."))).toThrow(/digits/);
+    expect(() => parse(withText(morning, morning, "From 13:00 on."))).toThrow(/summary contains digits/);
+    const titled = withText(morning);
+    expect(() => parse({ ...titled, parts: [{ title: "From 04:00", text: morning }, titled.parts[1]] })).toThrow(/title of part 1 contains digits/);
+  });
+
+  test("lets a part's text name clock times within it, and no other digits", () => {
     // The parts run 04:00–13:00 and 13:00–04:00.
-    expect(() => parse(withLines(["From 04:00 on.", "Until 13:00."], ["From 13:00 on.", "Until 03:59, and 04:00 closed it."]))).not.toThrow();
-    expect(() => parse(withLines(["At 14:00.", "Reviews."]))).toThrow(/line 1 of part 1 mentions 14:00, but the part runs 04:00–13:00/);
-    expect(() => parse(withLines(lines, ["At 12:59.", "Reviews."]))).toThrow(/mentions 12:59, but the part runs 13:00–04:00/);
-    expect(() => parse(withLines(["Three reviews.", "Then 2 more."]))).toThrow(/line 2 of part 1 contains digits other than HH:MM times/);
-    expect(() => parse(withLines(["At 9:30.", "Reviews."]))).toThrow(/contains digits other than/);
-    expect(() => parse(withLines(["Read a/b/c#3.", "Reviews."]))).toThrow(/contains digits other than/);
+    expect(() =>
+      parse(withText("You started at 04:00 and stopped at 13:00.", "You started at 13:00. You stopped at 03:59, and 04:00 closed the day.")),
+    ).not.toThrow();
+    expect(() => parse(withText("You read at 14:00."))).toThrow(/text of part 1 mentions 14:00, but the part runs 04:00–13:00/);
+    expect(() => parse(withText(morning, "You read at 12:59."))).toThrow(/mentions 12:59, but the part runs 13:00–04:00/);
+    expect(() => parse(withText("You had 2 reviews."))).toThrow(/text of part 1 contains digits other than HH:MM times/);
+    expect(() => parse(withText("You read at 9:30."))).toThrow(/contains digits other than/);
   });
 
-  test("lets a part name the day's pull requests by ref, number, or full repository", () => {
-    // Landed postlude#12, closed sp-cli#8, and nix-config#5 still open at the end.
-    expect(() => parse(withLines(["Landed postlude#12.", "Opened #5 too."], ["Closed davidvornholt/sp-cli#8.", "Reviews."]))).not.toThrow();
-    expect(() => parse(withLines(["Landed postlude#99.", "Reviews."]))).toThrow(/mentions postlude#99, which isn't among the day's pull requests/);
-    expect(() => parse(withLines(["Landed sp-cli#12.", "Reviews."]))).toThrow(/isn't among/);
-    const shared = {
-      ...collected,
-      reportInputs: {
-        ...collected.reportInputs,
-        landedPrs: {
-          status: "complete" as const,
-          items: [
-            ...collected.reportInputs.landedPrs.items,
-            { repository: "davidvornholt/pim", number: 12, ref: "pim#12", title: "Another twelve", mergedAt: "2026-10-29T10:00:00+01:00", part: 0 },
-          ],
-        },
-      },
-    };
-    expect(() => parse(withLines(["Landed #12.", "Reviews."]), shared)).toThrow(/matches pull requests in several repositories/);
-    expect(() => parse(withLines(["Landed pim#12.", "Reviews."]), shared)).not.toThrow();
+  test("refuses pull request numbers and asks for what they changed instead", () => {
+    for (const ref of ["postlude#12", "#12", "davidvornholt/sp-cli#8"]) {
+      expect(() => parse(withText(`You landed ${ref}.`))).toThrow(
+        new RegExp(`text of part 1 names a pull request by its number, ${ref}\\. .*say in everyday words what it changed`),
+      );
+    }
+    expect(() => parse(withText(morning, morning, "You landed postlude#12."))).toThrow(/summary names a pull request by its number/);
   });
 });
 
@@ -147,10 +159,24 @@ describe("renderReport", () => {
     expect(notice).not.toMatch(/\$\{|\p{Nd}/u);
   });
 
-  test("shows each part's number, title and time range over its lines", () => {
+  test("shows each part's number, title and time range over its paragraph", () => {
     expect(html).toContain(
-      '<h2>The day in parts</h2><ol class="arcs"><li class="arc"><h3><span class="no">1</span><span>The parser</span><span class="when">04:00–13:00</span></h3><ul><li>Fixed the date parser for postlude#14.</li><li>Landed postlude#12 at 04:00.</li></ul></li><li class="arc"><h3><span class="no">2</span>',
+      `<h2>The day in parts</h2><ol class="arcs"><li class="arc"><h3><span class="no">1</span><span>The parser</span><span class="when">04:00–13:00</span></h3><p>${TEXT.parts[0]?.text}</p></li><li class="arc"><h3><span class="no">2</span>`,
     );
+  });
+
+  test("lets the timeline use the full width and keeps every other section in the text column", () => {
+    const sections = [...html.matchAll(/<section( class="wide")?[^>]*>\s*<h2>([^<]*)<\/h2>/g)].map((match) => [match[2], match[1] !== undefined]);
+    expect(sections.filter(([, wide]) => wide)).toEqual([["Timeline", true]]);
+    expect(sections.map(([heading]) => heading)).toContain("Tracked in Super Productivity");
+    expect(template).toMatch(/main > \* \{ max-width: 720px; margin-inline: auto; \}/);
+    expect(template).toMatch(/main > \.wide \{ max-width: none; \}/);
+  });
+
+  test("leaves the pull requests' summaries to the agent", () => {
+    expect(collected.reportInputs.landedPrs.items.map((pr) => pr.summary)).toContain("The morning page now opens with the weather.");
+    expect(html).not.toContain("The morning page now opens with the weather.");
+    expect(html).not.toContain("Reads the task list with a second parser.");
   });
 
   test("leaves out the parts section on a day without parts", () => {
@@ -162,7 +188,10 @@ describe("renderReport", () => {
     const title = `<img src=x onerror="alert(1)">`;
     const inputs = {
       ...collected.reportInputs,
-      landedPrs: { status: "complete" as const, items: [{ repository: "a/b", number: 1, ref: "b#1", title, mergedAt: "2026-10-29T10:00:00+01:00", part: 0 }] },
+      landedPrs: {
+        status: "complete" as const,
+        items: [{ repository: "a/b", number: 1, ref: "b#1", title, summary: null, mergedAt: "2026-10-29T10:00:00+01:00", part: 0 }],
+      },
     };
     const escaped = renderReport(template, { ...collected, reportInputs: inputs }, TEXT);
     expect(escaped).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
@@ -411,6 +440,19 @@ describe("renderTimeline", () => {
     expect(drawn).not.toContain("tl-divider");
   });
 
+  test("labels the axis every hour or two on a wide report, and half as often on a narrow one", () => {
+    const axisLabels = (hours: number) => {
+      const start = at("2026-10-29T04:00:00+01:00");
+      const pieces = [{ start, end: start + (hours - 0.5) * 3_600_000, category: "code", project: null }];
+      const drawn = renderTimeline(withTimeline({ ...bare, pieces }, quiet), []);
+      return [...drawn.matchAll(/<span( class="minor")? style="left:[^"]*">(\d\d):00<\/span>/g)].map((match) => `${match[2]}${match[1] ? "·" : ""}`);
+    };
+    expect(axisLabels(6)).toEqual(["04", "05", "06", "07", "08", "09"]);
+    expect(axisLabels(12)).toEqual(["04", "05·", "06", "07·", "08", "09·", "10", "11·", "12", "13·", "14", "15·"]);
+    expect(axisLabels(24)).toEqual(["04", "06·", "08", "10·", "12", "14·", "16", "18·", "20", "22·", "00", "02·"]);
+    expect(template).toMatch(/\.tl-ticks \.minor \{ display: none; \}[\s\S]*@media \(min-width: 1100px\) \{[^}]*\}\s*\.tl-ticks \.minor \{ display: block; \}/);
+  });
+
   test(`joins a row's screen time across gaps shorter than ${MARK_GAP_MINUTES} minutes, and counts only the screen time`, () => {
     const nine = at("2026-10-29T09:00:00+01:00");
     // Forty pieces of half a minute, one minute apart.
@@ -465,8 +507,10 @@ describe("renderTimeline", () => {
     expect(drawn).not.toContain("<script>");
   });
 
-  test("lists the time tracked in Super Productivity", () => {
-    expect(html).toContain('<h3>Tracked in Super Productivity</h3><ul class="items"><li>Write tests <span class="meta">· Work · 50 min</span></li>');
+  test("lists the time tracked in Super Productivity in a section of its own, after the timeline", () => {
+    expect(html).toMatch(
+      /<\/section>\s*<section><h2>Tracked in Super Productivity<\/h2><ul class="items"><li>Write tests <span class="meta">· Work · 50 min<\/span><\/li>/,
+    );
   });
 
   test("says what is missing, also on a day with nothing to draw", () => {

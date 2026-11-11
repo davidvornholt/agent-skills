@@ -1,4 +1,4 @@
-// The agent's text carries no counts or durations: the template reads the day's figures from Postlude's message, and the times, minutes and counts this script prints come from the collected data, never from the agent. A part's lines may name clock times within the part and the day's pull requests, which render checks against the collected data.
+// The agent's text carries no counts or durations: the template reads the day's figures from Postlude's message, and the times, minutes and counts this script prints come from the collected data, never from the agent. A part's text may name clock times within the part, which render checks against the collected data.
 
 import { compareText } from "./compare.ts";
 import { toBerlinClock } from "./day.ts";
@@ -6,35 +6,59 @@ import type { Collected } from "./day-report.ts";
 import { clockRange, escapeHtml, minutesText } from "./html.ts";
 import { METRICS_VERSION } from "./metrics.ts";
 import { renderTimeline } from "./render-timeline.ts";
-import { type List, median, type ReportInputs, repoName } from "./report-inputs.ts";
+import { type List, median, type ReportInputs } from "./report-inputs.ts";
 import { type DayPart, projectLabel } from "./timeline.ts";
 
-export const SUMMARY_MAX_LENGTH = 600;
+// Short sentences and short paragraphs, so the report reads easily for someone without the background.
+export const SENTENCE_MAX_WORDS = 25;
+export const SUMMARY_MAX_WORDS = 60;
+export const PART_TEXT_MAX_WORDS = 90;
 export const PART_TITLE_MAX_LENGTH = 60;
-export const PART_LINE_MAX_LENGTH = 160;
-export const PART_MIN_LINES = 2;
-export const PART_MAX_LINES = 5;
 /** Open pull requests listed one by one in the loose ends; more collapse into one entry. */
 export const WAITING_PRS_LISTED = 3;
 
 const TEMPLATE_URL = new URL("../report/template.html", import.meta.url);
 
-export type AgentPart = { readonly title: string; readonly lines: readonly string[] };
+export type AgentPart = { readonly title: string; readonly text: string };
 
-/** What the agent writes: a summary of the day, and a title and a few lines per part, in order. */
+/** What the agent writes: a summary of the day, and a title and a paragraph per part, in order. */
 export type AgentText = { readonly summary: string; readonly parts: readonly AgentPart[] };
 
-const TEXT_SHAPE = '{"summary": "...", "parts": [{"title": "...", "lines": ["...", "..."]}, ...]}';
+const TEXT_SHAPE = '{"summary": "...", "parts": [{"title": "...", "text": "..."}, ...]}';
 const CLOCK = /\b([01]\d|2[0-3]):([0-5]\d)\b/g;
 // "#12", "name#12" or "owner/name#12", not inside a longer word or path.
-const REF = /(?<![\w./-])((?:[\w.-]+\/)?[\w.-]+)?#(\d+)(?!\w)/g;
+const REF = /(?<![\w./-])(?:(?:[\w.-]+\/)?[\w.-]+)?#\d+(?!\w)/;
 
-const cleanText = (name: string, text: unknown, limit: number): string => {
+const cleanText = (name: string, text: unknown): string => {
   if (typeof text !== "string") throw new Error(`The ${name} is not a string.`);
   const clean = text.trim().replace(/\s+/g, " ");
   if (clean.length === 0) throw new Error(`The ${name} is empty.`);
-  if (clean.length > limit) throw new Error(`The ${name} has ${clean.length} characters; the limit is ${limit}.`);
+  const ref = REF.exec(clean);
+  if (ref !== null)
+    throw new Error(
+      `The ${name} names a pull request by its number, ${ref[0]}. The reader doesn't know the numbers, so say in everyday words what it changed.`,
+    );
   return clean;
+};
+
+const words = (text: string): number => text.split(" ").filter((word) => /[\p{L}\p{Nd}]/u.test(word)).length;
+
+/** Checks that the text is whole sentences, none longer than SENTENCE_MAX_WORDS, and at most maxWords words in all. */
+const checkSentences = (name: string, text: string, maxWords: number): void => {
+  if (!/[.!?…]["'”’)]?$/u.test(text)) throw new Error(`The ${name} doesn't end a sentence. Write whole sentences, not a list or fragments.`);
+  const total = words(text);
+  if (total > maxWords) throw new Error(`The ${name} has ${total} words; the limit is ${maxWords}. Leave out what matters least.`);
+  for (const [index, sentence] of text.split(/(?<=[.!?…]["'”’)]?)\s+/u).entries()) {
+    const count = words(sentence);
+    if (count > SENTENCE_MAX_WORDS)
+      throw new Error(`Sentence ${index + 1} of the ${name} has ${count} words; the limit is ${SENTENCE_MAX_WORDS}. Split it into shorter sentences.`);
+  }
+};
+
+const NO_DIGITS = "The report prints every count and duration from the collected data, so describe them without numbers.";
+
+const checkNoDigits = (name: string, text: string): void => {
+  if (/\p{Nd}/u.test(text)) throw new Error(`The ${name} contains digits. ${NO_DIGITS}`);
 };
 
 /** Minutes since the journal day began at 04:00, for a clock time. */
@@ -45,57 +69,33 @@ const clockMinute = (ms: number): number => {
   return journalMinute(hour, minute);
 };
 
-type DayPrs = readonly { readonly repository: string; readonly number: number }[];
-
-const dayPrs = (inputs: ReportInputs): DayPrs => [...inputs.landedPrs.items, ...inputs.closedPrs.items, ...inputs.looseEnds.waitingPrs.items];
-
-const refProblem = (prs: DayPrs, repository: string | undefined, number: number): string | null => {
-  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
-  const matches = prs.filter(
-    (pr) =>
-      pr.number === number &&
-      (repository === undefined || (repository.includes("/") ? same(pr.repository, repository) : same(repoName(pr.repository), repository))),
-  );
-  const repositories = new Set(matches.map((pr) => pr.repository.toLowerCase()));
-  if (repositories.size === 1) return null;
-  return repositories.size === 0
-    ? "which isn't among the day's pull requests in reportInputs (landedPrs, closedPrs and looseEnds.waitingPrs). Write the ref of one of them."
-    : "which matches pull requests in several repositories. Write the pull request's ref instead.";
-};
-
-/** Checks a part's title or line: clock times must fall within the part and refs must name the day's pull requests; no other digits. */
-const checkPartText = (name: string, text: unknown, limit: number, part: DayPart, prs: DayPrs): string => {
-  const clean = cleanText(name, text, limit);
+/** Checks a part's text: clock times must fall within the part; no other digits. */
+const checkPartText = (name: string, text: string, part: DayPart): void => {
   const first = clockMinute(Date.parse(part.start));
   const last = clockMinute(Date.parse(part.end));
   // A part that ends at 04:00 ends at the end of the journal day.
   const end = last < first ? 24 * 60 : last;
-  for (const match of clean.matchAll(CLOCK)) {
+  for (const match of text.matchAll(CLOCK)) {
     const minute = journalMinute(Number(match[1]), Number(match[2]));
     // 04:00 is both the start and the end of the journal day.
     const inPart = (minute >= first && minute <= end) || minute + 24 * 60 === end;
     if (!inPart) throw new Error(`The ${name} mentions ${match[0]}, but the part runs ${part.clock}. Use only times within the part.`);
   }
-  for (const match of clean.matchAll(REF)) {
-    const problem = refProblem(prs, match[1], Number(match[2]));
-    if (problem !== null) throw new Error(`The ${name} mentions ${match[0]}, ${problem}`);
-  }
-  if (/\p{Nd}/u.test(clean.replace(CLOCK, "").replace(REF, "")))
-    throw new Error(
-      `The ${name} contains digits other than HH:MM times and pull request refs. The report prints every count and duration from the collected data, so describe them without numbers.`,
-    );
-  return clean;
+  if (/\p{Nd}/u.test(text.replace(CLOCK, ""))) throw new Error(`The ${name} contains digits other than HH:MM times. ${NO_DIGITS}`);
 };
 
-const checkPart = (part: unknown, index: number, dayPart: DayPart, prs: DayPrs): AgentPart => {
-  const { title, lines } = (typeof part === "object" && part !== null ? part : {}) as { title?: unknown; lines?: unknown };
+const checkPart = (part: unknown, index: number, dayPart: DayPart): AgentPart => {
+  const { title, text } = (typeof part === "object" && part !== null ? part : {}) as { title?: unknown; text?: unknown };
   const label = `part ${index + 1}`;
-  if (!Array.isArray(lines) || lines.length < PART_MIN_LINES || lines.length > PART_MAX_LINES)
-    throw new Error(`The ${label} needs a title and ${PART_MIN_LINES} to ${PART_MAX_LINES} lines, as ${TEXT_SHAPE}.`);
-  return {
-    title: checkPartText(`title of ${label}`, title, PART_TITLE_MAX_LENGTH, dayPart, prs),
-    lines: lines.map((line, number) => checkPartText(`line ${number + 1} of ${label}`, line, PART_LINE_MAX_LENGTH, dayPart, prs)),
-  };
+  if (typeof title !== "string" || typeof text !== "string") throw new Error(`The ${label} needs a title and a text, as ${TEXT_SHAPE}.`);
+  const cleanTitle = cleanText(`title of ${label}`, title);
+  if (cleanTitle.length > PART_TITLE_MAX_LENGTH)
+    throw new Error(`The title of ${label} has ${cleanTitle.length} characters; the limit is ${PART_TITLE_MAX_LENGTH}.`);
+  checkNoDigits(`title of ${label}`, cleanTitle);
+  const cleanBody = cleanText(`text of ${label}`, text);
+  checkSentences(`text of ${label}`, cleanBody, PART_TEXT_MAX_WORDS);
+  checkPartText(`text of ${label}`, cleanBody, dayPart);
+  return { title: cleanTitle, text: cleanBody };
 };
 
 /** Reads the agent's JSON from stdin and checks it against the collected day. */
@@ -114,11 +114,10 @@ export const parseAgentText = (raw: string, collected: Collected): AgentText => 
     throw new Error(
       `The report text has ${parts.length} parts, but the day has ${dayParts.length}. Write one entry per entry of reportInputs.parts, in order.`,
     );
-  const clean = cleanText("summary", summary, SUMMARY_MAX_LENGTH);
-  if (/\p{Nd}/u.test(clean))
-    throw new Error("The summary contains digits. The report prints every number and time from the collected data, so describe the day without them.");
-  const prs = dayPrs(collected.reportInputs);
-  return { summary: clean, parts: dayParts.map((dayPart, index) => checkPart(parts[index], index, dayPart, prs)) };
+  const clean = cleanText("summary", summary);
+  checkSentences("summary", clean, SUMMARY_MAX_WORDS);
+  checkNoDigits("summary", clean);
+  return { summary: clean, parts: dayParts.map((dayPart, index) => checkPart(parts[index], index, dayPart)) };
 };
 
 /** A model ID as people say it, such as "Claude Opus 5.5" for claude-opus-5-5. An unknown ID stays as it is. */
@@ -190,9 +189,8 @@ const renderParts = (collected: Collected, text: AgentText): string => {
   const { parts } = collected.reportInputs;
   if (parts.length === 0) return "";
   const items = parts.map((part, index) => {
-    const own = text.parts[index] ?? { title: "", lines: [] };
-    const lines = own.lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("");
-    return `<li class="arc"><h3><span class="no">${index + 1}</span><span>${escapeHtml(own.title)}</span><span class="when">${part.clock}</span></h3><ul>${lines}</ul></li>`;
+    const own = text.parts[index] ?? { title: "", text: "" };
+    return `<li class="arc"><h3><span class="no">${index + 1}</span><span>${escapeHtml(own.title)}</span><span class="when">${part.clock}</span></h3><p>${escapeHtml(own.text)}</p></li>`;
   });
   return `<section><h2>The day in parts</h2><ol class="arcs">${items.join("")}</ol></section>`;
 };

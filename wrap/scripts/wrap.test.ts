@@ -12,7 +12,7 @@ const collectedFile = join(directory, "collected.json");
 const collected = buildCollected(WINDOW, sources);
 writeFileSync(collectedFile, JSON.stringify(collected));
 
-const PART = { title: "Quiet", lines: ["Reviews.", "Tests."] };
+const PART = { title: "Quiet", text: "You reviewed changes. You wrote tests." };
 const TEXT = JSON.stringify({ summary: "A calm day.", parts: [PART, PART] });
 
 const run = async (args: string[], stdin = "") => {

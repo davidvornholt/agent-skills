@@ -92,6 +92,7 @@ const fixtures = {
         {
           number: 42,
           title: "Add the day report",
+          body: "**Before.** The day had no report.\n\n**Now.** The day gets a **report** in `Postlude`.\n\n## Verification\n\n- Tests pass.",
           repository_url: "https://api.github.com/repos/davidvornholt/agent-skills",
           pull_request: { merged_at: "2026-10-29T15:00:00Z" },
         },
@@ -106,6 +107,7 @@ const fixtures = {
         {
           number: 43,
           title: "Try a second parser",
+          body: "Stacked on #42.\n\nThis tries a second parser for the task list, to compare the two.",
           repository_url: "https://api.github.com/repos/davidvornholt/sp-cli",
           closed_at: "2026-10-29T10:45:00Z",
           pull_request: { merged_at: null },
@@ -328,10 +330,22 @@ test("reads every source into the metrics", () => {
     // The user's answer to the aliased All hands couldn't be read.
     { source: "calendar:work@example.com", status: "partial" },
   ]);
-  expect(collected.reportInputs.landedPrs.items).toMatchObject([{ repository: "davidvornholt/agent-skills", title: "Add the day report" }]);
+  expect(collected.reportInputs.landedPrs.items).toMatchObject([
+    { repository: "davidvornholt/agent-skills", title: "Add the day report", summary: "The day gets a report in Postlude." },
+  ]);
   expect(collected.reportInputs.closedPrs).toEqual({
     status: "complete",
-    items: [{ repository: "davidvornholt/sp-cli", number: 43, ref: "sp-cli#43", title: "Try a second parser", closedAt: "2026-10-29T11:45:00+01:00", part: 0 }],
+    items: [
+      {
+        repository: "davidvornholt/sp-cli",
+        number: 43,
+        ref: "sp-cli#43",
+        title: "Try a second parser",
+        summary: "This tries a second parser for the task list, to compare the two.",
+        closedAt: "2026-10-29T11:45:00+01:00",
+        part: 0,
+      },
+    ],
   });
   expect(collected.reportInputs.settledThreads.items).toMatchObject([{ title: "Settled today", project: "postlude" }]);
   expect(collected.timeline.threads).toEqual({

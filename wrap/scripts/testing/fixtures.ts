@@ -134,9 +134,15 @@ export const sources: Sources = {
     value: {
       incomplete: false,
       prs: [
-        { repository: "davidvornholt/postlude", number: 12, title: "Start of day", mergedAt: "2026-10-29T03:00:00Z" },
-        { repository: "davidvornholt/sp-cli", number: 7, title: "Afternoon", mergedAt: "2026-10-29T15:00:00Z" },
-        { repository: "davidvornholt/pim", number: 3, title: "End of day belongs to the next day", mergedAt: "2026-10-30T03:00:00Z" },
+        {
+          repository: "davidvornholt/postlude",
+          number: 12,
+          title: "Start of day",
+          summary: "The morning page now opens with the weather.",
+          mergedAt: "2026-10-29T03:00:00Z",
+        },
+        { repository: "davidvornholt/sp-cli", number: 7, title: "Afternoon", summary: null, mergedAt: "2026-10-29T15:00:00Z" },
+        { repository: "davidvornholt/pim", number: 3, title: "End of day belongs to the next day", summary: null, mergedAt: "2026-10-30T03:00:00Z" },
       ],
     },
   },
@@ -145,8 +151,14 @@ export const sources: Sources = {
     value: {
       incomplete: false,
       prs: [
-        { repository: "davidvornholt/sp-cli", number: 8, title: "Try a second parser", closedAt: "2026-10-29T10:45:00Z" },
-        { repository: "davidvornholt/pim", number: 2, title: "Closed the day before", closedAt: "2026-10-29T02:59:59Z" },
+        {
+          repository: "davidvornholt/sp-cli",
+          number: 8,
+          title: "Try a second parser",
+          summary: "Reads the task list with a second parser.",
+          closedAt: "2026-10-29T10:45:00Z",
+        },
+        { repository: "davidvornholt/pim", number: 2, title: "Closed the day before", summary: null, closedAt: "2026-10-29T02:59:59Z" },
       ],
     },
   },

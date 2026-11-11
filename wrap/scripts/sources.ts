@@ -24,11 +24,24 @@ export type SpData = {
   readonly projects: readonly { readonly id: string; readonly title: string }[];
 };
 
-export type LandedPr = { readonly repository: string; readonly number: number; readonly title: string; readonly mergedAt: string };
+/** summary is the start of the pull request's description in plain text (see pr-summary.ts), or null when it has none. */
+export type LandedPr = {
+  readonly repository: string;
+  readonly number: number;
+  readonly title: string;
+  readonly summary: string | null;
+  readonly mergedAt: string;
+};
 
 export type GithubData = { readonly prs: readonly LandedPr[]; readonly incomplete: boolean };
 
-export type ClosedPr = { readonly repository: string; readonly number: number; readonly title: string; readonly closedAt: string };
+export type ClosedPr = {
+  readonly repository: string;
+  readonly number: number;
+  readonly title: string;
+  readonly summary: string | null;
+  readonly closedAt: string;
+};
 
 export type ClosedPrData = { readonly prs: readonly ClosedPr[]; readonly incomplete: boolean };
 

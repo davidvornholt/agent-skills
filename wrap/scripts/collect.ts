@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { compareText } from "./compare.ts";
 import { addDays, type DayWindow, eventOnDay } from "./day.ts";
+import { prSummary } from "./pr-summary.ts";
 import type {
   CalendarAccount,
   CalendarEvent,
@@ -169,14 +170,14 @@ const searchPrs = async <T>(
 const readGithub = (window: DayWindow): Promise<Reading<GithubData>> =>
   searchPrs(`is:merged merged:${window.start}..${window.end}`, (item, repository): LandedPr | null =>
     isRecord(item.pull_request) && typeof item.pull_request.merged_at === "string" && typeof item.number === "number"
-      ? { repository, number: item.number, title: stringOr(item.title, ""), mergedAt: item.pull_request.merged_at }
+      ? { repository, number: item.number, title: stringOr(item.title, ""), summary: prSummary(item.body), mergedAt: item.pull_request.merged_at }
       : null,
   );
 
 const readClosedPrs = (window: DayWindow): Promise<Reading<ClosedPrData>> =>
   searchPrs(`is:closed is:unmerged closed:${window.start}..${window.end}`, (item, repository): ClosedPr | null =>
     typeof item.closed_at === "string" && typeof item.number === "number"
-      ? { repository, number: item.number, title: stringOr(item.title, ""), closedAt: item.closed_at }
+      ? { repository, number: item.number, title: stringOr(item.title, ""), summary: prSummary(item.body), closedAt: item.closed_at }
       : null,
   );
 

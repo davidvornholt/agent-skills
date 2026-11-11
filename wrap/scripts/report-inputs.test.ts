@@ -85,13 +85,31 @@ test("builds the parts and lists of a day with all sources", () => {
       status: "complete",
       items: [
         // Before the first stretch of screen time, so it belongs to the first part.
-        { repository: "davidvornholt/postlude", number: 12, ref: "postlude#12", title: "Start of day", mergedAt: "2026-10-29T04:00:00+01:00", part: 0 },
-        { repository: "davidvornholt/sp-cli", number: 7, ref: "sp-cli#7", title: "Afternoon", mergedAt: "2026-10-29T16:00:00+01:00", part: 1 },
+        {
+          repository: "davidvornholt/postlude",
+          number: 12,
+          ref: "postlude#12",
+          title: "Start of day",
+          summary: "The morning page now opens with the weather.",
+          mergedAt: "2026-10-29T04:00:00+01:00",
+          part: 0,
+        },
+        { repository: "davidvornholt/sp-cli", number: 7, ref: "sp-cli#7", title: "Afternoon", summary: null, mergedAt: "2026-10-29T16:00:00+01:00", part: 1 },
       ],
     },
     closedPrs: {
       status: "complete",
-      items: [{ repository: "davidvornholt/sp-cli", number: 8, ref: "sp-cli#8", title: "Try a second parser", closedAt: "2026-10-29T11:45:00+01:00", part: 0 }],
+      items: [
+        {
+          repository: "davidvornholt/sp-cli",
+          number: 8,
+          ref: "sp-cli#8",
+          title: "Try a second parser",
+          summary: "Reads the task list with a second parser.",
+          closedAt: "2026-10-29T11:45:00+01:00",
+          part: 0,
+        },
+      ],
     },
     appointments: {
       status: "complete",
@@ -167,8 +185,8 @@ test("writes a pull request's ref with its owner when two of the day's repositor
     value: {
       incomplete: false,
       prs: [
-        { repository: "davidvornholt/postlude", number: 12, title: "Start of day", mergedAt: "2026-10-29T03:00:00Z" },
-        { repository: "someone/postlude", number: 4, title: "A fork", mergedAt: "2026-10-29T09:00:00Z" },
+        { repository: "davidvornholt/postlude", number: 12, title: "Start of day", summary: null, mergedAt: "2026-10-29T03:00:00Z" },
+        { repository: "someone/postlude", number: 4, title: "A fork", summary: null, mergedAt: "2026-10-29T09:00:00Z" },
       ],
     },
   };
