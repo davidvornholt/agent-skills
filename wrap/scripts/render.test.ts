@@ -151,24 +151,38 @@ describe("renderReport", () => {
     );
   });
 
-  test("lets the timeline use the full width and keeps every other section in the text column", () => {
+  test("lets the timeline use the full width and keeps everything else in the text column, at Postlude's column width when it says one", () => {
     const sections = [...html.matchAll(/<section( class="wide")?[^>]*>\s*(?:<div class="section-head">)?<h2>([^<]*)<\/h2>/g)].map((match) => [
       match[2],
       match[1] !== undefined,
     ]);
     expect(sections.filter(([, wide]) => wide)).toEqual([["Timeline", true]]);
     expect(sections.map(([heading]) => heading)).toContain("Tracked in Super Productivity");
-    expect(template).toMatch(/main > \* \{ max-width: 720px; margin-inline: auto; \}/);
-    expect(template).toMatch(/main > \.wide \{ max-width: none; \}/);
+    expect(template).toContain("main > *, main > .wide > :not(.timeline) { max-width: min(720px, var(--column, 760px) - 40px); margin-inline: auto; }");
+    expect(template).toContain("main > .wide { max-width: none; }");
   });
 
-  test("says it has a width button, shows it only when Postlude says it can widen the report, and asks Postlude for the other width", () => {
+  test("takes Postlude's column, then says it has a width button, shows it only when Postlude says it can widen the report, and asks Postlude for the other width", () => {
     expect(template).toMatch(/\.width-toggle\[hidden\] \{ display: none; \}/);
-    expect(template).toContain('if (widthToggle) window.parent.postMessage({ type: "postlude:report-width-control" }, "*");');
     expect(template).toContain('if (data.type === "postlude:report-width") {');
-    expect(template).toContain('if (typeof data.available === "boolean" && typeof data.wide === "boolean") showWidth(data.available, data.wide);');
+    expect(template).toContain(
+      'if (typeof data.available === "boolean" && typeof data.wide === "boolean" && isNumber(data.column) && data.column > 0) showWidth(data.available, data.wide, data.column);',
+    );
+    const showWidth = template.slice(template.indexOf("const showWidth = "), template.indexOf("widthToggle?.addEventListener"));
+    const column = showWidth.indexOf('document.documentElement.style.setProperty("--column", ');
+    const offer = showWidth.indexOf('window.parent.postMessage({ type: "postlude:report-width-control" }, "*");');
+    // The report takes the column before it says it has a button, so Postlude never widens a report whose sections would still grow with the frame.
+    expect(column).toBeGreaterThan(-1);
+    expect(offer).toBeGreaterThan(column);
+    expect(template.split('"postlude:report-width-control"')).toHaveLength(2);
     expect(template).toContain("widthToggle.hidden = !available;");
     expect(template).toContain('{ type: "postlude:report-width-request", wide: widthToggle.dataset.wide !== "true" }');
+  });
+
+  test("keeps a shown tooltip by its target in every frame while Postlude widens or narrows the report", () => {
+    // A resize event can reach a frame's document an animation frame after its width has changed, and the tooltip would trail its target for that frame.
+    expect(template).toContain("new ResizeObserver(placeAgain).observe(document.documentElement);");
+    expect(template).not.toContain('addEventListener("resize"');
   });
 
   test("leaves the pull requests' summaries to the agent", () => {
@@ -411,7 +425,10 @@ describe("renderTimeline", () => {
     expect(axisLabels(6)).toEqual(["04", "05", "06", "07", "08", "09"]);
     expect(axisLabels(12)).toEqual(["04", "05·", "06", "07·", "08", "09·", "10", "11·", "12", "13·", "14", "15·"]);
     expect(axisLabels(24)).toEqual(["04", "06·", "08", "10·", "12", "14·", "16", "18·", "20", "22·", "00", "02·"]);
-    expect(template).toMatch(/\.tl-ticks \.minor \{ display: none; \}[\s\S]*@media \(min-width: 1100px\) \{[^}]*\}\s*\.tl-ticks \.minor \{ display: block; \}/);
+    expect(template).toMatch(
+      /\.tl-ticks \.minor \{ opacity: 0; transition: opacity 200ms ease; \}[\s\S]*@media \(min-width: 1100px\) \{\s*\.tl-ticks \.minor \{ opacity: 1; \}/,
+    );
+    expect(template).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.tl-ticks \.minor \{ transition: none; \}/);
   });
 
   test(`joins a row's screen time across gaps shorter than ${MARK_GAP_MINUTES} minutes, and counts only the screen time`, () => {

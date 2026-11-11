@@ -52,9 +52,9 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--surface); color: var(--ink); }
   body { font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
-  /* Every section keeps a column of readable width, and the timeline may use the frame's full width. */
+  /* Every section keeps a column of readable width, and only the timeline may use the frame's full width. Postlude says how wide the report is in its text column (--column), and the column keeps that width when Postlude shows the frame wider, so only the timeline moves while the frame grows and shrinks. */
   main { max-width: 1480px; margin: 0 auto; padding: 24px 20px 32px; }
-  main > * { max-width: 720px; margin-inline: auto; }
+  main > *, main > .wide > :not(.timeline) { max-width: min(720px, var(--column, 760px) - 40px); margin-inline: auto; }
   main > .wide { max-width: none; }
   h1 { font-size: 22px; line-height: 1.25; font-weight: 600; margin: 0; }
   h2 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
@@ -112,14 +112,15 @@
   .tooltip { position: fixed; z-index: 1; pointer-events: none; max-width: min(420px, calc(100vw - 8px)); padding: 4px 8px; border-radius: 6px; background: var(--tooltip-surface); color: var(--tooltip-ink); font-size: 12px; }
   /* The timeline: rows for the parts, the screen time by area, events, and T3 Code threads by area; marks placed in percent of the drawn hours. */
   .timeline { font-size: 12px; }
-  .tl-row { display: grid; grid-template-columns: minmax(80px, 180px) 1fr; gap: 10px; align-items: center; }
+  /* The labels take more room as the timeline grows, without a step while Postlude widens the frame. */
+  .tl-row { display: grid; grid-template-columns: minmax(80px, clamp(180px, 180px + (100% - 620px) * 0.15, 240px)) 1fr; gap: 10px; align-items: center; }
   .tl-label { color: var(--ink-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tl-track { position: relative; height: 18px; border-bottom: 1px solid var(--line);
     background-image: linear-gradient(to right, var(--line) 1px, transparent 1px); background-size: calc(100% / var(--hours)) 100%; }
   .tl-axis .tl-ticks { position: relative; height: 16px; color: var(--ink-muted); }
   .tl-ticks span { position: absolute; transform: translateX(-50%); }
   .tl-ticks span:first-child { transform: none; }
-  .tl-ticks .minor { display: none; }
+  .tl-ticks .minor { opacity: 0; transition: opacity 200ms ease; }
   .tl-group { margin: 10px 0 2px; color: var(--ink-muted); }
   .tl-mark { position: absolute; top: 3px; height: 12px; min-width: 2px; }
   .tl-screen { background: var(--screen); }
@@ -149,9 +150,12 @@
   dl.facts dd { margin: 0; }
   dl.facts ul { margin: 0; padding-left: 18px; }
   dl.facts details { margin-top: 4px; }
+  /* The minor axis labels fade in once the frame is wide enough for them. */
   @media (min-width: 1100px) {
-    .tl-row { grid-template-columns: minmax(80px, 240px) 1fr; }
-    .tl-ticks .minor { display: block; }
+    .tl-ticks .minor { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tl-ticks .minor { transition: none; }
   }
   @media (max-width: 520px) {
     dl.facts { grid-template-columns: 1fr; gap: 2px; }
@@ -408,8 +412,11 @@
 
   const tooltip = document.querySelector(".tooltip");
   let tipTarget = null;
+  let tipOffset = { x: 0, y: 0 };
   const place = (target, x, y) => {
+    const box = target.getBoundingClientRect();
     tipTarget = target;
+    tipOffset = { x: x - box.left, y: y - box.top };
     tooltip.textContent = target.dataset.tip;
     tooltip.hidden = false;
     const width = tooltip.offsetWidth;
@@ -432,23 +439,30 @@
   };
   document.addEventListener("focusout", hideTooltip);
   document.addEventListener("pointerleave", hideTooltip);
+  // A shown tooltip stays by its target when the target's text changes, and when the target moves, as it does in the frame while Postlude widens it. The observer follows the width in the frame it changes in, where a resize event can come a frame late.
+  const placeAgain = () => {
+    if (tipTarget === null || tooltip.hidden) return;
+    const box = tipTarget.getBoundingClientRect();
+    place(tipTarget, box.left + tipOffset.x, box.top + tipOffset.y);
+  };
+  new ResizeObserver(placeAgain).observe(document.documentElement);
 
-  // A report with a width button says so, and Postlude widens only such a report. Postlude then says whether it can show the report wide, which needs a screen with room for it, and whether it does; a Postlude that says nothing never shows the button. A press asks Postlude for the other width, and the button changes when Postlude says the frame has.
+  // Postlude says how wide the report is in its text column, whether it can show the report wide, which needs a screen with room for it, and whether it does. The report keeps everything but the timeline at the column's width, and only then says it has a width button; Postlude widens only a report that has said so, so nothing else moves when the frame does. A Postlude that says nothing never shows the button. A press asks Postlude for the other width, and the button changes when Postlude says the frame has.
   const widthToggle = document.querySelector("[data-width-toggle]");
-  if (widthToggle) window.parent.postMessage({ type: "postlude:report-width-control" }, "*");
-  const showWidth = (available, wide) => {
+  let offeredWidth = false;
+  const showWidth = (available, wide, column) => {
+    document.documentElement.style.setProperty("--column", `${column}px`);
     if (!widthToggle) return;
     const label = wide ? "Narrow the timeline" : "Widen the timeline";
     widthToggle.hidden = !available;
     widthToggle.dataset.wide = String(wide);
     widthToggle.dataset.tip = label;
     widthToggle.setAttribute("aria-label", label);
-    if (tipTarget !== widthToggle || tooltip.hidden) return;
-    // The frame moves under a pointer that stays still, so only a button focused from the keyboard keeps its tooltip, with the new label.
-    if (available && widthToggle.matches(":focus-visible")) {
-      const box = widthToggle.getBoundingClientRect();
-      place(widthToggle, box.left, box.top);
-    } else tooltip.hidden = true;
+    if (tipTarget === widthToggle && !available) tooltip.hidden = true;
+    else if (tipTarget === widthToggle) placeAgain();
+    if (offeredWidth) return;
+    offeredWidth = true;
+    window.parent.postMessage({ type: "postlude:report-width-control" }, "*");
   };
   widthToggle?.addEventListener("click", () => {
     window.parent.postMessage({ type: "postlude:report-width-request", wide: widthToggle.dataset.wide !== "true" }, "*");
@@ -459,7 +473,7 @@
     const data = event.data;
     if (typeof data !== "object" || data === null) return;
     if (data.type === "postlude:report-width") {
-      if (typeof data.available === "boolean" && typeof data.wide === "boolean") showWidth(data.available, data.wide);
+      if (typeof data.available === "boolean" && typeof data.wide === "boolean" && isNumber(data.column) && data.column > 0) showWidth(data.available, data.wide, data.column);
       return;
     }
     if (data.type !== "postlude:day-metrics") return;
