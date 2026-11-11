@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildCollected } from "./day-report.ts";
-import { sources, WINDOW } from "./testing/fixtures.ts";
+import { sources, summary, WINDOW } from "./testing/fixtures.ts";
 
 const directory = mkdtempSync(join(tmpdir(), "wrap-cli-"));
 afterAll(() => rmSync(directory, { recursive: true, force: true }));
@@ -12,7 +12,8 @@ const collectedFile = join(directory, "collected.json");
 const collected = buildCollected(WINDOW, sources);
 writeFileSync(collectedFile, JSON.stringify(collected));
 
-const TEXT = JSON.stringify({ summary: "A calm day.", parts: ["A quiet morning.", "A quiet afternoon."] });
+const PART = { title: "Quiet", text: "You reviewed changes. You wrote tests." };
+const TEXT = JSON.stringify({ summary: "A calm day.", parts: [PART, PART] });
 
 const run = async (args: string[], stdin = "") => {
   const child = Bun.spawn([process.execPath, join(import.meta.dir, "wrap.ts"), ...args], { stdin: new Blob([stdin]), stdout: "pipe", stderr: "pipe" });
@@ -30,13 +31,39 @@ test("render prints the stdin for postlude agent-area put", async () => {
   expect(payload.reportHtml).toContain('<p class="summary">A calm day.</p>');
 });
 
-test("render refuses a summary with digits and a paragraph count that doesn't match the parts", async () => {
-  const digits = await run(["render", collectedFile, "--model", "claude-opus-5-5"], JSON.stringify({ summary: "Wrote 3 tests.", parts: ["A", "B"] }));
-  expect(digits.exitCode).toBe(1);
-  expect(JSON.parse(digits.stderr.split("\n")[0] ?? "").error).toMatch(/digits/);
-  const count = await run(["render", collectedFile, "--model", "claude-opus-5-5"], JSON.stringify({ summary: "A calm day.", parts: ["A"] }));
+test("render passes on no window title and no list of windows", async () => {
+  const result = await run(["render", collectedFile, "--model", "claude-opus-5-5"], TEXT);
+  expect(result.exitCode).toBe(0);
+  const payload = JSON.parse(result.stdout);
+  // The collected file holds some titles in its parts, so the test would notice if render passed them on.
+  expect(JSON.stringify(collected.reportInputs.parts)).toContain("Garden plan - Writer");
+  const keys = (value: unknown): string[] =>
+    typeof value === "object" && value !== null ? Object.entries(value).flatMap(([key, child]) => [key, ...keys(child)]) : [];
+  expect(keys(payload)).not.toContain("windows");
+  // Every made-up title and app id in the fixture; T3 Code's own and the redacted ones also appear in the report's own words.
+  const made = summary.windows
+    .flatMap((window) => [window.app, window.title])
+    .filter((text) => text !== null && !/^(T3 Code|t3code|com\.t3tools|<redacted>)/.test(text));
+  expect(made).toContain("Garden plan - Writer");
+  for (const text of new Set(made)) expect(result.stdout).not.toContain(text);
+  for (const text of new Set(made)) expect(payload.reportHtml).not.toContain(text);
+});
+
+test("render passes on no mail subject and no message of a thread", async () => {
+  const result = await run(["render", collectedFile, "--model", "claude-opus-5-5"], TEXT);
+  expect(result.exitCode).toBe(0);
+  const subjects = collected.reportInputs.sentMail.items.map((mail) => mail.subject);
+  const messages = sources.t3.ok ? sources.t3.value.messages.map((message) => message.text.split("\n")[0] ?? "") : [];
+  expect(subjects).toContain("Garden plan for Saturday");
+  expect(messages).toContain("Merge it once the checks pass.");
+  expect(JSON.stringify(collected.conversations)).toContain("Merge it once the checks pass.");
+  for (const text of [...subjects, ...messages]) expect(result.stdout).not.toContain(text);
+});
+
+test("render refuses text whose part count doesn't match the day's", async () => {
+  const count = await run(["render", collectedFile, "--model", "claude-opus-5-5"], JSON.stringify({ summary: "A calm day.", parts: [PART] }));
   expect(count.exitCode).toBe(1);
-  expect(JSON.parse(count.stderr.split("\n")[0] ?? "").error).toMatch(/one paragraph per entry of reportInputs\.parts/);
+  expect(JSON.parse(count.stderr.split("\n")[0] ?? "").error).toMatch(/one entry per entry of reportInputs\.parts/);
 });
 
 test("render refuses a collected file of another metrics version", async () => {

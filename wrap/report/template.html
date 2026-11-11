@@ -23,6 +23,7 @@
     --scattered: #a49d94;
     --screen: #2e8b57;
     --agent: #9b8573;
+    --prompt: #2a1f19;
     --appointment: #4f6fa8;
     --warning: #fab219;
     --warning-ink: #0b0b0b;
@@ -41,6 +42,7 @@
     --scattered: #7d726a;
     --screen: #2fae78;
     --agent: #8c7b6d;
+    --prompt: #ece7dd;
     --appointment: #7f9fd6;
     --warning: #fab219;
     --warning-ink: #0b0b0b;
@@ -50,7 +52,10 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--surface); color: var(--ink); }
   body { font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
-  main { max-width: 760px; margin: 0 auto; padding: 24px 20px 32px; }
+  /* Every section keeps a column of readable width, and the timeline may use the frame's full width. */
+  main { max-width: 1480px; margin: 0 auto; padding: 24px 20px 32px; }
+  main > * { max-width: 720px; margin-inline: auto; }
+  main > .wide { max-width: none; }
   h1 { font-size: 22px; line-height: 1.25; font-weight: 600; margin: 0; }
   h2 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
   h3 { font-size: 13px; font-weight: 600; margin: 14px 0 4px; }
@@ -97,37 +102,51 @@
   .empty { margin: 0; color: var(--ink-muted); font-size: 13px; }
   .section-note { margin: -6px 0 10px; }
   .tooltip { position: fixed; z-index: 1; pointer-events: none; max-width: min(420px, calc(100vw - 8px)); padding: 4px 8px; border-radius: 6px; background: var(--tooltip-surface); color: var(--tooltip-ink); font-size: 12px; }
-  /* The timeline: one row per area and project, marks placed in percent of the drawn hours. */
+  /* The timeline: rows for the parts, the screen time by area, events, and T3 Code threads by area; marks placed in percent of the drawn hours. */
   .timeline { font-size: 12px; }
-  .tl-row { display: grid; grid-template-columns: minmax(80px, 140px) 1fr; gap: 10px; align-items: center; }
+  .tl-row { display: grid; grid-template-columns: minmax(80px, 180px) 1fr; gap: 10px; align-items: center; }
   .tl-label { color: var(--ink-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tl-track { position: relative; height: 18px; border-bottom: 1px solid var(--line);
     background-image: linear-gradient(to right, var(--line) 1px, transparent 1px); background-size: calc(100% / var(--hours)) 100%; }
   .tl-axis .tl-ticks { position: relative; height: 16px; color: var(--ink-muted); }
   .tl-ticks span { position: absolute; transform: translateX(-50%); }
   .tl-ticks span:first-child { transform: none; }
+  .tl-ticks .minor { display: none; }
   .tl-group { margin: 10px 0 2px; color: var(--ink-muted); }
   .tl-mark { position: absolute; top: 3px; height: 12px; min-width: 2px; }
   .tl-screen { background: var(--screen); }
   .tl-focus { border: 2px solid var(--ink); border-radius: 3px; top: 1px; height: 16px; }
-  .tl-agent { background: var(--agent); }
-  /* A project row has two lanes: agents working above, you in the project below. */
-  .tl-projects .tl-agent { top: 2px; height: 7px; }
-  .tl-projects .tl-screen { top: 10px; height: 6px; }
+  .tl-run { top: 5px; height: 8px; background: var(--agent); border-radius: 2px; }
+  .tl-prompt, .tl-phone { top: 5px; width: 8px; height: 8px; min-width: 0; margin-left: -4px; border-radius: 50%; }
+  .tl-prompt { background: var(--prompt); }
+  .tl-phone { border: 1.5px solid var(--prompt); background: var(--surface); }
   .tl-appointment { background: var(--appointment); border-radius: 3px; }
   .tl-tick { width: 2px; top: 1px; height: 16px; background: var(--ink); }
+  .tl-mail { width: 2px; top: 5px; height: 8px; background: var(--ink-muted); }
+  .tl-part { top: 1px; height: 16px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-sunken); color: var(--ink-secondary); font-size: 11px; line-height: 14px; text-align: center; overflow: hidden; }
+  .tl-divider { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--ink-muted); opacity: .5; }
   .swatch.tl-focus { background: none; border-width: 1px; }
-  .swatch.tl-agent, .swatch.tl-tick { height: 10px; }
-  .swatch.tl-tick { width: 2px; }
+  .swatch.tl-tick, .swatch.tl-mail { width: 2px; height: 10px; }
+  .swatch.tl-prompt, .swatch.tl-phone { width: 8px; height: 8px; margin: 0; }
   details.prs { margin: 0; font-size: inherit; color: inherit; }
   details.prs summary h2 { display: inline; margin: 0 12px 0 0; }
-  ol.parts { margin: 0; padding: 0; list-style: none; }
-  ol.parts li { display: grid; grid-template-columns: 96px 1fr; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
-  ol.parts li:last-child { border-bottom: none; }
-  ol.parts p { margin: 0; }
-  .part-time { color: var(--ink-secondary); }
+  ol.arcs { display: flex; flex-direction: column; gap: 18px; margin: 0; padding: 0; list-style: none; }
+  .arc h3 { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; margin: 0; font-size: 14px; }
+  .arc .no { display: inline-grid; place-items: center; flex: none; width: 18px; height: 18px; border: 1px solid var(--line); border-radius: 50%; font-size: 11px; font-weight: 400; color: var(--ink-muted); transform: translateY(-1px); }
+  .arc .when { font-size: 12px; font-weight: 400; color: var(--ink-muted); white-space: nowrap; }
+  .arc p { margin: 4px 0 0 26px; max-width: 66ch; }
+  .arc p + p { margin-top: 10px; }
+  dl.facts { display: grid; grid-template-columns: 96px 1fr; gap: 10px 16px; margin: 0; }
+  dl.facts dt { font-weight: 600; font-size: 13px; }
+  dl.facts dd { margin: 0; }
+  dl.facts ul { margin: 0; padding-left: 18px; }
+  dl.facts details { margin-top: 4px; }
+  @media (min-width: 1100px) {
+    .tl-row { grid-template-columns: minmax(80px, 240px) 1fr; }
+    .tl-ticks .minor { display: block; }
+  }
   @media (max-width: 520px) {
-    ol.parts li { grid-template-columns: 1fr; gap: 2px; }
+    dl.facts { grid-template-columns: 1fr; gap: 2px; }
   }
   @media (forced-colors: active) {
     .bar, .split > div, .swatch, .tl-mark { forced-color-adjust: none; border: 1px solid CanvasText; }
@@ -156,9 +175,9 @@
       <p class="tile-note">Short stretches: <span data-metric="scatteredMinutes"></span></p>
     </div>
     <div class="tile">
-      <p class="tile-label">Off the computer</p>
+      <p class="tile-label">Tracked time</p>
       <p class="tile-value" data-metric="offComputerMinutes"></p>
-      <p class="tile-note">Tracked in Super Productivity</p>
+      <p class="tile-note">In Super Productivity</p>
     </div>
     <div class="tile">
       <p class="tile-label">Appointments</p>
@@ -174,11 +193,14 @@
       <p class="tile-value" data-metric="sentMails" data-view="total"></p>
       <p class="tile-note" data-metric="sentMails" data-view="note"></p>
     </div>
+    <!--wrap:tiles-->
   </section>
 
   <!--wrap:timeline-->
 
   <!--wrap:parts-->
+
+  <!--wrap:facts-->
 
   <section>
     <h2>Focus and short stretches</h2>

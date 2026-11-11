@@ -91,6 +91,8 @@ describe("activity", () => {
     expect(() => parseSummary({ ...summary, summaryVersion: 7 }, DAY)).toThrow(/summaryVersion 7/);
     // A host whose activity-digest predates the timeline by category and T3 project.
     expect(() => parseSummary({ ...summary, summaryVersion: 8 }, DAY)).toThrow(/summaryVersion 8/);
+    // A host whose activity-digest predates window titles.
+    expect(() => parseSummary({ ...summary, summaryVersion: 9 }, DAY)).toThrow(/summaryVersion 9/);
     expect(() => parseSummary(summary, "2026-10-28")).toThrow(/not 2026-10-28/);
     const { dayMetrics, problems } = metrics({ summary: { ok: true, value: { ...summary, summaryVersion: 1 } } });
     expect(dayMetrics.activeMinutes).toBeNull();
@@ -114,6 +116,11 @@ describe("activity", () => {
     expect(() => parseSummary(withoutIntervals, DAY)).toThrow(/activeIntervals is not a list/);
   });
 
+  test("rejects a category without the T3 projects filed under it, which the metrics then leave out", () => {
+    const categories = summary.categories.map(({ t3Projects: _, ...category }) => category);
+    expect(() => parseSummary({ ...summary, categories }, DAY)).toThrow(/categories\[0\] needs an id, a label, minutes, and a list of T3 projects/);
+  });
+
   test("reads the timeline and focus blocks as epoch milliseconds", () => {
     const parsed = parseSummary(summary, DAY);
     expect(parsed.timeline[0]).toEqual({
@@ -126,6 +133,18 @@ describe("activity", () => {
     expect(parsed.focusBlocks).toEqual([{ start: Date.parse("2026-10-29T08:12:00+01:00"), end: Date.parse("2026-10-29T11:32:00+01:00"), category: "code" }]);
     expect(() => parseSummary({ ...summary, timeline: undefined }, DAY)).toThrow(/timeline is not a list/);
     expect(() => parseSummary({ ...summary, timeline: [{ ...summary.timeline[0], project: 1 }] }, DAY)).toThrow(/timeline\[0\]\.project/);
+  });
+
+  test("reads the windows, and rejects a summary whose windows are malformed", () => {
+    expect(parseSummary(summary, DAY).windows.at(5)).toEqual({
+      start: Date.parse("2026-10-29T13:00:00+01:00"),
+      end: Date.parse("2026-10-29T14:00:00+01:00"),
+      app: "accounts.exe",
+      title: null,
+    });
+    expect(() => parseSummary({ ...summary, windows: undefined }, DAY)).toThrow(/windows is not a list/);
+    expect(() => parseSummary({ ...summary, windows: [{ ...summary.windows[0], app: 1 }] }, DAY)).toThrow(/windows\[0\]\.app/);
+    expect(() => parseSummary({ ...summary, windows: [{ ...summary.windows[0], end: "later" }] }, DAY)).toThrow(/windows\[0\] needs a start and an end/);
   });
 
   test("leaves the off-screen appointment time null unless every host is complete", () => {
@@ -143,7 +162,7 @@ describe("activity", () => {
   });
 });
 
-describe("off-computer time", () => {
+describe("tracked time", () => {
   test("counts all time tracked in Super Productivity, each task without subtasks once", () => {
     if (!sources.sp.ok) throw new Error("fixture");
     // Garden's own total repeats its subtasks', so only Dig and Plant count; Walk's time on the day before doesn't.
@@ -175,7 +194,16 @@ describe("sent mail", () => {
       value: [
         {
           mailbox: "c@example.com",
-          reading: { ok: true as const, value: { sentAt: ["2026-10-29T20:00:00+01:00", "2026-10-28T19:00:00+01:00"], limitReached: true } },
+          reading: {
+            ok: true as const,
+            value: {
+              sent: [
+                { at: "2026-10-29T20:00:00+01:00", subject: "Today" },
+                { at: "2026-10-28T19:00:00+01:00", subject: "Yesterday" },
+              ],
+              limitReached: true,
+            },
+          },
         },
       ],
     };
@@ -186,7 +214,21 @@ describe("sent mail", () => {
   test("marks unreadable send dates as partial", () => {
     const mail = {
       ok: true as const,
-      value: [{ mailbox: "d@example.com", reading: { ok: true as const, value: { sentAt: ["", "2026-10-29T20:00:00+01:00"], limitReached: false } } }],
+      value: [
+        {
+          mailbox: "d@example.com",
+          reading: {
+            ok: true as const,
+            value: {
+              sent: [
+                { at: "", subject: "No date" },
+                { at: "2026-10-29T20:00:00+01:00", subject: "Today" },
+              ],
+              limitReached: false,
+            },
+          },
+        },
+      ],
     };
     expect(metrics({ mail }).dayMetrics.sentMails).toEqual([{ mailbox: "d@example.com", count: 1 }]);
     expect(coverageOf({ mail }, "mail")).toEqual([{ source: "mail:d@example.com", status: "partial" }]);

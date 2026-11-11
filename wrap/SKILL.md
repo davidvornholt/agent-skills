@@ -9,7 +9,7 @@ argument-hint: [yesterday | YYYY-MM-DD]
 
 A journal day runs from 04:00 to 04:00 Europe/Berlin. Postlude keeps the user's journal text, scripture, and rating in their own area, which this skill never writes.
 
-You write only the summary and a paragraph for each part of the day. Don't compute, estimate, or correct numbers yourself, because the scripts produce every number and Postlude compares days only when the same script version produced them.
+You write the summary and the text for each part of the day. The scripts produce every figure, so take any number you mention from the collected data rather than computing it.
 
 ## Run it
 
@@ -21,21 +21,44 @@ You write only the summary and a paragraph for each part of the day. Don't compu
    bun ~/.claude/skills/wrap/scripts/wrap.ts collect "$DAY" > "/tmp/wrap-$DAY.json"
    ```
 
-3. Read the collected day without the timeline, which only the renderer draws: `jq 'del(.timeline)' "/tmp/wrap-$DAY.json"`. Look at `reportInputs` and `problems`. If the user can fix a missing source now, such as Super Productivity running on neither host, say so and offer to collect again. Otherwise continue, because the report shows a missing source as a gap rather than as zero. On the X1, collect runs this skill's `t3` command on the z890 over SSH, so a usage error under "T3 Code unavailable" means the z890's copy of the skill is older.
-4. Write the report text:
-   - `summary`: two to four plain sentences on what the day held.
-   - `parts`: one paragraph per entry of `reportInputs.parts`, in the same order. Describe what happened on the computer in that part, from its areas, projects and agent threads, and from the tasks, threads, pull requests and appointments whose `part` is that entry's index. A part's time range covers everything placed in it. With no parts, the list is empty.
+3. Read the collected day without the timeline, which only the renderer draws, and without the conversations, which come next: `jq 'del(.timeline, .conversations)' "/tmp/wrap-$DAY.json"`. Look at `reportInputs` and `problems`. If the user can fix a missing source now, such as Super Productivity running on neither host, say so and offer to collect again. Otherwise continue, because the report shows a missing source as a gap rather than as zero.
 
-   Describe only what the data shows. Don't rate, judge, or advise, and don't guess why something happened, how it felt, or what happened away from the computer, because the user writes that in the journal. Don't use digits: the report prints every time and number from the collected data, and `render` rejects text with digits.
+   Then read all of `conversations`: the day's T3 Code threads with their messages of the day, which are the user's prompts, the agents' replies, and the reports of the tasks the agents delegated. They are long, so write them to a text file and read it in pieces:
+
+   ```sh
+   jq -r '.conversations.items[] | "# \(.title) [\(.id)] (\(.project), started by \(.startedBy // "unknown"), parts: \(.parts | map(tostring) | join(", ")))", .messages[], ""' "/tmp/wrap-$DAY.json" > "/tmp/wrap-$DAY.txt"
+   ```
+
+4. Write a `summary` in a few short paragraphs about what the parts can't show:
+
+   - the shape of the day: start and stop, the main stretches, and how the screen time split between steering agents (`t3Minutes`) and everything else the user did, which the windows show, and how long agents ran alone (`agentsAloneMinutes`)
+   - patterns worth noticing
+   - at most one or two outcomes that defined the day
+
+   You may compare with the previous days' reports, which `postlude agent-area get <date>` prints.
+
+   For each entry of `reportInputs.parts`, in order, write a short `title` and a `text` about that entry and everything whose `part` is its index. A `text` may hold several short paragraphs, for example one per thread of work. Separate paragraphs with a blank line.
+
+   Tell a reader who no longer remembers the day what happened, concretely: what the user asked for, what the agents found, built or decided, and what came of it. A ticked-off task or a thread that was worked on isn't news by itself, and tasks mainly show what the work was about. Look up whatever else you need to understand the day.
+
+   The report looks back. A part may say where a thread of work ended, such as a fix that is in a pull request, but nothing reads as a to-do for the user, because the brief skill covers what's ahead.
+
+   Say who started each thing: the user by hand, agents the user asked from the desk or the phone, or agents on their own, such as scheduled tasks, the night shift, the curator, and delegated work. `startedBy` and the message authors tell them apart.
+
+   Name threads with unclear T3 titles in `threads`, by id, and use those names in your text.
+
+   Address the user as "you", because they read the report themselves. It's their day, not the agents', so write agent work as work they had agents do. Describe the user's `windows` and `sentMail` in your own words, never by a window's title, an app id or a mail subject, because the report is stored.
+
+   Don't rate, judge, or advise, and don't guess why something happened, how it felt, or what happened away from the computer, because the user adds that after reading the report.
 5. Render and store. Re-running for a day replaces only the agent area, so it's safe after fixing a source.
 
    ```sh
    bun ~/.claude/skills/wrap/scripts/wrap.ts render "/tmp/wrap-$DAY.json" --model <your model id> <<'EOF' | postlude agent-area put "$DAY"
-   {"summary": "<summary>", "parts": ["<first part>", "<second part>"]}
+   {"summary": "<paragraph>\n\n<paragraph>", "parts": [{"title": "<title>", "text": "<paragraph>\n\n<paragraph>"}], "threads": {"<thread id>": "<name>"}}
    EOF
    ```
 
-6. Check with `postlude agent-area get "$DAY"`, then tell the user the report is in Postlude and which sources were missing.
+6. Check with `postlude agent-area get "$DAY"`, and delete the collected files, which hold window titles, mail subjects and the conversations: `rm "/tmp/wrap-$DAY.json" "/tmp/wrap-$DAY.txt"`. Then tell the user the report is in Postlude and which sources were missing.
 
 ## Changing the metrics or report
 
