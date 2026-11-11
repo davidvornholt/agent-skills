@@ -33,7 +33,6 @@ You write the summary and the text for each part of the day. The scripts produce
 
    - the shape of the day: start and stop, the main stretches, and how the screen time split between steering agents (`t3Minutes`) and everything else the user did, which the windows show, and how long agents ran alone (`agentsAloneMinutes`)
    - patterns worth noticing
-   - what is waiting for the user
    - at most one or two outcomes that defined the day
 
    You may compare with the previous days' reports, which `postlude agent-area get <date>` prints.
@@ -41,6 +40,8 @@ You write the summary and the text for each part of the day. The scripts produce
    For each entry of `reportInputs.parts`, in order, write a short `title` and a `text` about that entry and everything whose `part` is its index. A `text` may hold several short paragraphs, for example one per thread of work. Separate paragraphs with a blank line.
 
    Tell a reader who no longer remembers the day what happened, concretely: what the user asked for, what the agents found, built or decided, and what came of it. A ticked-off task or a thread that was worked on isn't news by itself, and tasks mainly show what the work was about. Look up whatever else you need to understand the day.
+
+   The report looks back. A part may say where a thread of work ended, such as a fix that is in a pull request, but nothing reads as a to-do for the user, because the brief skill covers what's ahead.
 
    Say who started each thing: the user by hand, agents the user asked from the desk or the phone, or agents on their own, such as scheduled tasks, the night shift, the curator, and delegated work. `startedBy` and the message authors tell them apart.
 

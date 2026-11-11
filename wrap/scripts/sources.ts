@@ -12,9 +12,6 @@ export type SpTask = {
   /** The day the task is planned for, as YYYY-MM-DD, or the time it is due at, in epoch milliseconds. */
   readonly dueDay: string | null;
   readonly dueWithTime: number | null;
-  /** The task's deadline, kept apart from its due day, as a day or a time. */
-  readonly deadlineDay: string | null;
-  readonly deadlineWithTime: number | null;
   /** When the user marked it as won't do, which also marks it done. */
   readonly wontDoOn: number | null;
 };
@@ -75,12 +72,8 @@ export type T3Thread = {
 export type T3PullRequest = {
   readonly repository: string;
   readonly number: number;
-  readonly title: string;
   readonly linkedAt: string;
-  readonly state: "open" | "merged" | "closed";
-  readonly isDraft: boolean;
   readonly mergedAt: string | null;
-  readonly closedAt: string | null;
 };
 
 /**
@@ -101,7 +94,7 @@ export type T3DayThread = {
 };
 
 /** A run of an agent, which ran from start to end; a run still going ends at the time it was read. */
-export type T3Run = { readonly threadId: string; readonly start: string; readonly end: string; readonly running: boolean };
+export type T3Run = { readonly threadId: string; readonly start: string; readonly end: string };
 
 /** A message the user wrote in T3 Code, on the computer or the phone; T3's own messages and agents' don't count. */
 export type T3Prompt = { readonly threadId: string; readonly at: string; readonly fromPhone: boolean };

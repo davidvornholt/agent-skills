@@ -146,28 +146,6 @@ test("builds the parts and lists of a day with all sources", () => {
       ],
     },
     kontor: { status: "missing", attempted: null, approvalNeeded: null },
-    looseEnds: {
-      waitingPrs: {
-        status: "complete",
-        // Not the pull request linked only after the day, nor those merged or closed within it.
-        items: [
-          { repository: "davidvornholt/nix-config", number: 5, ref: "nix-config#5", title: "Build at night", isDraft: true, thread: "Night build" },
-          { repository: "davidvornholt/pim", number: 3, ref: "pim#3", title: "End of day belongs to the next day", isDraft: false, thread: "Fix the parser" },
-          { repository: "davidvornholt/postlude", number: 14, ref: "postlude#14", title: "Parse dates", isDraft: false, thread: "Fix the parser" },
-        ],
-      },
-      dueTasks: {
-        status: "complete",
-        // Not the task done before the day ended, the one marked won't do, or the one due after the next day.
-        items: [
-          { title: "Pay the bill", project: "Home", day: "2026-10-27", kind: "due", when: "overdue" },
-          { title: "Call the plumber", project: "Home", day: "2026-10-29", kind: "due", when: "today" },
-          { title: "Next day", project: "Home", day: "2026-10-29", kind: "due", when: "today" },
-          { title: "Pack", project: "Home", day: "2026-10-30", kind: "deadline", when: "tomorrow" },
-        ],
-      },
-      runningThreads: { status: "complete", items: [{ title: "Watch the deploy", project: "nix-config" }] },
-    },
     facts: {
       prompts: { count: 4, fromPhone: 1, threads: 2 },
       // Each thread's agent time adds up, so overlapping threads count twice; the time any agent ran counts them once.
@@ -205,9 +183,7 @@ test("writes a pull request's ref with its owner when two of the day's repositor
       ],
     },
   };
-  const { landedPrs, looseEnds } = inputs({ github });
-  expect(landedPrs.items.map((pr) => pr.ref)).toEqual(["davidvornholt/postlude#12", "someone/postlude#4"]);
-  expect(looseEnds.waitingPrs.items.map((pr) => pr.ref)).toEqual(["nix-config#5", "pim#3", "davidvornholt/postlude#14"]);
+  expect(inputs({ github }).landedPrs.items.map((pr) => pr.ref)).toEqual(["davidvornholt/postlude#12", "someone/postlude#4"]);
 });
 
 test("counts a reply only when the user prompted before an agent started in the thread again", () => {
@@ -216,8 +192,8 @@ test("counts a reply only when the user prompted before an agent started in the 
   const value = {
     ...t3,
     runs: [
-      { threadId: "t-parser", start: "2026-10-29T10:00:00.000Z", end: "2026-10-29T10:10:00.000Z", running: false },
-      { threadId: "t-parser", start: "2026-10-29T10:20:00.000Z", end: "2026-10-29T10:30:00.000Z", running: false },
+      { threadId: "t-parser", start: "2026-10-29T10:00:00.000Z", end: "2026-10-29T10:10:00.000Z" },
+      { threadId: "t-parser", start: "2026-10-29T10:20:00.000Z", end: "2026-10-29T10:30:00.000Z" },
     ],
     // Sent while the second run was going, so it doesn't answer the first.
     prompts: [{ threadId: "t-parser", at: "2026-10-29T10:25:00.000Z", fromPhone: false }],
@@ -243,9 +219,6 @@ test("marks lists of unreachable sources as missing", () => {
     lists.closedPrs,
     lists.appointments,
     lists.trackedTasks,
-    lists.looseEnds.waitingPrs,
-    lists.looseEnds.dueTasks,
-    lists.looseEnds.runningThreads,
     lists.facts.leadTimes,
   ]) {
     expect(list).toEqual({ status: "missing", items: [] });

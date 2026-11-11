@@ -63,17 +63,12 @@ const task = (fields: Partial<SpTask> & Pick<SpTask, "id" | "title">): SpTask =>
   timeSpentOnDay: {},
   dueDay: null,
   dueWithTime: null,
-  deadlineDay: null,
-  deadlineWithTime: null,
   wontDoOn: null,
   ...fields,
 });
 
-const pullRequest = (fields: Partial<T3PullRequest> & Pick<T3PullRequest, "repository" | "number" | "title" | "linkedAt">): T3PullRequest => ({
-  state: "open",
-  isDraft: false,
+const pullRequest = (fields: Partial<T3PullRequest> & Pick<T3PullRequest, "repository" | "number" | "linkedAt">): T3PullRequest => ({
   mergedAt: null,
-  closedAt: null,
   ...fields,
 });
 
@@ -109,12 +104,8 @@ export const spTasks: SpTask[] = [
   task({ id: "late", title: "Shop", isDone: true, doneOn: at("2026-10-30T03:59:59+01:00"), timeSpentOnDay: { [DAY]: minutes(5) } }),
   // Due at a time on the day and done only after it ended, so it was still open at the end.
   task({ id: "next-day", title: "Next day", isDone: true, doneOn: at("2026-10-30T04:00:00+01:00"), dueWithTime: at("2026-10-29T15:00:00+01:00") }),
-  task({ id: "day-before", title: "Day before", isDone: true, doneOn: at("2026-10-28T20:00:00+01:00"), dueDay: "2026-10-27" }),
-  task({ id: "bill", title: "Pay the bill", dueDay: "2026-10-27" }),
+  task({ id: "day-before", title: "Day before", isDone: true, doneOn: at("2026-10-28T20:00:00+01:00") }),
   task({ id: "call", title: "Call the plumber", dueDay: DAY }),
-  // The deadline comes before the day it's planned for, so it counts.
-  task({ id: "pack", title: "Pack", dueDay: "2026-11-02", deadlineDay: "2026-10-30" }),
-  task({ id: "later", title: "Later", dueDay: "2026-10-31" }),
   task({ id: "skipped", title: "Skipped", isDone: true, dueDay: DAY, wontDoOn: at("2026-10-29T09:00:00+01:00") }),
 ];
 
@@ -233,9 +224,7 @@ export const sources: Sources = {
           project: "~/dev/nix-config",
           firstPromptAt: "2026-10-28T20:00:00.000Z",
           startedBy: "phone",
-          pullRequests: [
-            pullRequest({ repository: "davidvornholt/nix-config", number: 5, title: "Build at night", linkedAt: "2026-10-28T21:00:00.000Z", isDraft: true }),
-          ],
+          pullRequests: [],
         },
         {
           id: "t-parser",
@@ -244,17 +233,8 @@ export const sources: Sources = {
           firstPromptAt: "2026-10-29T08:20:00.000Z",
           startedBy: "user",
           pullRequests: [
-            pullRequest({ repository: "davidvornholt/postlude", number: 14, title: "Parse dates", linkedAt: "2026-10-29T09:00:00.000Z" }),
-            // Merged at the end of the journal day, so it was still open then.
-            pullRequest({
-              repository: "davidvornholt/pim",
-              number: 3,
-              title: "End of day belongs to the next day",
-              linkedAt: "2026-10-29T09:30:00.000Z",
-              state: "merged",
-              mergedAt: "2026-10-30T03:00:00Z",
-            }),
-            pullRequest({ repository: "davidvornholt/postlude", number: 15, title: "Linked the next day", linkedAt: "2026-10-30T05:00:00.000Z" }),
+            // Merged as the journal day ended, so it belongs to the next day.
+            pullRequest({ repository: "davidvornholt/pim", number: 3, linkedAt: "2026-10-29T09:30:00.000Z", mergedAt: "2026-10-30T03:00:00Z" }),
           ],
         },
         {
@@ -264,22 +244,8 @@ export const sources: Sources = {
           firstPromptAt: "2026-10-29T13:50:00.000Z",
           startedBy: "user",
           pullRequests: [
-            pullRequest({
-              repository: "davidvornholt/sp-cli",
-              number: 7,
-              title: "Afternoon",
-              linkedAt: "2026-10-29T14:10:00.000Z",
-              state: "merged",
-              mergedAt: "2026-10-29T15:00:00Z",
-            }),
-            pullRequest({
-              repository: "davidvornholt/sp-cli",
-              number: 8,
-              title: "Try a second parser",
-              linkedAt: "2026-10-29T10:00:00.000Z",
-              state: "closed",
-              closedAt: "2026-10-29T10:45:00Z",
-            }),
+            pullRequest({ repository: "davidvornholt/sp-cli", number: 7, linkedAt: "2026-10-29T14:10:00.000Z", mergedAt: "2026-10-29T15:00:00Z" }),
+            pullRequest({ repository: "davidvornholt/sp-cli", number: 8, linkedAt: "2026-10-29T10:00:00.000Z" }),
           ],
         },
         { id: "t-docs", title: "Write docs", project: "~/dev/sp-cli", firstPromptAt: null, startedBy: "thread", pullRequests: [] },
@@ -287,14 +253,14 @@ export const sources: Sources = {
       ],
       runs: [
         // Began before the journal day, so the timeline clips it to the day's start.
-        { threadId: "t-night", start: "2026-10-29T02:30:00.000Z", end: "2026-10-29T03:30:00.000Z", running: false },
-        { threadId: "t-parser", start: "2026-10-29T08:30:00.000Z", end: "2026-10-29T09:15:00.000Z", running: false },
-        { threadId: "t-parser", start: "2026-10-29T09:25:00.000Z", end: "2026-10-29T10:00:00.000Z", running: false },
-        { threadId: "t-tidy", start: "2026-10-29T14:00:00.000Z", end: "2026-10-29T14:40:00.000Z", running: false },
-        { threadId: "t-tidy", start: "2026-10-29T14:45:00.000Z", end: "2026-10-29T15:00:00.000Z", running: false },
-        { threadId: "t-docs", start: "2026-10-29T14:20:00.000Z", end: "2026-10-29T14:30:00.000Z", running: false },
+        { threadId: "t-night", start: "2026-10-29T02:30:00.000Z", end: "2026-10-29T03:30:00.000Z" },
+        { threadId: "t-parser", start: "2026-10-29T08:30:00.000Z", end: "2026-10-29T09:15:00.000Z" },
+        { threadId: "t-parser", start: "2026-10-29T09:25:00.000Z", end: "2026-10-29T10:00:00.000Z" },
+        { threadId: "t-tidy", start: "2026-10-29T14:00:00.000Z", end: "2026-10-29T14:40:00.000Z" },
+        { threadId: "t-tidy", start: "2026-10-29T14:45:00.000Z", end: "2026-10-29T15:00:00.000Z" },
+        { threadId: "t-docs", start: "2026-10-29T14:20:00.000Z", end: "2026-10-29T14:30:00.000Z" },
         // Still running when T3 was read, so the timeline clips it to the day's end.
-        { threadId: "t-deploy", start: "2026-10-30T02:00:00.000Z", end: "2026-10-30T06:00:00.000Z", running: true },
+        { threadId: "t-deploy", start: "2026-10-30T02:00:00.000Z", end: "2026-10-30T06:00:00.000Z" },
       ],
       prompts: [
         { threadId: "t-parser", at: "2026-10-29T08:20:00.000Z", fromPhone: false },

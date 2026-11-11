@@ -116,8 +116,6 @@ const parseTask = (item: unknown): SpTask => {
     timeSpentOnDay,
     dueDay: stringOr(item.dueDay, null),
     dueWithTime: numberOr(item.dueWithTime, null),
-    deadlineDay: stringOr(item.deadlineDay, null),
-    deadlineWithTime: numberOr(item.deadlineWithTime, null),
     wontDoOn: numberOr(item.wontDoOn, null),
   };
 };
@@ -375,8 +373,6 @@ export const homeRelative = (path: string, home: string): string => (path === ho
 // T3 also stores messages it writes for the user, with creationSource "server"; only what the user typed on the computer ("web") or the phone ("mobile") is a prompt.
 const PROMPTS = `m.role = 'user' and json_extract(m.payload_json, '$.createdBy') = 'user' and json_extract(m.payload_json, '$.creationSource') in ('web', 'mobile')`;
 
-const PR_STATES = new Set(["open", "merged", "closed"]);
-
 /** Who wrote a message, or null for T3's notices that background work finished and the messages it writes for the user. */
 type AuthorRow = Pick<MessageRow, "role" | "created_by" | "source" | "delegated" | "scheduled">;
 
@@ -399,16 +395,11 @@ const parsePullRequest = (item: unknown): T3PullRequest => {
   if (!isRecord(item) || typeof item.repository !== "string" || typeof item.number !== "number" || typeof item.linkedAt !== "string") {
     throw new Error("a pull request has no repository, number, or link time");
   }
-  if (typeof item.state !== "string" || !PR_STATES.has(item.state)) throw new Error("a pull request has no state");
   return {
     repository: item.repository,
     number: item.number,
-    title: stringOr(item.title, ""),
     linkedAt: item.linkedAt,
-    state: item.state as T3PullRequest["state"],
-    isDraft: item.isDraft === true,
     mergedAt: stringOr(item.mergedAt, null),
-    closedAt: stringOr(item.closedAt, null),
   };
 };
 
@@ -539,7 +530,6 @@ export const readLocalT3 = async (window: DayWindow, nowMs: number): Promise<Rea
       threadId: row.thread_id,
       start: row.started_at,
       end: row.completed_at ?? new Date(nowMs).toISOString(),
-      running: row.completed_at === null,
     }))
     .toSorted((a, b) => compareText(a.start, b.start) || compareText(a.threadId, b.threadId));
   const prompts: T3Prompt[] = promptRows
@@ -582,7 +572,7 @@ const parseRun = (item: unknown): T3Run => {
   if (!isRecord(item) || typeof item.threadId !== "string" || typeof item.start !== "string" || typeof item.end !== "string") {
     throw new Error("a run has no thread, start, or end");
   }
-  return { threadId: item.threadId, start: item.start, end: item.end, running: item.running === true };
+  return { threadId: item.threadId, start: item.start, end: item.end };
 };
 
 const parsePrompt = (item: unknown): T3Prompt => {

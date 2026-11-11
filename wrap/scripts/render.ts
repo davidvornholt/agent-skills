@@ -10,8 +10,6 @@ import { type List, median, type ReportInputs } from "./report-inputs.ts";
 import { projectLabel } from "./timeline.ts";
 
 export const PART_TITLE_MAX_LENGTH = 60;
-/** Open pull requests listed one by one in the loose ends; more collapse into one entry. */
-export const WAITING_PRS_LISTED = 3;
 
 const TEMPLATE_URL = new URL("../report/template.html", import.meta.url);
 
@@ -200,57 +198,6 @@ const renderTiles = (inputs: ReportInputs): string => {
   ].join("");
 };
 
-// A div, not a p, because the entry of many pull requests holds a details element.
-const looseItem = (tag: string, body: string): string => `<li class="loose"><span class="tag">${tag}</span><div>${body}</div></li>`;
-
-const renderWaitingPrs = (prs: ReportInputs["looseEnds"]["waitingPrs"]["items"]): string[] => {
-  const line = (pr: (typeof prs)[number]) => withMeta(`${pr.ref} ${pr.title}`, pr.thread);
-  if (prs.length <= WAITING_PRS_LISTED) return prs.map((pr) => looseItem(pr.isDraft ? "Draft" : "Open", line(pr)));
-  const drafts = prs.filter((pr) => pr.isDraft).length;
-  const byRepository = new Map<string, (typeof prs)[number][]>();
-  for (const pr of prs) byRepository.set(pr.repository, [...(byRepository.get(pr.repository) ?? []), pr]);
-  const groups = [...byRepository]
-    .toSorted(([a, left], [b, right]) => right.length - left.length || compareText(a, b))
-    .map(([repository, entries]) => `<h3>${escapeHtml(projectLabel(repository))} <span class="meta">· ${entries.length}</span></h3>${itemList(entries, line)}`)
-    .join("");
-  const drafted = drafts === 0 ? "" : drafts === prs.length ? ", all of them drafts" : drafts === 1 ? ", one of them a draft" : `, ${drafts} of them drafts`;
-  return [
-    looseItem(
-      "Open",
-      `${prs.length} pull requests from the day's threads were still open at its end${drafted}.<details><summary>Show them</summary>${groups}</details>`,
-    ),
-  ];
-};
-
-const WHEN_TAGS = { overdue: "Overdue", today: "Today", tomorrow: "Tomorrow" } as const;
-
-const renderLooseEnds = (inputs: ReportInputs): string => {
-  const { waitingPrs, dueTasks, runningThreads } = inputs.looseEnds;
-  const items = [
-    ...runningThreads.items.map((thread) => looseItem("Running", withMeta(thread.title, thread.project))),
-    ...renderWaitingPrs(waitingPrs.items),
-    ...dueTasks.items.map((task) =>
-      looseItem(
-        WHEN_TAGS[task.when],
-        withMeta(
-          task.title,
-          [task.project, task.kind === "deadline" ? "deadline" : null, task.when === "overdue" ? `since ${task.day}` : null]
-            .filter((part) => part !== null)
-            .join(", "),
-        ),
-      ),
-    ),
-  ];
-  const gaps = [
-    waitingPrs.status === "missing" || runningThreads.status === "missing"
-      ? "T3 Code was not available, so open pull requests and running threads are missing."
-      : null,
-    dueTasks.status === "missing" ? "Super Productivity was not available, so due tasks are missing." : null,
-  ].filter((note) => note !== null);
-  const body = items.length === 0 ? `<p class="empty">No loose ends.</p>` : `<ul class="loose-ends">${items.join("")}</ul>`;
-  return `<section><h2>Loose ends</h2>${body}${gaps.map((note) => `<p class="meta">${note}</p>`).join("")}</section>`;
-};
-
 const outputFacts = (inputs: ReportInputs): string[] => {
   const { landedPrs, closedPrs, handedOffTasks, settledThreads, facts } = inputs;
   const repositories = new Set(landedPrs.items.map((pr) => pr.repository)).size;
@@ -363,7 +310,6 @@ export const renderReport = (template: string, collected: Collected, text: Agent
     ),
   );
   html = fillSlot(html, "parts", renderParts(collected, text));
-  html = fillSlot(html, "looseends", renderLooseEnds(collected.reportInputs));
   html = fillSlot(html, "facts", renderFacts(collected.reportInputs));
   html = fillSlot(html, "lists", renderLists(collected.reportInputs));
   return fillSlot(html, "notes", renderNotes(collected.reportInputs));

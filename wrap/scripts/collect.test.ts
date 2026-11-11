@@ -227,17 +227,13 @@ const fixtures = {
             {
               repository: "davidvornholt/postlude",
               number: 14,
-              title: "Parse dates",
               linkedAt: "2026-10-29T09:00:00.000Z",
-              state: "open",
-              isDraft: false,
-              mergedAt: null,
-              closedAt: null,
+              mergedAt: "2026-10-29T10:00:00.000Z",
             },
           ],
         },
       ],
-      runs: [{ threadId: "t-parser", start: "2026-10-29T08:30:00.000Z", end: "2026-10-29T09:15:00.000Z", running: false }],
+      runs: [{ threadId: "t-parser", start: "2026-10-29T08:30:00.000Z", end: "2026-10-29T09:15:00.000Z" }],
       prompts: [{ threadId: "t-parser", at: "2026-10-29T08:20:00.000Z", fromPhone: true }],
       messages: [
         { threadId: "t-parser", at: "2026-10-29T08:20:00.000Z", author: "phone", text: "The parser drops dates without a year." },
@@ -412,7 +408,7 @@ test("reads every source into the metrics", () => {
       },
     ],
   });
-  expect(collected.reportInputs.looseEnds.waitingPrs.items).toMatchObject([{ ref: "postlude#14", thread: "Fix the parser" }]);
+  expect(collected.reportInputs.facts.leadTimes.items).toMatchObject([{ thread: "Fix the parser", prs: 1, minutes: 100 }]);
   expect(collected.conversations).toEqual({
     status: "complete",
     items: [

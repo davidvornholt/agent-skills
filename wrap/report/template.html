@@ -136,10 +136,6 @@
   .arc .when { font-size: 12px; font-weight: 400; color: var(--ink-muted); white-space: nowrap; }
   .arc p { margin: 4px 0 0 26px; max-width: 66ch; }
   .arc p + p { margin-top: 10px; }
-  ul.loose-ends { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
-  .loose { display: grid; grid-template-columns: 76px 1fr; gap: 12px; }
-  .loose details { margin-top: 4px; }
-  .tag { height: fit-content; padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; color: var(--ink-secondary); text-align: center; white-space: nowrap; }
   dl.facts { display: grid; grid-template-columns: 96px 1fr; gap: 10px 16px; margin: 0; }
   dl.facts dt { font-weight: 600; font-size: 13px; }
   dl.facts dd { margin: 0; }
@@ -150,8 +146,7 @@
     .tl-ticks .minor { display: block; }
   }
   @media (max-width: 520px) {
-    .loose, dl.facts { grid-template-columns: 1fr; gap: 2px; }
-    .tag { justify-self: start; }
+    dl.facts { grid-template-columns: 1fr; gap: 2px; }
   }
   @media (forced-colors: active) {
     .bar, .split > div, .swatch, .tl-mark { forced-color-adjust: none; border: 1px solid CanvasText; }
@@ -204,8 +199,6 @@
   <!--wrap:timeline-->
 
   <!--wrap:parts-->
-
-  <!--wrap:looseends-->
 
   <!--wrap:facts-->
 

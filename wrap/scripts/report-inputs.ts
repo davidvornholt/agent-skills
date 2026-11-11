@@ -1,5 +1,5 @@
 import { compareText } from "./compare.ts";
-import { addDays, type DayWindow, eventOnDay, journalDayAt, toBerlinDate, toBerlinIso } from "./day.ts";
+import { type DayWindow, eventOnDay, journalDayAt, toBerlinDate, toBerlinIso } from "./day.ts";
 import { totalMinutes, totalMs } from "./intervals.ts";
 import type { WindowPiece } from "./metrics.ts";
 import type { CalendarEvent, Sources, SpData, SpTask } from "./sources.ts";
@@ -30,22 +30,6 @@ type InPart = { readonly part: number | null };
 
 /** How the report refers to a pull request: "name#12", or "owner/name#12" when two of the day's repositories share the name. */
 type Ref = { readonly repository: string; readonly number: number; readonly ref: string };
-
-/** What was left open at the end of the day, as the sources recorded it. */
-export type LooseEnds = {
-  /** Pull requests linked to the day's T3 Code threads that were open at the end of the day; isDraft is as T3 last synced it. */
-  readonly waitingPrs: List<Ref & { readonly title: string; readonly isDraft: boolean; readonly thread: string }>;
-  /** Open Super Productivity tasks due or with a deadline by the next day, the earliest first. */
-  readonly dueTasks: List<{
-    readonly title: string;
-    readonly project: string | null;
-    readonly day: string;
-    readonly kind: "due" | "deadline";
-    readonly when: "overdue" | "today" | "tomorrow";
-  }>;
-  /** T3 Code threads with an agent still running at the end of the day. */
-  readonly runningThreads: List<{ readonly title: string; readonly project: string }>;
-};
 
 type Peak = { readonly count: number; readonly at: string };
 
@@ -100,7 +84,6 @@ export type ReportInputs = {
    * Until its first attempt (lastSyncOutcome null) Kontor always reports approvalNeeded. An attempt that stopped early may leave lastSyncAt null.
    */
   readonly kontor: { readonly status: ListStatus; readonly attempted: boolean | null; readonly approvalNeeded: boolean | null };
-  readonly looseEnds: LooseEnds;
   readonly facts: Facts;
 };
 
@@ -205,87 +188,27 @@ const closedPrs = (reading: Sources["closedPrs"], window: DayWindow, bounds: Par
   return { status: reading.value.incomplete ? "partial" : "complete", items };
 };
 
-const openAtEnd = (pr: { readonly state: string; readonly mergedAt: string | null; readonly closedAt: string | null }, window: DayWindow): boolean => {
-  const ended = pr.mergedAt ?? pr.closedAt;
-  return pr.state === "open" || (ended !== null && Date.parse(ended) >= window.endMs);
-};
-
-const waitingPrs = (reading: Sources["t3"], window: DayWindow, ref: RefFor): LooseEnds["waitingPrs"] => {
-  if (!reading.ok) return missing();
-  const seen = new Map<string, { pr: { repository: string; number: number; title: string; isDraft: boolean }; thread: string; linkedMs: number }>();
-  for (const thread of reading.value.dayThreads) {
-    for (const pr of thread.pullRequests) {
-      const linkedMs = Date.parse(pr.linkedAt);
-      const key = `${pr.repository}#${pr.number}`;
-      if (linkedMs >= window.endMs || !openAtEnd(pr, window) || (seen.get(key)?.linkedMs ?? Number.POSITIVE_INFINITY) <= linkedMs) continue;
-      seen.set(key, { pr, thread: thread.title, linkedMs });
-    }
-  }
-  const items = [...seen.values()]
-    .toSorted((a, b) => compareText(a.pr.repository, b.pr.repository) || a.pr.number - b.pr.number)
-    .map(({ pr, thread }) => ({
-      repository: pr.repository,
-      number: pr.number,
-      ref: ref(pr.repository, pr.number),
-      title: pr.title,
-      isDraft: pr.isDraft,
-      thread,
-    }));
-  return { status: "complete", items };
-};
-
 const repoName = (repository: string): string => repository.split("/").at(-1) ?? repository;
 
 /** The pull requests of the day's lists, so that each ref the report prints names one of them. */
-const refsFor = (sources: Sources, window: DayWindow): RefFor => {
+const refsFor = (sources: Sources): RefFor => {
   const repositories = new Set<string>();
   if (sources.github.ok) for (const pr of sources.github.value.prs) repositories.add(pr.repository);
   if (sources.closedPrs.ok) for (const pr of sources.closedPrs.value.prs) repositories.add(pr.repository);
-  if (sources.t3.ok)
-    for (const thread of sources.t3.value.dayThreads) for (const pr of thread.pullRequests) if (openAtEnd(pr, window)) repositories.add(pr.repository);
   const named = new Map<string, number>();
   for (const repository of repositories) named.set(repoName(repository), (named.get(repoName(repository)) ?? 0) + 1);
   return (repository, number) => `${named.get(repoName(repository)) === 1 ? repoName(repository) : repository}#${number}`;
 };
 
-const spTaskDay = (task: SpTask, kind: "due" | "deadline"): string | null => {
-  const [day, time] = kind === "due" ? [task.dueDay, task.dueWithTime] : [task.deadlineDay, task.deadlineWithTime];
-  const days = [day, time === null ? null : journalDayAt(time)].filter((value) => value !== null);
+/** The journal day a task is due on, from its due day or its due time, whichever comes first. */
+const spDueDay = (task: SpTask): string | null => {
+  const days = [task.dueDay, task.dueWithTime === null ? null : journalDayAt(task.dueWithTime)].filter((value) => value !== null);
   return days.toSorted(compareText)[0] ?? null;
 };
 
 const spDoneBy = (task: SpTask, ms: number): boolean => task.isDone && (task.doneOn ?? 0) < ms;
 
 const spWontDoBy = (task: SpTask, ms: number): boolean => task.wontDoOn !== null && task.wontDoOn < ms;
-
-const dueTasks = (reading: Sources["sp"], window: DayWindow): LooseEnds["dueTasks"] => {
-  if (!reading.ok) return missing();
-  const name = spTaskNames(reading.value);
-  const tomorrow = addDays(window.day, 1);
-  const items = reading.value.tasks
-    .filter((task) => !spDoneBy(task, window.endMs) && !spWontDoBy(task, window.endMs))
-    .flatMap((task) => {
-      const due = spTaskDay(task, "due");
-      const deadline = spTaskDay(task, "deadline");
-      // A deadline counts first, because it is the harder date.
-      const [day, kind] = deadline !== null && (due === null || deadline <= due) ? [deadline, "deadline" as const] : [due, "due" as const];
-      if (day === null || day > tomorrow) return [];
-      const when = day < window.day ? ("overdue" as const) : day === window.day ? ("today" as const) : ("tomorrow" as const);
-      return [{ ...name(task), day, kind, when }];
-    })
-    .toSorted((a, b) => compareText(a.day, b.day) || compareText(a.title, b.title));
-  return { status: "complete", items };
-};
-
-const runningThreads = (reading: Sources["t3"], window: DayWindow): LooseEnds["runningThreads"] => {
-  if (!reading.ok) return missing();
-  const running = new Set(reading.value.runs.filter((run) => run.running || Date.parse(run.end) >= window.endMs).map((run) => run.threadId));
-  const items = reading.value.dayThreads
-    .filter((thread) => running.has(thread.id))
-    .map((thread) => ({ title: thread.title, project: projectLabel(thread.project) }))
-    .toSorted((a, b) => compareText(a.title, b.title));
-  return { status: "complete", items };
-};
 
 export const median = (values: readonly number[]): number => {
   const sorted = values.toSorted((a, b) => a - b);
@@ -354,7 +277,7 @@ const facts = (window: DayWindow, sources: Sources, timeline: Timeline, windows:
     if (thread.prompts.length > 0) byArea.set(areaLabel(thread.category), (byArea.get(areaLabel(thread.category)) ?? 0) + thread.prompts.length);
   const followUps = threads.flatMap((thread) => followUpSeconds(thread, window));
   const longest = timeline.focusBlocks.toSorted((a, b) => b.end - b.start - (a.end - a.start) || a.start - b.start)[0];
-  const dueToday = sources.sp.ok ? sources.sp.value.tasks.filter((task) => spTaskDay(task, "due") === window.day && !spWontDoBy(task, window.endMs)) : null;
+  const dueToday = sources.sp.ok ? sources.sp.value.tasks.filter((task) => spDueDay(task) === window.day && !spWontDoBy(task, window.endMs)) : null;
   return {
     prompts: t3
       ? {
@@ -464,7 +387,7 @@ const moments = (placed: Placed): Moment[] => {
 
 export const buildReportInputs = (window: DayWindow, sources: Sources, timeline: Timeline): ReportInputs => {
   const bounds = partBounds(window, timeline);
-  const ref = refsFor(sources, window);
+  const ref = refsFor(sources);
   const placed: Placed = {
     handedOffTasks: handedOffTasks(sources.sp, window, bounds),
     settledThreads: settledThreads(sources.t3, window, bounds),
@@ -480,7 +403,6 @@ export const buildReportInputs = (window: DayWindow, sources: Sources, timeline:
     openThreads: openThreads(sources.t3, window),
     trackedTasks: trackedTasks(sources.sp, window.day),
     kontor: kontor(sources.kontor),
-    looseEnds: { waitingPrs: waitingPrs(sources.t3, window, ref), dueTasks: dueTasks(sources.sp, window), runningThreads: runningThreads(sources.t3, window) },
     facts: facts(window, sources, timeline, windows),
   };
 };

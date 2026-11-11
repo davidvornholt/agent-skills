@@ -11,7 +11,6 @@ import {
   PART_TITLE_MAX_LENGTH,
   parseAgentText,
   renderReport,
-  WAITING_PRS_LISTED,
 } from "./render.ts";
 import { MARK_GAP_MINUTES, renderTimeline, THREADS_PER_AREA } from "./render-timeline.ts";
 import { sources, WINDOW } from "./testing/fixtures.ts";
@@ -280,57 +279,6 @@ describe("renderReport", () => {
     expect(unmeasured).toContain('<p class="tile-label">Prompts</p><p class="tile-value"><span class="unmeasured">Not measured</span></p></div>');
   });
 
-  test("lists the loose ends: running threads, open pull requests, and tasks due or overdue", () => {
-    const loose = (tag: string, body: string) => `<li class="loose"><span class="tag">${tag}</span><div>${body}</div></li>`;
-    expect(html).toContain(
-      `<h2>Loose ends</h2><ul class="loose-ends">${[
-        loose("Running", 'Watch the deploy <span class="meta">· nix-config</span>'),
-        loose("Draft", 'nix-config#5 Build at night <span class="meta">· Night build</span>'),
-        loose("Open", 'pim#3 End of day belongs to the next day <span class="meta">· Fix the parser</span>'),
-        loose("Open", 'postlude#14 Parse dates <span class="meta">· Fix the parser</span>'),
-        loose("Overdue", 'Pay the bill <span class="meta">· Home, since 2026-10-27</span>'),
-        loose("Today", 'Call the plumber <span class="meta">· Home</span>'),
-        loose("Today", 'Next day <span class="meta">· Home</span>'),
-        loose("Tomorrow", 'Pack <span class="meta">· Home, deadline</span>'),
-      ].join("")}</ul></section>`,
-    );
-  });
-
-  test(`collapses more than ${WAITING_PRS_LISTED} open pull requests into one entry, grouped by repository`, () => {
-    const waiting = Array.from({ length: WAITING_PRS_LISTED + 1 }, (_, index) => ({
-      repository: index === 0 ? "davidvornholt/pim" : "davidvornholt/postlude",
-      number: 20 + index,
-      ref: `${index === 0 ? "pim" : "postlude"}#${20 + index}`,
-      title: `Change ${String.fromCharCode(65 + index)}`,
-      isDraft: index < 2,
-      thread: "Fix the parser",
-    }));
-    const { looseEnds } = collected.reportInputs;
-    const many = renderReport(
-      template,
-      { ...collected, reportInputs: { ...collected.reportInputs, looseEnds: { ...looseEnds, waitingPrs: { status: "complete", items: waiting } } } },
-      TEXT,
-    );
-    expect(many).toContain(
-      '<li class="loose"><span class="tag">Open</span><div>4 pull requests from the day\'s threads were still open at its end, 2 of them drafts.<details><summary>Show them</summary><h3>postlude <span class="meta">· 3</span></h3>',
-    );
-    expect(many).not.toContain('<span class="tag">Draft</span>');
-  });
-
-  test("says when there are no loose ends, and which sources were missing", () => {
-    const none = { status: "complete" as const, items: [] };
-    const quiet = renderReport(
-      template,
-      { ...collected, reportInputs: { ...collected.reportInputs, looseEnds: { waitingPrs: none, dueTasks: none, runningThreads: none } } },
-      TEXT,
-    );
-    expect(quiet).toContain('<h2>Loose ends</h2><p class="empty">No loose ends.</p></section>');
-    const unavailable = { ok: false as const, error: "unreachable" };
-    const missing = renderReport(template, buildCollected(WINDOW, { ...sources, t3: unavailable, sp: unavailable }), TEXT);
-    expect(missing).toContain("T3 Code was not available, so open pull requests and running threads are missing.");
-    expect(missing).toContain("Super Productivity was not available, so due tasks are missing.");
-  });
-
   test("gives the day's figures under the headings its data supports", () => {
     const facts = (lines: readonly string[]) => `<dd><ul>${lines.map((line) => `<li>${line}</li>`).join("")}</ul></dd>`;
     expect(html).toContain(
@@ -360,7 +308,7 @@ describe("renderReport", () => {
   });
 
   test("refuses a template without its slots", () => {
-    for (const slot of ["lists", "tiles", "looseends", "facts"]) {
+    for (const slot of ["lists", "tiles", "facts"]) {
       expect(() => renderReport(template.replace(`<!--wrap:${slot}-->`, ""), collected, TEXT)).toThrow(`<!--wrap:${slot}-->`);
     }
     expect(() => renderReport(`${template}<!--wrap:notes-->`, collected, TEXT)).toThrow(/exactly one <!--wrap:notes-->/);
