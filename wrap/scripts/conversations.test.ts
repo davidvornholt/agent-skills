@@ -18,6 +18,7 @@ test("gives each day thread with messages its messages of the day in order, with
     id: "t-parser",
     title: "Fix the parser",
     project: "~/dev/postlude",
+    startedBy: "User",
     parts: [0],
     messages: [
       "09:20 User: The parser drops dates like 29.10. without a year. Can you fix that?",
@@ -28,7 +29,7 @@ test("gives each day thread with messages its messages of the day in order, with
   expect(conversations.items[1]?.messages[1]).toBe(
     "15:30 Reports of delegated tasks: Delegated task (Split the tests) [completed]:\nThe tests now sit in one file per command.",
   );
-  expect(conversations.items[2]?.messages).toEqual(["03:00 Scheduled prompt: Check whether the deploy finished."]);
+  expect(conversations.items[2]).toMatchObject({ startedBy: "Scheduled prompt", messages: ["03:00 Scheduled prompt: Check whether the deploy finished."] });
 });
 
 test(`leaves out code blocks longer than ${CODE_BLOCK_MAX_LINES} lines and keeps shorter ones`, () => {

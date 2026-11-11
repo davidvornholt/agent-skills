@@ -222,6 +222,7 @@ const fixtures = {
           title: "Fix the parser",
           project: "~/dev/postlude",
           firstPromptAt: "2026-10-29T08:20:00.000Z",
+          startedBy: "phone",
           pullRequests: [
             {
               repository: "davidvornholt/postlude",
@@ -419,6 +420,7 @@ test("reads every source into the metrics", () => {
         id: "t-parser",
         title: "Fix the parser",
         project: "~/dev/postlude",
+        startedBy: "User, on the phone",
         parts: [0],
         messages: ["09:20 User, on the phone: The parser drops dates without a year.", "10:15 Agent: They parse now, and postlude#14 tests them."],
       },
@@ -435,13 +437,15 @@ test("reads the day thread's own messages on the z890, with its delegates' repor
         id: "t-garden",
         title: "Plan the garden",
         project: "~/dev/garden",
+        // The first message from the user, not T3's assistant message before it.
+        startedBy: "User",
         parts: [0],
         messages: [
           "09:00 User: Plan the garden beds.",
           "09:01 Agent: I'll have a helper measure the beds first.",
           "09:04 Reports of delegated tasks: Delegated task (Measure the beds) [completed]:\nBoth beds are two metres wide.",
           "09:08 Scheduled prompt: Water the beds.",
-          "09:09 From another thread: The seeds arrived.",
+          "09:09 Another agent: The seeds arrived.",
           "09:10 User, on the phone: Add tomatoes.",
         ],
       },

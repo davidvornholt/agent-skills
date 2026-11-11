@@ -20,6 +20,8 @@ test("builds the parts and lists of a day with all sources", () => {
         end: "2026-10-29T13:00:00+01:00",
         clock: "04:00–13:00",
         screenMinutes: 240,
+        t3Minutes: 210,
+        agentsAloneMinutes: 30,
         areas: [
           { label: "Code", minutes: 210 },
           { label: "Mail", minutes: 30 },
@@ -30,8 +32,8 @@ test("builds the parts and lists of a day with all sources", () => {
           { project: "nix-config", screenMinutes: 0, agentMinutes: 30 },
         ],
         threads: [
-          { title: "Fix the parser", project: "postlude", prompts: 2, agentMinutes: 80 },
-          { title: "Night build", project: "nix-config", prompts: 0, agentMinutes: 30 },
+          { id: "t-parser", title: "Fix the parser", project: "postlude", prompts: 2, agentMinutes: 80 },
+          { id: "t-night", title: "Night build", project: "nix-config", prompts: 0, agentMinutes: 30 },
         ],
         // Without T3 Code's own windows, redacted ones, and the calculator's single minute; the mail windows add up across the redacted one.
         windows: [{ app: "org.example.Mail", title: "Inbox - Mail", minutes: 24 }],
@@ -42,6 +44,8 @@ test("builds the parts and lists of a day with all sources", () => {
         end: "2026-10-30T04:00:00+01:00",
         clock: "13:00–04:00",
         screenMinutes: 330,
+        t3Minutes: 180,
+        agentsAloneMinutes: 60,
         areas: [
           { label: "Code", minutes: 180 },
           { label: "Not categorised", minutes: 90 },
@@ -53,9 +57,9 @@ test("builds the parts and lists of a day with all sources", () => {
           { project: "nix-config", screenMinutes: 0, agentMinutes: 60 },
         ],
         threads: [
-          { title: "Tidy tests", project: "sp-cli", prompts: 2, agentMinutes: 55 },
-          { title: "Watch the deploy", project: "nix-config", prompts: 0, agentMinutes: 60 },
-          { title: "Write docs", project: "sp-cli", prompts: 0, agentMinutes: 10 },
+          { id: "t-tidy", title: "Tidy tests", project: "sp-cli", prompts: 2, agentMinutes: 55 },
+          { id: "t-deploy", title: "Watch the deploy", project: "nix-config", prompts: 0, agentMinutes: 60 },
+          { id: "t-docs", title: "Write docs", project: "sp-cli", prompts: 0, agentMinutes: 10 },
         ],
         windows: [
           { app: "org.example.Writer", title: "Garden plan - Writer", minutes: 70 },
@@ -182,6 +186,7 @@ test("builds the parts and lists of a day with all sources", () => {
           },
         ],
       },
+      split: { t3Minutes: 390, agentsAloneMinutes: 90 },
       focus: { blocks: 1, longest: { minutes: 200, start: "2026-10-29T08:12:00+01:00", end: "2026-10-29T11:32:00+01:00", area: "Code" } },
       dueToday: { count: 3, done: 1 },
       promptsByArea: [{ area: "Code", prompts: 4 }],
@@ -245,7 +250,9 @@ test("marks lists of unreachable sources as missing", () => {
   ]) {
     expect(list).toEqual({ status: "missing", items: [] });
   }
-  expect(lists.facts).toMatchObject({ prompts: null, agents: null, followUp: null, dueToday: null, promptsByArea: [] });
+  expect(lists.facts).toMatchObject({ prompts: null, agents: null, split: null, followUp: null, dueToday: null, promptsByArea: [] });
+  // Without screen time, every agent's run would count as one while the user was away.
+  expect(inputs({ summary: unavailable }).facts.split).toBeNull();
 });
 
 test("marks closed pull requests partial when GitHub's search was incomplete, and keeps the landed ones", () => {

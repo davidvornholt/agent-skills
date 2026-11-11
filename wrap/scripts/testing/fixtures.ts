@@ -232,6 +232,7 @@ export const sources: Sources = {
           title: "Night build",
           project: "~/dev/nix-config",
           firstPromptAt: "2026-10-28T20:00:00.000Z",
+          startedBy: "phone",
           pullRequests: [
             pullRequest({ repository: "davidvornholt/nix-config", number: 5, title: "Build at night", linkedAt: "2026-10-28T21:00:00.000Z", isDraft: true }),
           ],
@@ -241,6 +242,7 @@ export const sources: Sources = {
           title: "Fix the parser",
           project: "~/dev/postlude",
           firstPromptAt: "2026-10-29T08:20:00.000Z",
+          startedBy: "user",
           pullRequests: [
             pullRequest({ repository: "davidvornholt/postlude", number: 14, title: "Parse dates", linkedAt: "2026-10-29T09:00:00.000Z" }),
             // Merged at the end of the journal day, so it was still open then.
@@ -260,6 +262,7 @@ export const sources: Sources = {
           title: "Tidy tests",
           project: "~/dev/sp-cli",
           firstPromptAt: "2026-10-29T13:50:00.000Z",
+          startedBy: "user",
           pullRequests: [
             pullRequest({
               repository: "davidvornholt/sp-cli",
@@ -279,8 +282,8 @@ export const sources: Sources = {
             }),
           ],
         },
-        { id: "t-docs", title: "Write docs", project: "~/dev/sp-cli", firstPromptAt: null, pullRequests: [] },
-        { id: "t-deploy", title: "Watch the deploy", project: "~/dev/nix-config", firstPromptAt: null, pullRequests: [] },
+        { id: "t-docs", title: "Write docs", project: "~/dev/sp-cli", firstPromptAt: null, startedBy: "thread", pullRequests: [] },
+        { id: "t-deploy", title: "Watch the deploy", project: "~/dev/nix-config", firstPromptAt: null, startedBy: "schedule", pullRequests: [] },
       ],
       runs: [
         // Began before the journal day, so the timeline clips it to the day's start.

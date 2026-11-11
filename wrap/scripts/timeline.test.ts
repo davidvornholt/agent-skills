@@ -190,13 +190,22 @@ describe("part threads", () => {
     const built = buildTimeline(WINDOW, sources);
     const [first, second] = buildParts(built, partBounds(WINDOW, built), [], []).map((part) => part.threads);
     expect(first).toEqual([
-      { title: "Fix the parser", project: "postlude", prompts: 2, agentMinutes: 80 },
-      { title: "Night build", project: "nix-config", prompts: 0, agentMinutes: 30 },
+      { id: "t-parser", title: "Fix the parser", project: "postlude", prompts: 2, agentMinutes: 80 },
+      { id: "t-night", title: "Night build", project: "nix-config", prompts: 0, agentMinutes: 30 },
     ]);
     expect(second).toEqual([
-      { title: "Tidy tests", project: "sp-cli", prompts: 2, agentMinutes: 55 },
-      { title: "Watch the deploy", project: "nix-config", prompts: 0, agentMinutes: 60 },
-      { title: "Write docs", project: "sp-cli", prompts: 0, agentMinutes: 10 },
+      { id: "t-tidy", title: "Tidy tests", project: "sp-cli", prompts: 2, agentMinutes: 55 },
+      { id: "t-deploy", title: "Watch the deploy", project: "nix-config", prompts: 0, agentMinutes: 60 },
+      { id: "t-docs", title: "Write docs", project: "sp-cli", prompts: 0, agentMinutes: 10 },
+    ]);
+  });
+
+  test("count the screen time with T3 Code in front, and the time agents ran while the user had no screen time", () => {
+    const built = buildTimeline(WINDOW, sources);
+    const parts = buildParts(built, partBounds(WINDOW, built), [], dayWindows(WINDOW, sources));
+    expect(parts.map(({ screenMinutes, t3Minutes, agentsAloneMinutes }) => ({ screenMinutes, t3Minutes, agentsAloneMinutes }))).toEqual([
+      { screenMinutes: 240, t3Minutes: 210, agentsAloneMinutes: 30 },
+      { screenMinutes: 330, t3Minutes: 180, agentsAloneMinutes: 60 },
     ]);
   });
 });

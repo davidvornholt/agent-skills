@@ -15,7 +15,7 @@ const AUTHORS: Readonly<Record<T3Author, string>> = {
   agent: "Agent",
   delegates: "Reports of delegated tasks",
   schedule: "Scheduled prompt",
-  thread: "From another thread",
+  thread: "Another agent",
 };
 
 /** A day thread with its messages of the journal day, each as "HH:MM Author: text". It holds the user's prompts and agents' text, so it is for the agent only and never reaches the report or Postlude. */
@@ -23,6 +23,8 @@ export type Conversation = {
   readonly id: string;
   readonly title: string;
   readonly project: string;
+  /** Who wrote the thread's first message, as its messages name authors; null when T3 wrote it. */
+  readonly startedBy: string | null;
   /** The parts its messages fall in. */
   readonly parts: readonly number[];
   readonly messages: readonly string[];
@@ -59,6 +61,7 @@ export const buildConversations = (window: DayWindow, t3: Sources["t3"], bounds:
           id: thread.id,
           title: thread.title,
           project: thread.project,
+          startedBy: thread.startedBy === null ? null : AUTHORS[thread.startedBy],
           parts,
           messages: messages.map((message) => `${toBerlinClock(message.at)} ${AUTHORS[message.author]}: ${withoutLongCode(message.text)}`),
         },

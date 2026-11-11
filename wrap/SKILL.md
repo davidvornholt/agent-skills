@@ -26,12 +26,25 @@ You write the summary and the text for each part of the day. The scripts produce
    Then read all of `conversations`: the day's T3 Code threads with their messages of the day, which are the user's prompts, the agents' replies, and the reports of the tasks the agents delegated. They are long, so write them to a text file and read it in pieces:
 
    ```sh
-   jq -r '.conversations.items[] | "# \(.title) (\(.project), parts: \(.parts | map(tostring) | join(", ")))", .messages[], ""' "/tmp/wrap-$DAY.json" > "/tmp/wrap-$DAY.txt"
+   jq -r '.conversations.items[] | "# \(.title) [\(.id)] (\(.project), started by \(.startedBy // "unknown"), parts: \(.parts | map(tostring) | join(", ")))", .messages[], ""' "/tmp/wrap-$DAY.json" > "/tmp/wrap-$DAY.txt"
    ```
 
-4. Write a `summary` of the day in two or three sentences. For each entry of `reportInputs.parts`, in order, write a short `title` and a `text` about that entry and everything whose `part` is its index. A `text` may hold several short paragraphs separated by a blank line, for example one per thread of work.
+4. Write a `summary` in a few short paragraphs about what the parts can't show:
+
+   - the shape of the day: start and stop, the main stretches, and the split between the user's own work, steering agents (`t3Minutes`) and agents running alone (`agentsAloneMinutes`)
+   - patterns worth noticing
+   - what is waiting for the user
+   - at most one or two outcomes that defined the day
+
+   You may compare with the previous days' reports, which `postlude agent-area get <date>` prints.
+
+   For each entry of `reportInputs.parts`, in order, write a short `title` and a `text` about that entry and everything whose `part` is its index. A `text` may hold several short paragraphs, for example one per thread of work. Separate paragraphs with a blank line.
 
    Tell a reader who no longer remembers the day what happened, concretely: what the user asked for, what the agents found, built or decided, and what came of it. A ticked-off task or a thread that was worked on isn't news by itself, and tasks mainly show what the work was about. Look up whatever else you need to understand the day.
+
+   Say who started each thing: the user by hand, agents the user asked from the desk or the phone, or agents on their own, such as scheduled tasks, the night shift, the curator, and delegated work. `startedBy` and the message authors tell them apart.
+
+   Name threads with unclear T3 titles in `threads`, by id, and use those names in your text.
 
    Address the user as "you", because they read the report themselves. It's their day, not the agents', so write agent work as work they had agents do. Describe the user's `windows` and `sentMail` in your own words, never by a window's title, an app id or a mail subject, because the report is stored.
 
@@ -40,7 +53,7 @@ You write the summary and the text for each part of the day. The scripts produce
 
    ```sh
    bun ~/.claude/skills/wrap/scripts/wrap.ts render "/tmp/wrap-$DAY.json" --model <your model id> <<'EOF' | postlude agent-area put "$DAY"
-   {"summary": "<summary>", "parts": [{"title": "<title>", "text": "<paragraph>\n\n<paragraph>"}]}
+   {"summary": "<paragraph>\n\n<paragraph>", "parts": [{"title": "<title>", "text": "<paragraph>\n\n<paragraph>"}], "threads": {"<thread id>": "<name>"}}
    EOF
    ```
 

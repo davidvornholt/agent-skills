@@ -9,7 +9,7 @@ import { agentAreaPayload, loadTemplate, parseAgentText, renderReport } from "./
 
 const USAGE = `Usage:
   wrap.ts collect [YYYY-MM-DD]                    Read every source for the journal day (default: the current one) and print the metrics and report lists as JSON.
-  wrap.ts render <collected.json> --model <id>    Read the report text as JSON on stdin, {"summary": "...", "parts": [{"title": "...", "text": "..."}, ...]}, and print the stdin for \`postlude agent-area put <day>\`.
+  wrap.ts render <collected.json> --model <id>    Read the report text as JSON on stdin, {"summary": "...", "parts": [{"title": "...", "text": "..."}, ...], "threads": {"<thread id>": "<name>", ...}}, and print the stdin for \`postlude agent-area put <day>\`.
   wrap.ts t3 <YYYY-MM-DD>                         Print this machine's T3 Code threads, and the day's threads with their runs, prompts, messages and pull requests, as JSON (collect runs it on the z890 over SSH).`;
 
 class UsageError extends Error {}

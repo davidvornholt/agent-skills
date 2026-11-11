@@ -378,7 +378,9 @@ const PROMPTS = `m.role = 'user' and json_extract(m.payload_json, '$.createdBy')
 const PR_STATES = new Set(["open", "merged", "closed"]);
 
 /** Who wrote a message, or null for T3's notices that background work finished and the messages it writes for the user. */
-const authorOf = (row: MessageRow): T3Author | null => {
+type AuthorRow = Pick<MessageRow, "role" | "created_by" | "source" | "delegated" | "scheduled">;
+
+const authorOf = (row: AuthorRow): T3Author | null => {
   if (row.role === "assistant") return "agent";
   if (row.role === "user" && row.created_by === "user" && (row.source === "web" || row.source === "mobile")) return row.source === "mobile" ? "phone" : "user";
   if (row.created_by !== "agent") return null;
@@ -386,6 +388,9 @@ const authorOf = (row: MessageRow): T3Author | null => {
   if (row.source === "mcp") return row.scheduled === 1 ? "schedule" : "thread";
   return null;
 };
+
+const AUTHOR_COLUMNS = `json_extract(m.payload_json, '$.createdBy') as created_by, json_extract(m.payload_json, '$.creationSource') as source,
+  json_extract(m.payload_json, '$.delegatedCompletion') is not null as delegated, json_extract(m.payload_json, '$.scheduledTaskId') is not null as scheduled`;
 
 // T3 heads each delegate's report with the task's long node id, as "Delegated task node:delegated-task:… (Title) [completed]:".
 const DELEGATE_NODE_ID = /^Delegated task \S+ \(/gm;
@@ -475,11 +480,15 @@ export const readLocalT3 = async (window: DayWindow, nowMs: number): Promise<Rea
       for (const row of threadRows) members.get(fold(row.thread_id))?.push(row.thread_id);
       const projectRoots = new Map(projects.map((project) => [project.project_id, homeRelative(project.workspace_root, home)]));
       const firstPrompt = database.query(`select min(m.created_at) as at from orchestration_v2_projection_messages m where m.thread_id = ?1 and ${PROMPTS}`);
+      const firstMessage = database.query(
+        `select m.role, ${AUTHOR_COLUMNS} from orchestration_v2_projection_messages m where m.thread_id = ?1 and m.role = 'user' order by m.created_at, m.rowid limit 1`,
+      );
       const links = database.query(
         `select json_extract(payload_json, '$.pullRequests') as links from orchestration_v2_projection_threads where thread_id in (select value from json_each(?1))`,
       );
       dayThreads = ids.map((id) => {
         const row = byThread.get(id);
+        const first = firstMessage.get(id) as AuthorRow | null;
         const pullRequests = new Map<string, T3PullRequest>();
         for (const { links: raw } of links.all(JSON.stringify(members.get(id) ?? [id])) as { links: string | null }[]) {
           const parsed: unknown = raw === null ? [] : JSON.parse(raw);
@@ -495,6 +504,7 @@ export const readLocalT3 = async (window: DayWindow, nowMs: number): Promise<Rea
           title: row?.title ?? "",
           project: projectRoots.get(row?.project_id ?? "") ?? "-",
           firstPromptAt: (firstPrompt.get(id) as { at: string | null } | null)?.at ?? null,
+          startedBy: first === null ? null : authorOf(first),
           pullRequests: [...pullRequests.values()].toSorted(
             (a, b) => compareText(a.linkedAt, b.linkedAt) || compareText(a.repository, b.repository) || a.number - b.number,
           ),
@@ -504,10 +514,7 @@ export const readLocalT3 = async (window: DayWindow, nowMs: number): Promise<Rea
       messages = (
         database
           .query(
-            `select m.thread_id, m.created_at, m.role, json_extract(m.payload_json, '$.text') as text,
-               json_extract(m.payload_json, '$.createdBy') as created_by, json_extract(m.payload_json, '$.creationSource') as source,
-               json_extract(m.payload_json, '$.delegatedCompletion') is not null as delegated,
-               json_extract(m.payload_json, '$.scheduledTaskId') is not null as scheduled
+            `select m.thread_id, m.created_at, m.role, json_extract(m.payload_json, '$.text') as text, ${AUTHOR_COLUMNS}
              from orchestration_v2_projection_messages m where m.created_at >= ?1 and m.created_at < ?2 order by m.created_at, m.rowid`,
           )
           .all(start, end) as MessageRow[]
@@ -552,15 +559,21 @@ export const readLocalT3 = async (window: DayWindow, nowMs: number): Promise<Rea
   return ok({ threads, dayThreads, runs, prompts, messages });
 };
 
+const AUTHORS = new Set<string>(["user", "phone", "agent", "delegates", "schedule", "thread"] satisfies T3Author[]);
+
+const isAuthor = (value: unknown): value is T3Author => typeof value === "string" && AUTHORS.has(value);
+
 const parseDayThread = (item: unknown): T3DayThread => {
   if (!isRecord(item) || typeof item.id !== "string" || typeof item.project !== "string" || !Array.isArray(item.pullRequests)) {
     throw new Error("a day thread has no id, project, or pull requests");
   }
+  if (item.startedBy !== null && !isAuthor(item.startedBy)) throw new Error("a day thread has no author of its first message");
   return {
     id: item.id,
     title: stringOr(item.title, ""),
     project: item.project,
     firstPromptAt: stringOr(item.firstPromptAt, null),
+    startedBy: item.startedBy,
     pullRequests: item.pullRequests.map(parsePullRequest),
   };
 };
@@ -577,14 +590,12 @@ const parsePrompt = (item: unknown): T3Prompt => {
   return { threadId: item.threadId, at: item.at, fromPhone: item.fromPhone === true };
 };
 
-const AUTHORS = new Set<string>(["user", "phone", "agent", "delegates", "schedule", "thread"] satisfies T3Author[]);
-
 const parseMessage = (item: unknown): T3Message => {
   if (!isRecord(item) || typeof item.threadId !== "string" || typeof item.at !== "string" || typeof item.text !== "string") {
     throw new Error("a message has no thread, time, or text");
   }
-  if (typeof item.author !== "string" || !AUTHORS.has(item.author)) throw new Error("a message has no author");
-  return { threadId: item.threadId, at: item.at, author: item.author as T3Author, text: item.text };
+  if (!isAuthor(item.author)) throw new Error("a message has no author");
+  return { threadId: item.threadId, at: item.at, author: item.author, text: item.text };
 };
 
 const readT3 = async (window: DayWindow, host: string): Promise<Reading<T3Data>> => {

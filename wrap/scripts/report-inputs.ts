@@ -1,6 +1,7 @@
 import { compareText } from "./compare.ts";
 import { addDays, type DayWindow, eventOnDay, journalDayAt, toBerlinDate, toBerlinIso } from "./day.ts";
 import { totalMinutes, totalMs } from "./intervals.ts";
+import type { WindowPiece } from "./metrics.ts";
 import type { CalendarEvent, Sources, SpData, SpTask } from "./sources.ts";
 import {
   buildParts,
@@ -12,6 +13,7 @@ import {
   partBounds,
   projectLabel,
   sentMails,
+  splitTime,
   type Timeline,
   type TimelineThread,
   UNCATEGORISED,
@@ -68,6 +70,8 @@ export type Facts = {
     readonly mergedAt: string;
     readonly minutes: number;
   }>;
+  /** The screen time with T3 Code in front, and the time at least one agent ran while the user had no screen time; null when screen time or T3 Code wasn't available. */
+  readonly split: { readonly t3Minutes: number; readonly agentsAloneMinutes: number } | null;
   readonly focus: {
     readonly blocks: number;
     readonly longest: { readonly minutes: number; readonly start: string; readonly end: string; readonly area: string } | null;
@@ -340,7 +344,7 @@ const leadTimes = (reading: Sources["t3"], window: DayWindow): Facts["leadTimes"
   return { status: "complete", items };
 };
 
-const facts = (window: DayWindow, sources: Sources, timeline: Timeline): Facts => {
+const facts = (window: DayWindow, sources: Sources, timeline: Timeline, windows: readonly WindowPiece[]): Facts => {
   const t3 = timeline.threads.status !== "missing";
   const threads = timeline.threads.items;
   const prompts = threads.flatMap((thread) => thread.prompts);
@@ -369,6 +373,14 @@ const facts = (window: DayWindow, sources: Sources, timeline: Timeline): Facts =
       : null,
     followUp: followUps.length === 0 ? null : { medianSeconds: Math.round(median(followUps)), count: followUps.length },
     leadTimes: leadTimes(sources.t3, window),
+    split:
+      timeline.status === "missing" || !t3
+        ? null
+        : splitTime(
+            timeline.pieces,
+            windows,
+            threads.flatMap((thread) => thread.runs),
+          ),
     focus:
       timeline.status === "missing"
         ? null
@@ -460,14 +472,15 @@ export const buildReportInputs = (window: DayWindow, sources: Sources, timeline:
     closedPrs: closedPrs(sources.closedPrs, window, bounds, ref),
     appointments: appointments(sources.calendar, window, bounds),
   };
+  const windows = dayWindows(window, sources);
   return {
-    parts: buildParts(timeline, bounds, moments(placed), dayWindows(window, sources)),
+    parts: buildParts(timeline, bounds, moments(placed), windows),
     ...placed,
     sentMail: sentMail(window, sources, bounds),
     openThreads: openThreads(sources.t3, window),
     trackedTasks: trackedTasks(sources.sp, window.day),
     kontor: kontor(sources.kontor),
     looseEnds: { waitingPrs: waitingPrs(sources.t3, window, ref), dueTasks: dueTasks(sources.sp, window), runningThreads: runningThreads(sources.t3, window) },
-    facts: facts(window, sources, timeline),
+    facts: facts(window, sources, timeline, windows),
   };
 };

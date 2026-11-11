@@ -94,6 +94,8 @@ export type T3DayThread = {
   readonly project: string;
   /** The user's first prompt in the thread, on any day; null when the user never prompted it. */
   readonly firstPromptAt: string | null;
+  /** Who wrote the thread's first message, on any day: the user, a scheduled task, or another thread's agent; null when T3 wrote it. */
+  readonly startedBy: T3Author | null;
   /** Each pull request once, with the earliest link among the thread and its subagents. */
   readonly pullRequests: readonly T3PullRequest[];
 };

@@ -83,8 +83,9 @@ const threadMarks = (runs: readonly Interval[], prompts: TimelineThread["prompts
 
 const firstActivity = (thread: TimelineThread): number => Math.min(...thread.runs.map((run) => run.start), ...thread.prompts.map((prompt) => prompt.at));
 
-/** One group per area, in the order of the screen time rows, so a thread sits under the screen time its project got. */
-const threadGroups = (collected: Collected, areaOrder: readonly string[]): Group[] => {
+/** One group per area, in the order of the screen time rows, so a thread sits under the screen time its project got. A row shows the agent's name for a thread where it gave one, and its tooltip the T3 title, so the thread can still be found in T3 Code. */
+const threadGroups = (collected: Collected, areaOrder: readonly string[], names: ReadonlyMap<string, string>): Group[] => {
+  const title = (thread: TimelineThread) => thread.title || "Untitled thread";
   const byArea = new Map<string, TimelineThread[]>();
   for (const thread of collected.timeline.threads.items) {
     const label = areaLabel(collected, thread.category);
@@ -101,12 +102,15 @@ const threadGroups = (collected: Collected, areaOrder: readonly string[]): Group
       const shown = ranked.slice(0, THREADS_PER_AREA).toSorted((a, b) => firstActivity(a) - firstActivity(b) || compareText(a.id, b.id));
       const rest = ranked.slice(THREADS_PER_AREA);
       const rows: Row[] = shown.map((thread) => ({
-        label: thread.title || "Untitled thread",
-        tip: `${thread.title || "Untitled thread"} · ${projectLabel(thread.project)}`,
+        label: names.get(thread.id) ?? title(thread),
+        tip: `${title(thread)} · ${projectLabel(thread.project)}`,
         marks: threadMarks(thread.runs, thread.prompts),
       }));
       if (rest.length > 0) {
-        const titles = rest.map((thread) => thread.title || "Untitled thread");
+        const titles = rest.map((thread) => {
+          const name = names.get(thread.id);
+          return name === undefined ? title(thread) : `${name} (${title(thread)})`;
+        });
         const more = titles.length > TIP_THREADS ? `; and ${titles.length - TIP_THREADS} more` : "";
         rows.push({
           label: rest.length === 1 ? "One other thread" : `${rest.length} other threads`,
@@ -170,8 +174,8 @@ const LEGEND: readonly (readonly [string, string])[] = [
   ["tl-mail", "Mail sent"],
 ];
 
-/** The timeline, as a section that may use the report's full width, and the time tracked in Super Productivity, which has no time of day, below it. titles holds the agent's title for each part, in order. */
-export const renderTimeline = (collected: Collected, titles: readonly string[]): string => {
+/** The timeline, as a section that may use the report's full width, and the time tracked in Super Productivity, which has no time of day, below it. titles holds the agent's title for each part, in order, and names its names for threads, by id. */
+export const renderTimeline = (collected: Collected, titles: readonly string[], names: ReadonlyMap<string, string>): string => {
   const areas = areaGroup(collected);
   const partRow: Row = {
     label: "Parts",
@@ -187,6 +191,7 @@ export const renderTimeline = (collected: Collected, titles: readonly string[]):
     ...threadGroups(
       collected,
       areas.rows.map((row) => row.label),
+      names,
     ),
   ].filter((group) => group.rows.length > 0);
   const day = { start: Date.parse(collected.window.start), end: Date.parse(collected.window.end) };

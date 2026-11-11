@@ -4,7 +4,7 @@
 
 import { compareText } from "./compare.ts";
 import { type DayWindow, toBerlinClock, toBerlinIso } from "./day.ts";
-import { clip, type Interval, joinGaps, totalMinutes, totalMs, union } from "./intervals.ts";
+import { clip, type Interval, joinGaps, subtract, totalMinutes, totalMs, union } from "./intervals.ts";
 import { type FocusBlock, parseSummary, type Summary, type TimelinePiece, type WindowPiece } from "./metrics.ts";
 import type { ListStatus } from "./report-inputs.ts";
 import type { Sources } from "./sources.ts";
@@ -17,7 +17,7 @@ export const PART_THREADS = 12;
 export const PART_WINDOWS = 12;
 export const PART_WINDOW_MIN_MINUTES = 2;
 
-// T3 Code's own windows, as nix-config's activity-summary.json matches them under t3Windows. The part's threads already say what happened there.
+// T3 Code's own windows, as nix-config's activity-summary.json matches them under t3Windows. They count as time spent steering agents, and the part's threads already say what happened there.
 const T3_APP = /^(com\.t3tools\.T3Code|t3code)$/i;
 const T3_TITLE = /^T3 Code( \(Beta\))?$/i;
 const REDACTED = "<redacted>";
@@ -55,9 +55,19 @@ export type DayPart = {
   /** start and end as clock times, such as "09:10–11:45": the first and last minute of the part's screen time, prompts, agent runs, and the tasks, threads, pull requests and appointments placed in it. */
   readonly clock: string;
   readonly screenMinutes: number;
+  /** Of screenMinutes, the time with T3 Code in front. */
+  readonly t3Minutes: number;
+  /** The time at least one agent ran while the user had no screen time. */
+  readonly agentsAloneMinutes: number;
   readonly areas: readonly { readonly label: string; readonly minutes: number }[];
   readonly projects: readonly { readonly project: string; readonly screenMinutes: number; readonly agentMinutes: number }[];
-  readonly threads: readonly { readonly title: string; readonly project: string; readonly prompts: number; readonly agentMinutes: number }[];
+  readonly threads: readonly {
+    readonly id: string;
+    readonly title: string;
+    readonly project: string;
+    readonly prompts: number;
+    readonly agentMinutes: number;
+  }[];
   /** The user's own windows, without T3 Code's and redacted ones. title is null for a Windows program. They hold window titles, so they are for the agent's text only and never reach the report or Postlude. */
   readonly windows: readonly { readonly app: string | null; readonly title: string | null; readonly minutes: number }[];
 };
@@ -190,8 +200,16 @@ const byMinutes = <T extends { readonly minutes: number; readonly label: string 
 /** When something placed in a part happened: an instant, with start equal to end, or an appointment. */
 export type Moment = Interval & { readonly part: number | null };
 
-const ownWindow = ({ app, title }: WindowPiece): boolean =>
-  (app !== null || title !== null) && app !== REDACTED && title !== REDACTED && !T3_APP.test(app ?? "") && !T3_TITLE.test(title ?? "");
+const t3Window = ({ app, title }: WindowPiece): boolean => T3_APP.test(app ?? "") || T3_TITLE.test(title ?? "");
+
+const ownWindow = (piece: WindowPiece): boolean =>
+  (piece.app !== null || piece.title !== null) && piece.app !== REDACTED && piece.title !== REDACTED && !t3Window(piece);
+
+/** The screen time with T3 Code in front, and the time an agent ran while the user had no screen time. */
+export const splitTime = (pieces: readonly Interval[], windows: readonly WindowPiece[], runs: readonly Interval[]) => {
+  const t3 = windows.filter(t3Window);
+  return { t3Minutes: totalMinutes(subtract(pieces, subtract(pieces, t3))), agentsAloneMinutes: totalMinutes(subtract(runs, pieces)) };
+};
 
 const partWindows = (windows: readonly WindowPiece[], bound: Interval): DayPart["windows"] => {
   const byWindow = new Map<string, { app: string | null; title: string | null; intervals: Interval[] }>();
@@ -247,6 +265,11 @@ export const buildParts = (timeline: Timeline, bounds: PartBounds, moments: read
       end: toBerlinIso(end),
       clock: `${toBerlinClock(start)}–${toBerlinClock(end)}`,
       screenMinutes: totalMinutes(pieces),
+      ...splitTime(
+        pieces,
+        windows,
+        threads.flatMap((entry) => entry.runs),
+      ),
       areas: [...areas]
         .map(([label, ms]) => ({ label, minutes: minutes(ms) }))
         .filter((area) => area.minutes > 0)
@@ -257,6 +280,7 @@ export const buildParts = (timeline: Timeline, bounds: PartBounds, moments: read
         .toSorted((a, b) => b.screenMinutes + b.agentMinutes - (a.screenMinutes + a.agentMinutes) || compareText(a.project, b.project)),
       threads: threads
         .map((entry) => ({
+          id: entry.thread.id,
           title: entry.thread.title,
           project: projectLabel(entry.thread.project),
           prompts: entry.prompts.length,

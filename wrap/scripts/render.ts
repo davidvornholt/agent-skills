@@ -1,4 +1,4 @@
-// The template reads the day's figures from Postlude's message, and the times, minutes and counts this script prints come from the collected data. The agent writes only the prose: a summary, and a title and one or more paragraphs per part.
+// The template reads the day's figures from Postlude's message, and the times, minutes and counts this script prints come from the collected data. The agent writes only the prose: a summary, a title and one or more paragraphs per part, and clearer names for threads whose T3 title is unclear.
 
 import { compareText } from "./compare.ts";
 import { toBerlinClock } from "./day.ts";
@@ -17,10 +17,14 @@ const TEMPLATE_URL = new URL("../report/template.html", import.meta.url);
 
 export type AgentPart = { readonly title: string; readonly paragraphs: readonly string[] };
 
-/** What the agent writes: a summary of the day, and a title and one or more paragraphs per part, in order. */
-export type AgentText = { readonly summary: string; readonly parts: readonly AgentPart[] };
+/** What the agent writes: a summary of the day in one or more paragraphs, a title and one or more paragraphs per part, in order, and names for some of the day's threads, by thread id. */
+export type AgentText = {
+  readonly summary: readonly string[];
+  readonly parts: readonly AgentPart[];
+  readonly threadNames: ReadonlyMap<string, string>;
+};
 
-const TEXT_SHAPE = '{"summary": "...", "parts": [{"title": "...", "text": "..."}, ...]}';
+const TEXT_SHAPE = '{"summary": "...", "parts": [{"title": "...", "text": "..."}, ...], "threads": {"<thread id>": "<name>", ...}}';
 
 const tidy = (text: string): string => text.trim().replace(/\s+/g, " ");
 
@@ -31,8 +35,9 @@ const cleanText = (name: string, text: unknown): string => {
   return clean;
 };
 
-/** Splits a part's text into paragraphs at blank lines, tidies the white space within each, and drops the empty ones. */
-const cleanParagraphs = (name: string, text: string): string[] => {
+/** Splits a text into paragraphs at blank lines, tidies the white space within each, and drops the empty ones. */
+const cleanParagraphs = (name: string, text: unknown): string[] => {
+  if (typeof text !== "string") throw new Error(`The ${name} is not a string.`);
   const paragraphs = text
     .split(/\n[^\S\n]*\n/)
     .map(tidy)
@@ -51,6 +56,19 @@ const checkPart = (part: unknown, index: number): AgentPart => {
   return { title: cleanTitle, paragraphs: cleanParagraphs(`text of ${label}`, text) };
 };
 
+// Optional, and only for the day's threads, so a name always has a row or a conversation it belongs to.
+const checkThreadNames = (threads: unknown, collected: Collected): Map<string, string> => {
+  if (threads === undefined) return new Map();
+  if (typeof threads !== "object" || threads === null || Array.isArray(threads)) throw new Error(`The threads are not an object, as ${TEXT_SHAPE}.`);
+  const dayIds = new Set([...collected.timeline.threads.items, ...collected.conversations.items].map((thread) => thread.id));
+  return new Map(
+    Object.entries(threads).map(([id, name]) => {
+      if (!dayIds.has(id)) throw new Error(`The threads name ${id}, which is not one of the day's threads.`);
+      return [id, cleanText(`name of thread ${id}`, name)];
+    }),
+  );
+};
+
 /** Reads the agent's JSON from stdin and checks that it has one entry per part of the collected day. */
 export const parseAgentText = (raw: string, collected: Collected): AgentText => {
   let value: unknown;
@@ -60,14 +78,18 @@ export const parseAgentText = (raw: string, collected: Collected): AgentText => 
     throw new Error(`The report text is not JSON. Pipe ${TEXT_SHAPE}.`);
   }
   if (typeof value !== "object" || value === null) throw new Error("The report text is not a JSON object.");
-  const { summary, parts } = value as { summary?: unknown; parts?: unknown };
+  const { summary, parts, threads } = value as { summary?: unknown; parts?: unknown; threads?: unknown };
   if (!Array.isArray(parts)) throw new Error("The report text has no parts list.");
   const dayParts = collected.reportInputs.parts;
   if (parts.length !== dayParts.length)
     throw new Error(
       `The report text has ${parts.length} parts, but the day has ${dayParts.length}. Write one entry per entry of reportInputs.parts, in order.`,
     );
-  return { summary: cleanText("summary", summary), parts: dayParts.map((_, index) => checkPart(parts[index], index)) };
+  return {
+    summary: cleanParagraphs("summary", summary),
+    parts: dayParts.map((_, index) => checkPart(parts[index], index)),
+    threadNames: checkThreadNames(threads, collected),
+  };
 };
 
 /** A model ID as people say it, such as "Claude Opus 5.5" for claude-opus-5-5. An unknown ID stays as it is. */
@@ -247,12 +269,16 @@ const outputFacts = (inputs: ReportInputs): string[] => {
 };
 
 const focusFacts = (inputs: ReportInputs): string[] => {
-  const focus = inputs.facts.focus;
-  if (focus === null || focus.longest === null) return [];
-  const { longest } = focus;
+  const { focus, split } = inputs.facts;
+  const longest = focus?.longest ?? null;
   return [
-    `${count(focus.blocks, "focus block", "focus blocks")}; the longest was ${minutesText(longest.minutes)} on ${longest.area}, ${clockRange(Date.parse(longest.start), Date.parse(longest.end))}.`,
-  ];
+    split === null
+      ? null
+      : `${minutesText(split.t3Minutes)} of your screen time was in T3 Code, and agents ran for ${minutesText(split.agentsAloneMinutes)} while you had no screen time.`,
+    focus === null || longest === null
+      ? null
+      : `${count(focus.blocks, "focus block", "focus blocks")}; the longest was ${minutesText(longest.minutes)} on ${longest.area}, ${clockRange(Date.parse(longest.start), Date.parse(longest.end))}.`,
+  ].filter((line) => line !== null);
 };
 
 const directionFacts = (inputs: ReportInputs): string[] => {
@@ -324,7 +350,7 @@ const fillSlot = (template: string, slot: string, content: string): string => {
 export const renderReport = (template: string, collected: Collected, text: AgentText): string => {
   if (template.split("__METRICS_VERSION__").length !== 2) throw new Error("The report template needs exactly one __METRICS_VERSION__.");
   let html = template.replace("__METRICS_VERSION__", String(METRICS_VERSION));
-  html = fillSlot(html, "summary", `<p class="summary">${escapeHtml(text.summary)}</p>`);
+  html = fillSlot(html, "summary", text.summary.map((paragraph) => `<p class="summary">${escapeHtml(paragraph)}</p>`).join(""));
   html = fillSlot(html, "alerts", renderAlerts(collected.reportInputs));
   html = fillSlot(html, "tiles", renderTiles(collected.reportInputs));
   html = fillSlot(
@@ -333,6 +359,7 @@ export const renderReport = (template: string, collected: Collected, text: Agent
     renderTimeline(
       collected,
       text.parts.map((part) => part.title),
+      text.threadNames,
     ),
   );
   html = fillSlot(html, "parts", renderParts(collected, text));
