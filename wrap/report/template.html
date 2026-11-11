@@ -52,10 +52,10 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--surface); color: var(--ink); }
   body { font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
-  /* Every section keeps a column of readable width, and only the timeline may use the frame's full width. Postlude says how wide the report is in its text column (--column), and the column keeps that width when Postlude shows the frame wider, so only the timeline moves while the frame grows and shrinks. */
+  /* Every section keeps a column of readable width, and only the timeline may use the frame's full width. Postlude says how wide the report is in its text column (--column), and the column keeps that width when Postlude shows the frame wider, so only the timeline moves while the frame grows and shrinks. The column's width is rounded the way the browser rounds a frame's width, so in the column the sections fill it exactly, as they do without Postlude's column; their left margin is a whole pixel, so the text never sits between two pixels, and Postlude's whole-pixel steps on each side keep it on the same ones. */
   main { max-width: 1480px; margin: 0 auto; padding: 24px 20px 32px; }
-  main > *, main > .wide > :not(.timeline) { max-width: min(720px, var(--column, 760px) - 40px); margin-inline: auto; }
-  main > .wide { max-width: none; }
+  main > *, main > .wide > :not(.timeline) { --text-width: min(720px, round(var(--column, 760px) - 40px, 1px)); max-width: var(--text-width); margin-inline: auto; margin-left: max(0px, round((100% - var(--text-width)) / 2, 1px)); }
+  main > .wide { max-width: none; margin-inline: 0; }
   h1 { font-size: 22px; line-height: 1.25; font-weight: 600; margin: 0; }
   h2 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
   h3 { font-size: 13px; font-weight: 600; margin: 14px 0 4px; }

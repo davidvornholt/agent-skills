@@ -158,8 +158,10 @@ describe("renderReport", () => {
     ]);
     expect(sections.filter(([, wide]) => wide)).toEqual([["Timeline", true]]);
     expect(sections.map(([heading]) => heading)).toContain("Tracked in Super Productivity");
-    expect(template).toContain("main > *, main > .wide > :not(.timeline) { max-width: min(720px, var(--column, 760px) - 40px); margin-inline: auto; }");
-    expect(template).toContain("main > .wide { max-width: none; }");
+    expect(template).toContain(
+      "main > *, main > .wide > :not(.timeline) { --text-width: min(720px, round(var(--column, 760px) - 40px, 1px)); max-width: var(--text-width); margin-inline: auto; margin-left: max(0px, round((100% - var(--text-width)) / 2, 1px)); }",
+    );
+    expect(template).toContain("main > .wide { max-width: none; margin-inline: 0; }");
   });
 
   test("takes Postlude's column, then says it has a width button, shows it only when Postlude says it can widen the report, and asks Postlude for the other width", () => {
