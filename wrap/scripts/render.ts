@@ -1,4 +1,4 @@
-// The agent's text carries no counts or durations: the template reads the day's figures from Postlude's message, and the times, minutes and counts this script prints come from the collected data, never from the agent. A part's text may name clock times within the part, which render checks against the collected data.
+// The template reads the day's figures from Postlude's message, and the times, minutes and counts this script prints come from the collected data. The agent writes only the prose: a summary, and a title and paragraph per part.
 
 import { compareText } from "./compare.ts";
 import { toBerlinClock } from "./day.ts";
@@ -7,12 +7,8 @@ import { clockRange, escapeHtml, minutesText } from "./html.ts";
 import { METRICS_VERSION } from "./metrics.ts";
 import { renderTimeline } from "./render-timeline.ts";
 import { type List, median, type ReportInputs } from "./report-inputs.ts";
-import { type DayPart, projectLabel } from "./timeline.ts";
+import { projectLabel } from "./timeline.ts";
 
-// Short sentences and short paragraphs, so the report reads easily for someone without the background.
-export const SENTENCE_MAX_WORDS = 25;
-export const SUMMARY_MAX_WORDS = 60;
-export const PART_TEXT_MAX_WORDS = 90;
 export const PART_TITLE_MAX_LENGTH = 60;
 /** Open pull requests listed one by one in the loose ends; more collapse into one entry. */
 export const WAITING_PRS_LISTED = 3;
@@ -25,80 +21,25 @@ export type AgentPart = { readonly title: string; readonly text: string };
 export type AgentText = { readonly summary: string; readonly parts: readonly AgentPart[] };
 
 const TEXT_SHAPE = '{"summary": "...", "parts": [{"title": "...", "text": "..."}, ...]}';
-const CLOCK = /\b([01]\d|2[0-3]):([0-5]\d)\b/g;
-// "#12", "name#12" or "owner/name#12", not inside a longer word or path.
-const REF = /(?<![\w./-])(?:(?:[\w.-]+\/)?[\w.-]+)?#\d+(?!\w)/;
 
 const cleanText = (name: string, text: unknown): string => {
   if (typeof text !== "string") throw new Error(`The ${name} is not a string.`);
   const clean = text.trim().replace(/\s+/g, " ");
   if (clean.length === 0) throw new Error(`The ${name} is empty.`);
-  const ref = REF.exec(clean);
-  if (ref !== null)
-    throw new Error(
-      `The ${name} names a pull request by its number, ${ref[0]}. The reader doesn't know the numbers, so say in everyday words what it changed.`,
-    );
   return clean;
 };
 
-const words = (text: string): number => text.split(" ").filter((word) => /[\p{L}\p{Nd}]/u.test(word)).length;
-
-/** Checks that the text is whole sentences, none longer than SENTENCE_MAX_WORDS, and at most maxWords words in all. */
-const checkSentences = (name: string, text: string, maxWords: number): void => {
-  if (!/[.!?…]["'”’)]?$/u.test(text)) throw new Error(`The ${name} doesn't end a sentence. Write whole sentences, not a list or fragments.`);
-  const total = words(text);
-  if (total > maxWords) throw new Error(`The ${name} has ${total} words; the limit is ${maxWords}. Leave out what matters least.`);
-  for (const [index, sentence] of text.split(/(?<=[.!?…]["'”’)]?)\s+/u).entries()) {
-    const count = words(sentence);
-    if (count > SENTENCE_MAX_WORDS)
-      throw new Error(`Sentence ${index + 1} of the ${name} has ${count} words; the limit is ${SENTENCE_MAX_WORDS}. Split it into shorter sentences.`);
-  }
-};
-
-const NO_DIGITS = "The report prints every count and duration from the collected data, so describe them without numbers.";
-
-const checkNoDigits = (name: string, text: string): void => {
-  if (/\p{Nd}/u.test(text)) throw new Error(`The ${name} contains digits. ${NO_DIGITS}`);
-};
-
-/** Minutes since the journal day began at 04:00, for a clock time. */
-const journalMinute = (hour: number, minute: number): number => (hour * 60 + minute - 4 * 60 + 24 * 60) % (24 * 60);
-
-const clockMinute = (ms: number): number => {
-  const [hour = 0, minute = 0] = toBerlinClock(ms).split(":").map(Number);
-  return journalMinute(hour, minute);
-};
-
-/** Checks a part's text: clock times must fall within the part; no other digits. */
-const checkPartText = (name: string, text: string, part: DayPart): void => {
-  const first = clockMinute(Date.parse(part.start));
-  const last = clockMinute(Date.parse(part.end));
-  // A part that ends at 04:00 ends at the end of the journal day.
-  const end = last < first ? 24 * 60 : last;
-  for (const match of text.matchAll(CLOCK)) {
-    const minute = journalMinute(Number(match[1]), Number(match[2]));
-    // 04:00 is both the start and the end of the journal day.
-    const inPart = (minute >= first && minute <= end) || minute + 24 * 60 === end;
-    if (!inPart) throw new Error(`The ${name} mentions ${match[0]}, but the part runs ${part.clock}. Use only times within the part.`);
-  }
-  if (/\p{Nd}/u.test(text.replace(CLOCK, ""))) throw new Error(`The ${name} contains digits other than HH:MM times. ${NO_DIGITS}`);
-};
-
-const checkPart = (part: unknown, index: number, dayPart: DayPart): AgentPart => {
+const checkPart = (part: unknown, index: number): AgentPart => {
   const { title, text } = (typeof part === "object" && part !== null ? part : {}) as { title?: unknown; text?: unknown };
   const label = `part ${index + 1}`;
   if (typeof title !== "string" || typeof text !== "string") throw new Error(`The ${label} needs a title and a text, as ${TEXT_SHAPE}.`);
   const cleanTitle = cleanText(`title of ${label}`, title);
   if (cleanTitle.length > PART_TITLE_MAX_LENGTH)
     throw new Error(`The title of ${label} has ${cleanTitle.length} characters; the limit is ${PART_TITLE_MAX_LENGTH}.`);
-  checkNoDigits(`title of ${label}`, cleanTitle);
-  const cleanBody = cleanText(`text of ${label}`, text);
-  checkSentences(`text of ${label}`, cleanBody, PART_TEXT_MAX_WORDS);
-  checkPartText(`text of ${label}`, cleanBody, dayPart);
-  return { title: cleanTitle, text: cleanBody };
+  return { title: cleanTitle, text: cleanText(`text of ${label}`, text) };
 };
 
-/** Reads the agent's JSON from stdin and checks it against the collected day. */
+/** Reads the agent's JSON from stdin and checks that it has one entry per part of the collected day. */
 export const parseAgentText = (raw: string, collected: Collected): AgentText => {
   let value: unknown;
   try {
@@ -114,10 +55,7 @@ export const parseAgentText = (raw: string, collected: Collected): AgentText => 
     throw new Error(
       `The report text has ${parts.length} parts, but the day has ${dayParts.length}. Write one entry per entry of reportInputs.parts, in order.`,
     );
-  const clean = cleanText("summary", summary);
-  checkSentences("summary", clean, SUMMARY_MAX_WORDS);
-  checkNoDigits("summary", clean);
-  return { summary: clean, parts: dayParts.map((dayPart, index) => checkPart(parts[index], index, dayPart)) };
+  return { summary: cleanText("summary", summary), parts: dayParts.map((_, index) => checkPart(parts[index], index)) };
 };
 
 /** A model ID as people say it, such as "Claude Opus 5.5" for claude-opus-5-5. An unknown ID stays as it is. */

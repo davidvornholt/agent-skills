@@ -8,12 +8,9 @@ import {
   durationText,
   loadTemplate,
   modelDisplayName,
-  PART_TEXT_MAX_WORDS,
   PART_TITLE_MAX_LENGTH,
   parseAgentText,
   renderReport,
-  SENTENCE_MAX_WORDS,
-  SUMMARY_MAX_WORDS,
   WAITING_PRS_LISTED,
 } from "./render.ts";
 import { MARK_GAP_MINUTES, renderTimeline, THREADS_PER_AREA } from "./render-timeline.ts";
@@ -31,7 +28,6 @@ const TEXT: AgentText = {
 };
 const TITLES = TEXT.parts.map((part) => part.title);
 const at = (iso: string) => Date.parse(iso);
-const sentence = (words: number) => `${Array.from({ length: words }, () => "word").join(" ")}.`;
 
 describe("parseAgentText", () => {
   const parse = (value: unknown, day: Collected = collected) => parseAgentText(typeof value === "string" ? value : JSON.stringify(value), day);
@@ -85,48 +81,9 @@ describe("parseAgentText", () => {
     expect(() => parse({ ...long, parts: [{ title: "a".repeat(PART_TITLE_MAX_LENGTH + 1), text: morning }, long.parts[1]] })).toThrow(/title of part 1 has/);
   });
 
-  test("asks for whole, short sentences in short paragraphs", () => {
-    expect(() => parse(withText(sentence(SENTENCE_MAX_WORDS)))).not.toThrow();
-    expect(() => parse(withText(`You read. ${sentence(SENTENCE_MAX_WORDS + 1)}`))).toThrow(
-      new RegExp(`Sentence 2 of the text of part 1 has ${SENTENCE_MAX_WORDS + 1} words; the limit is ${SENTENCE_MAX_WORDS}`),
-    );
-    expect(() => parse(withText(morning, morning, `A calm day; ${sentence(SENTENCE_MAX_WORDS)}`))).toThrow(/Sentence 1 of the summary has/);
-    const paragraph = (words: number) =>
-      [...Array.from({ length: Math.floor(words / 10) }, () => sentence(10)), ...(words % 10 === 0 ? [] : [sentence(words % 10)])].join(" ");
-    expect(() => parse(withText(paragraph(PART_TEXT_MAX_WORDS)))).not.toThrow();
-    expect(() => parse(withText(paragraph(PART_TEXT_MAX_WORDS + 1)))).toThrow(new RegExp(`text of part 1 has ${PART_TEXT_MAX_WORDS + 1} words`));
-    expect(() => parse(withText(morning, morning, paragraph(SUMMARY_MAX_WORDS + 1)))).toThrow(/summary has \d+ words; the limit is/);
-    expect(() => parse(withText("Read the news; wrote tests"))).toThrow(/doesn't end a sentence/);
-    // A quote or a bracket may close the last sentence.
-    expect(() => parse(withText('You read the "news."'))).not.toThrow();
-  });
-
-  test("refuses digits in any script in the summary and titles, because the report prints every number itself", () => {
-    expect(() => parse(withText(morning, morning, "Three meetings and 2 reviews."))).toThrow(/summary contains digits/);
-    expect(() => parse(withText(morning, morning, "Meetings: ٣."))).toThrow(/digits/);
-    expect(() => parse(withText(morning, morning, "From 13:00 on."))).toThrow(/summary contains digits/);
-    const titled = withText(morning);
-    expect(() => parse({ ...titled, parts: [{ title: "From 04:00", text: morning }, titled.parts[1]] })).toThrow(/title of part 1 contains digits/);
-  });
-
-  test("lets a part's text name clock times within it, and no other digits", () => {
-    // The parts run 04:00–13:00 and 13:00–04:00.
-    expect(() =>
-      parse(withText("You started at 04:00 and stopped at 13:00.", "You started at 13:00. You stopped at 03:59, and 04:00 closed the day.")),
-    ).not.toThrow();
-    expect(() => parse(withText("You read at 14:00."))).toThrow(/text of part 1 mentions 14:00, but the part runs 04:00–13:00/);
-    expect(() => parse(withText(morning, "You read at 12:59."))).toThrow(/mentions 12:59, but the part runs 13:00–04:00/);
-    expect(() => parse(withText("You had 2 reviews."))).toThrow(/text of part 1 contains digits other than HH:MM times/);
-    expect(() => parse(withText("You read at 9:30."))).toThrow(/contains digits other than/);
-  });
-
-  test("refuses pull request numbers and asks for what they changed instead", () => {
-    for (const ref of ["postlude#12", "#12", "davidvornholt/sp-cli#8"]) {
-      expect(() => parse(withText(`You landed ${ref}.`))).toThrow(
-        new RegExp(`text of part 1 names a pull request by its number, ${ref}\\. .*say in everyday words what it changed`),
-      );
-    }
-    expect(() => parse(withText(morning, morning, "You landed postlude#12."))).toThrow(/summary names a pull request by its number/);
+  test("leaves the wording to the agent: long sentences, numbers and pull request refs pass", () => {
+    const long = `You ${Array.from({ length: 40 }, () => "read").join(" and ")}.`;
+    expect(() => parse(withText(long, "You landed postlude#12 at 14:00, which fixed 2 dates.", "A calm day with 3 reviews"))).not.toThrow();
   });
 });
 

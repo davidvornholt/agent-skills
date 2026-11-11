@@ -49,10 +49,7 @@ test("render passes on no window title and no list of windows", async () => {
   for (const text of new Set(made)) expect(payload.reportHtml).not.toContain(text);
 });
 
-test("render refuses a summary with digits and a part count that doesn't match the day's", async () => {
-  const digits = await run(["render", collectedFile, "--model", "claude-opus-5-5"], JSON.stringify({ summary: "Wrote 3 tests.", parts: [PART, PART] }));
-  expect(digits.exitCode).toBe(1);
-  expect(JSON.parse(digits.stderr.split("\n")[0] ?? "").error).toMatch(/digits/);
+test("render refuses text whose part count doesn't match the day's", async () => {
   const count = await run(["render", collectedFile, "--model", "claude-opus-5-5"], JSON.stringify({ summary: "A calm day.", parts: [PART] }));
   expect(count.exitCode).toBe(1);
   expect(JSON.parse(count.stderr.split("\n")[0] ?? "").error).toMatch(/one entry per entry of reportInputs\.parts/);
