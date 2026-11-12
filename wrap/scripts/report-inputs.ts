@@ -2,6 +2,7 @@ import { compareText } from "./compare.ts";
 import { type DayWindow, eventOnDay, journalDayAt, toBerlinDate, toBerlinIso } from "./day.ts";
 import { totalMinutes, totalMs } from "./intervals.ts";
 import type { WindowPiece } from "./metrics.ts";
+import { focusMinutes } from "./screen-marks.ts";
 import type { CalendarEvent, Sources, SpData, SpTask } from "./sources.ts";
 import {
   buildParts,
@@ -70,10 +71,10 @@ export type ReportInputs = {
   readonly handedOffTasks: List<{ readonly title: string; readonly project: string | null; readonly doneAt: string } & InPart>;
   readonly settledThreads: List<{ readonly title: string; readonly project: string; readonly settledAt: string } & InPart>;
   readonly openThreads: List<{ readonly title: string; readonly project: string; readonly openSince: string }>;
-  /** summary is the start of the pull request's description, for the agent to say what it changed; the report shows only the title. */
+  /** summary is the start of the pull request's description, for the agent to say what it changed; the timeline's card shows its first sentences. */
   readonly landedPrs: List<Ref & { readonly title: string; readonly summary: string | null; readonly mergedAt: string } & InPart>;
   readonly closedPrs: List<Ref & { readonly title: string; readonly summary: string | null; readonly closedAt: string } & InPart>;
-  /** The mail the user sent, for the agent to describe in its own words; subjects never reach the report or Postlude. */
+  /** The mail the user sent, for the agent to describe in its own words; the timeline's cards show the subjects. */
   readonly sentMail: List<{ readonly mailbox: string; readonly subject: string; readonly sentAt: string } & InPart>;
   /** start and end are null for an all-day event. */
   readonly appointments: List<{ readonly title: string; readonly start: string | null; readonly end: string | null } & InPart>;
@@ -276,7 +277,10 @@ const facts = (window: DayWindow, sources: Sources, timeline: Timeline, windows:
   for (const thread of threads)
     if (thread.prompts.length > 0) byArea.set(areaLabel(thread.category), (byArea.get(areaLabel(thread.category)) ?? 0) + thread.prompts.length);
   const followUps = threads.flatMap((thread) => followUpSeconds(thread, window));
-  const longest = timeline.focusBlocks.toSorted((a, b) => b.end - b.start - (a.end - a.start) || a.start - b.start)[0];
+  // A focus block's minutes are its time at the computer, as the summary and the timeline's cards count them.
+  const longest = timeline.focusBlocks
+    .map((block) => ({ ...block, minutes: focusMinutes(timeline.pieces, block) }))
+    .toSorted((a, b) => b.minutes - a.minutes || a.start - b.start)[0];
   const dueToday = sources.sp.ok ? sources.sp.value.tasks.filter((task) => spDueDay(task) === window.day && !spWontDoBy(task, window.endMs)) : null;
   return {
     prompts: t3
@@ -312,7 +316,7 @@ const facts = (window: DayWindow, sources: Sources, timeline: Timeline, windows:
             longest:
               longest === undefined
                 ? null
-                : { minutes: totalMinutes([longest]), start: toBerlinIso(longest.start), end: toBerlinIso(longest.end), area: areaLabel(longest.category) },
+                : { minutes: longest.minutes, start: toBerlinIso(longest.start), end: toBerlinIso(longest.end), area: areaLabel(longest.category) },
           },
     dueToday: dueToday === null ? null : { count: dueToday.length, done: dueToday.filter((task) => spDoneBy(task, window.endMs)).length },
     promptsByArea: [...byArea].map(([area, count]) => ({ area, prompts: count })).toSorted((a, b) => b.prompts - a.prompts || compareText(a.area, b.area)),

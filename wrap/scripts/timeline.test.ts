@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { WindowPiece } from "./metrics.ts";
 import { sources, summary, WINDOW } from "./testing/fixtures.ts";
 import {
+  appName,
   buildParts,
   buildTimeline,
   dayWindows,
@@ -21,8 +22,9 @@ const timeline = (pieces: Timeline["pieces"]): Timeline => ({
   pieces,
   focusBlocks: [],
   categoryLabels: { code: "Code" },
+  windows: [],
   threads: { status: "complete", items: [] },
-  sentMail: { status: "complete", times: [] },
+  sentMail: { status: "complete", items: [] },
 });
 const clocks = (pieces: Timeline["pieces"]) => {
   const built = timeline(pieces);
@@ -165,15 +167,43 @@ describe("buildTimeline", () => {
     expect(buildTimeline(WINDOW, { ...sources, t3: { ok: true, value: { ...t3, runs } } }).threads.items.map((thread) => thread.id)).not.toContain("t-docs");
   });
 
-  test("keeps the send times of the mailboxes it could read, within the day, and is partial when one failed or hit its limit", () => {
+  test("keeps the send time, mailbox and subject of the mail from the mailboxes it could read, within the day, and is partial when one failed or hit its limit", () => {
     const { sentMail } = buildTimeline(WINDOW, sources);
     expect(sentMail.status).toBe("partial");
-    expect(sentMail.times.map((ms) => new Date(ms).toISOString())).toEqual([
-      "2026-10-29T08:00:00.000Z",
-      "2026-10-29T18:00:00.000Z",
-      "2026-10-29T19:00:00.000Z",
-      "2026-10-30T01:00:00.000Z",
+    expect(sentMail.items.map(({ at, mailbox, subject }) => [new Date(at).toISOString(), mailbox, subject])).toEqual([
+      ["2026-10-29T08:00:00.000Z", "b@example.com", "Garden plan for Saturday"],
+      ["2026-10-29T18:00:00.000Z", "c@example.com", "Invoice for October"],
+      ["2026-10-29T19:00:00.000Z", "c@example.com", "Re: Invoice for October"],
+      ["2026-10-30T01:00:00.000Z", "b@example.com", "Late reply"],
     ]);
+    // Nothing of a mail but when, from where, and its subject.
+    expect(sentMail.items.every((item) => Object.keys(item).sort().join() === "at,mailbox,subject")).toBe(true);
+  });
+
+  test("names the apps in front, keeps the titles of the user's own windows, and leaves out a window whose app or title was redacted", () => {
+    const { windows } = buildTimeline(WINDOW, sources);
+    expect([...new Set(windows.map((piece) => piece.app))].sort()).toEqual(["Accounts", "Calculator", "Mail", "T3 Code", "Writer"]);
+    // T3 Code's windows lose their title, and a Windows program has none.
+    expect([...new Set(windows.map((piece) => `${piece.app}: ${piece.title}`))].sort()).toEqual([
+      "Accounts: null",
+      "Calculator: Split the bill - Calculator",
+      "Mail: Inbox - Mail",
+      "T3 Code: null",
+      "Writer: Garden plan - Writer",
+    ]);
+  });
+
+  test("names an app as people say it", () => {
+    expect(
+      ["com.t3tools.T3Code", "t3code", "org.example.Mail", "WINWORD.EXE", "accounts.exe", "firefox", "org.gnome.TextEditor", "google-chrome"].map(appName),
+    ).toEqual(["T3 Code", "T3 Code", "Mail", "Winword", "Accounts", "Firefox", "TextEditor", "Google chrome"]);
+  });
+
+  test("keeps the pull requests a thread landed within the day", () => {
+    const { threads } = buildTimeline(WINDOW, sources);
+    expect(
+      threads.items.flatMap((thread) => thread.pullRequests.map((pr) => [thread.id, `${pr.repository}#${pr.number}`, new Date(pr.mergedAt).toISOString()])),
+    ).toEqual([["t-tidy", "davidvornholt/sp-cli#7", "2026-10-29T15:00:00.000Z"]]);
   });
 
   test("is missing without a usable summary, but keeps the threads", () => {
@@ -204,7 +234,8 @@ describe("part threads", () => {
     const built = buildTimeline(WINDOW, sources);
     const parts = buildParts(built, partBounds(WINDOW, built), [], dayWindows(WINDOW, sources));
     expect(parts.map(({ screenMinutes, t3Minutes, agentsAloneMinutes }) => ({ screenMinutes, t3Minutes, agentsAloneMinutes }))).toEqual([
-      { screenMinutes: 240, t3Minutes: 210, agentsAloneMinutes: 30 },
+      // The minute away at 09:40 is screen time neither of the user nor in T3 Code, while an agent ran.
+      { screenMinutes: 239, t3Minutes: 209, agentsAloneMinutes: 31 },
       { screenMinutes: 330, t3Minutes: 180, agentsAloneMinutes: 60 },
     ]);
   });

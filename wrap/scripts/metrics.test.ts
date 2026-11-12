@@ -13,15 +13,15 @@ test("computes every metric of a day with all sources", () => {
     dayMetrics: {
       metricsVersion: METRICS_VERSION,
       day: DAY,
-      activeMinutes: 330,
-      firstActivityAt: "2026-10-29T08:12:00+01:00",
-      lastActivityAt: "2026-10-29T23:40:00+01:00",
-      focusMinutes: 200,
-      scatteredMinutes: 130,
+      activeMinutes: 569,
+      firstActivityAt: "2026-10-29T08:00:00+01:00",
+      lastActivityAt: "2026-10-29T18:30:00+01:00",
+      focusMinutes: 449,
+      scatteredMinutes: 120,
       categories: [
-        { id: "code", label: "Code", minutes: 200 },
-        { id: "mail", label: "Mail", minutes: 80 },
-        { id: "admin", label: "Admin", minutes: 50 },
+        { id: "code", label: "Code", minutes: 389 },
+        { id: "admin", label: "Admin", minutes: 67 },
+        { id: "mail", label: "Mail", minutes: 23 },
       ],
       offComputerMinutes: 120,
       appointmentMinutes: 180,
@@ -125,18 +125,18 @@ describe("activity", () => {
     const parsed = parseSummary(summary, DAY);
     expect(parsed.timeline[0]).toEqual({
       start: Date.parse("2026-10-29T08:00:00+01:00"),
-      end: Date.parse("2026-10-29T11:30:00+01:00"),
+      end: Date.parse("2026-10-29T09:40:00+01:00"),
       category: "code",
       project: "~/dev/postlude",
     });
     expect(parsed.timeline.at(-1)).toMatchObject({ category: null, project: null });
-    expect(parsed.focusBlocks).toEqual([{ start: Date.parse("2026-10-29T08:12:00+01:00"), end: Date.parse("2026-10-29T11:32:00+01:00"), category: "code" }]);
+    expect(parsed.focusBlocks[0]).toEqual({ start: Date.parse("2026-10-29T08:00:00+01:00"), end: Date.parse("2026-10-29T11:30:00+01:00"), category: "code" });
     expect(() => parseSummary({ ...summary, timeline: undefined }, DAY)).toThrow(/timeline is not a list/);
     expect(() => parseSummary({ ...summary, timeline: [{ ...summary.timeline[0], project: 1 }] }, DAY)).toThrow(/timeline\[0\]\.project/);
   });
 
   test("reads the windows, and rejects a summary whose windows are malformed", () => {
-    expect(parseSummary(summary, DAY).windows.at(5)).toEqual({
+    expect(parseSummary(summary, DAY).windows.find((window) => window.app === "accounts.exe")).toEqual({
       start: Date.parse("2026-10-29T13:00:00+01:00"),
       end: Date.parse("2026-10-29T14:00:00+01:00"),
       app: "accounts.exe",

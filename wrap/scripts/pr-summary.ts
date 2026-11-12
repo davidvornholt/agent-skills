@@ -46,3 +46,17 @@ export const prSummary = (body: unknown): string | null => {
   const text = plain(chosen.replace(LABEL, ""));
   return text === "" ? null : capped(text);
 };
+
+/** The longest summary a pull request's card in the timeline shows. */
+export const CARD_SUMMARY_MAX_LENGTH = 240;
+
+/** A summary as a pull request's card shows it: its first two sentences where they fit, or else its first, cut at a word with an ellipsis where it is too long. */
+export const cardSummary = (summary: string): string => {
+  const sentences = summary.split(/(?<=[.!?])\s+/);
+  const [first = summary, second] = sentences;
+  const two = second === undefined ? first : `${first} ${second}`;
+  if (two.length <= CARD_SUMMARY_MAX_LENGTH) return two;
+  if (first.length <= CARD_SUMMARY_MAX_LENGTH) return first;
+  const wordEnd = first.lastIndexOf(" ", CARD_SUMMARY_MAX_LENGTH - 1);
+  return `${first.slice(0, wordEnd > 0 ? wordEnd : CARD_SUMMARY_MAX_LENGTH - 1).trimEnd()}…`;
+};

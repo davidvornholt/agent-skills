@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { PR_SUMMARY_MAX_LENGTH, prSummary } from "./pr-summary.ts";
+import { CARD_SUMMARY_MAX_LENGTH, cardSummary, PR_SUMMARY_MAX_LENGTH, prSummary } from "./pr-summary.ts";
 
 test("takes the Now paragraph, without its label and markdown", () => {
   const body = [
@@ -41,4 +41,18 @@ test("gives null for a body without prose", () => {
   expect(prSummary(null)).toBeNull();
   expect(prSummary("")).toBeNull();
   expect(prSummary("## Changes\n\n- One\n- Two\n\nOpened by an agent in a tool that writes this line.")).toBeNull();
+});
+
+test("a card shows the first two sentences where they fit, or else the first, cut at a word", () => {
+  expect(cardSummary("The garden page shows a map. Each bed links to its plants. The map prints too.")).toBe(
+    "The garden page shows a map. Each bed links to its plants.",
+  );
+  const long = `The garden page shows ${"a very long ".repeat(25)}map.`;
+  expect(cardSummary(`Short first. ${long}`)).toBe("Short first.");
+  const cut = cardSummary(long);
+  expect(cut.length).toBeLessThanOrEqual(CARD_SUMMARY_MAX_LENGTH);
+  // Cut before a space, so no word is cut in half.
+  expect(`${long.slice(0, cut.length - 1)}…`).toBe(cut);
+  expect(long.charAt(cut.length - 1)).toBe(" ");
+  expect(cardSummary("One sentence without an end")).toBe("One sentence without an end");
 });

@@ -19,15 +19,17 @@ test("builds the parts and lists of a day with all sources", () => {
         start: "2026-10-29T04:00:00+01:00",
         end: "2026-10-29T13:00:00+01:00",
         clock: "04:00–13:00",
-        screenMinutes: 240,
-        t3Minutes: 210,
-        agentsAloneMinutes: 30,
+        // The minute away at 09:40 counts toward the agents' time alone.
+        screenMinutes: 239,
+        t3Minutes: 209,
+        agentsAloneMinutes: 31,
         areas: [
-          { label: "Code", minutes: 210 },
-          { label: "Mail", minutes: 30 },
+          { label: "Code", minutes: 209 },
+          { label: "Mail", minutes: 23 },
+          { label: "Admin", minutes: 7 },
         ],
         projects: [
-          { project: "postlude", screenMinutes: 210, agentMinutes: 80 },
+          { project: "postlude", screenMinutes: 209, agentMinutes: 80 },
           // The run began before the journal day, so only its last half hour counts.
           { project: "nix-config", screenMinutes: 0, agentMinutes: 30 },
         ],
@@ -36,7 +38,7 @@ test("builds the parts and lists of a day with all sources", () => {
           { id: "t-night", title: "Night build", project: "nix-config", prompts: 0, agentMinutes: 30 },
         ],
         // Without T3 Code's own windows, redacted ones, and the calculator's single minute; the mail windows add up across the redacted one.
-        windows: [{ app: "org.example.Mail", title: "Inbox - Mail", minutes: 24 }],
+        windows: [{ app: "org.example.Mail", title: "Inbox - Mail", minutes: 22 }],
       },
       {
         // A task done just before the end of the journal day, and the night train clipped to it.
@@ -164,8 +166,9 @@ test("builds the parts and lists of a day with all sources", () => {
           },
         ],
       },
-      split: { t3Minutes: 390, agentsAloneMinutes: 90 },
-      focus: { blocks: 1, longest: { minutes: 200, start: "2026-10-29T08:12:00+01:00", end: "2026-10-29T11:32:00+01:00", area: "Code" } },
+      split: { t3Minutes: 389, agentsAloneMinutes: 91 },
+      // The longest by its time at the computer, which leaves out the minute away within it.
+      focus: { blocks: 3, longest: { minutes: 209, start: "2026-10-29T08:00:00+01:00", end: "2026-10-29T11:30:00+01:00", area: "Code" } },
       dueToday: { count: 3, done: 1 },
       promptsByArea: [{ area: "Code", prompts: 4 }],
     },

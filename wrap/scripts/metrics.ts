@@ -60,7 +60,7 @@ export type Summary = {
   readonly categories: readonly SummaryCategory[];
   readonly activeIntervals: readonly Interval[] | null;
   readonly timeline: readonly TimelinePiece[];
-  /** Window titles, as input for one report: they must not be stored, because the focus logs they come from are deleted after 30 days. */
+  /** The windows in front, with their titles; the report's timeline cards name the titles of the user's own windows. */
   readonly windows: readonly WindowPiece[];
   readonly focusBlocks: readonly FocusBlock[];
 };

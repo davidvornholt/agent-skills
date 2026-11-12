@@ -1,4 +1,4 @@
-// The day's timeline and its parts. The report draws the timeline, and the agent writes a title and a few lines per part.
+// The day's timeline and its parts. compose builds the report's timeline from it, and the agent writes a title and a few lines per part.
 //
 // A part starts as a stretch of the user's screen time: the timeline's pieces joined across gaps shorter than PART_GAP_MINUTES. A stretch with less than PART_MIN_MINUTES of screen time joins the stretch before it, or the one after it when it comes first, so a short check at night doesn't need lines of its own. Things that happened, such as a landed pull request, a prompt or an agent's run, belong to the part whose bound holds them: from the start of its stretch to the start of the next one, the first part from the start of the journal day, and the last part to its end. A part's printed time range covers its screen time and everything placed in it, so it can begin before its stretch and end after it.
 
@@ -36,17 +36,27 @@ export type TimelineThread = {
   /** When at least one agent of the thread was running. */
   readonly runs: readonly Interval[];
   readonly prompts: readonly Prompt[];
+  /** The pull requests T3 Code links to the thread that merged within the journal day. repository is "owner/name". */
+  readonly pullRequests: readonly { readonly repository: string; readonly number: number; readonly mergedAt: number }[];
 };
 
-/** What the report draws; the agent doesn't need to read it. Times are epoch milliseconds, clipped to the journal day. */
+/** A stretch in which a window was in front: its app, by the name people say, and its title where it is one of the user's own windows, not T3 Code's. */
+export type ScreenWindow = Interval & { readonly app: string; readonly title: string | null };
+
+/** A sent mail. The report's timeline shows its subject on hover. */
+export type SentMail = { readonly at: number; readonly mailbox: string; readonly subject: string };
+
+/** What the report's timeline is built from; the agent doesn't need to read it. Times are epoch milliseconds, clipped to the journal day. */
 export type Timeline = {
   readonly status: ListStatus;
   readonly pieces: readonly TimelinePiece[];
   readonly focusBlocks: readonly FocusBlock[];
   readonly categoryLabels: Readonly<Record<string, string>>;
+  /** The windows in front, leaving out redacted ones. */
+  readonly windows: readonly ScreenWindow[];
   readonly threads: { readonly status: ListStatus; readonly items: readonly TimelineThread[] };
-  /** Send times only, from the mailboxes that could be read. */
-  readonly sentMail: { readonly status: ListStatus; readonly times: readonly number[] };
+  /** From the mailboxes that could be read, the earliest first. */
+  readonly sentMail: { readonly status: ListStatus; readonly items: readonly SentMail[] };
 };
 
 export type DayPart = {
@@ -68,9 +78,12 @@ export type DayPart = {
     readonly prompts: number;
     readonly agentMinutes: number;
   }[];
-  /** The user's own windows, without T3 Code's and redacted ones. title is null for a Windows program. They hold window titles, so they are for the agent's text only and never reach the report or Postlude. */
+  /** The user's own windows, without T3 Code's and redacted ones. title is null for a Windows program. */
   readonly windows: readonly { readonly app: string | null; readonly title: string | null; readonly minutes: number }[];
 };
+
+/** A thread's T3 title, or a stand-in for a thread without one. */
+export const threadTitle = (thread: TimelineThread): string => thread.title || "Untitled thread";
 
 /** A T3 project's name in the report: the last folder of its path. */
 export const projectLabel = (project: string): string => project.split("/").filter(Boolean).at(-1) ?? project;
@@ -95,9 +108,33 @@ const usableSummary = (window: DayWindow, sources: Sources): Summary | null => {
   }
 };
 
-/** The summary's windows within the journal day. They hold window titles, so they stay out of the timeline, which the collected file keeps. */
+/** The summary's windows within the journal day, with app ids as the summary has them, for the parts. */
 export const dayWindows = (window: DayWindow, sources: Sources): WindowPiece[] =>
   clipped(usableSummary(window, sources)?.windows ?? [], windowInterval(window));
+
+/**
+ * An app as people say it: the last part of a reverse-DNS app id, a Windows program without ".exe", with a capital letter where the id has none or only capitals, such as "Mail" for org.example.Mail and "Winword" for WINWORD.EXE.
+ */
+export const appName = (app: string): string => {
+  if (T3_APP.test(app)) return "T3 Code";
+  const program = /\.exe$/i.test(app);
+  const name = (program ? app.slice(0, -".exe".length) : (app.split(".").at(-1) ?? app)).replace(/[-_]+/g, " ").trim();
+  if (name === "") return app;
+  const plain = name === name.toLowerCase() || name === name.toUpperCase() ? name.toLowerCase() : name;
+  return plain.charAt(0).toUpperCase() + plain.slice(1);
+};
+
+const t3Window = ({ app, title }: WindowPiece): boolean => T3_APP.test(app ?? "") || T3_TITLE.test(title ?? "");
+
+const ownWindow = (piece: WindowPiece): boolean =>
+  (piece.app !== null || piece.title !== null) && piece.app !== REDACTED && piece.title !== REDACTED && !t3Window(piece);
+
+const screenWindows = (windows: readonly WindowPiece[]): ScreenWindow[] =>
+  windows.flatMap((piece) =>
+    piece.app === null || piece.app === REDACTED || piece.title === REDACTED
+      ? []
+      : [{ start: piece.start, end: piece.end, app: appName(piece.app), title: ownWindow(piece) ? piece.title : null }],
+  );
 
 const dayThreads = (window: DayWindow, sources: Sources, summary: Summary | null): Timeline["threads"] => {
   if (!sources.t3.ok) return { status: "missing", items: [] };
@@ -121,15 +158,16 @@ const dayThreads = (window: DayWindow, sources: Sources, summary: Summary | null
       .map((prompt) => ({ at: Date.parse(prompt.at), fromPhone: prompt.fromPhone }))
       .filter((prompt) => inDay(prompt.at, day))
       .toSorted((a, b) => a.at - b.at),
+    pullRequests: thread.pullRequests
+      .flatMap(({ repository, number, mergedAt }) => (mergedAt === null ? [] : [{ repository, number, mergedAt: Date.parse(mergedAt) }]))
+      .filter((pr) => inDay(pr.mergedAt, day))
+      .toSorted((a, b) => a.mergedAt - b.mergedAt || compareText(a.repository, b.repository) || a.number - b.number),
   }));
   return { status: "complete", items: items.filter((thread) => thread.runs.length > 0 || thread.prompts.length > 0) };
 };
 
 /** The mail sent within the journal day from the mailboxes that could be read, the earliest first. */
-export const sentMails = (
-  window: DayWindow,
-  sources: Sources,
-): { readonly status: ListStatus; readonly items: readonly { readonly mailbox: string; readonly at: number; readonly subject: string }[] } => {
+export const sentMails = (window: DayWindow, sources: Sources): Timeline["sentMail"] => {
   if (!sources.mail.ok) return { status: "missing", items: [] };
   const day = windowInterval(window);
   const read = sources.mail.value.flatMap(({ mailbox, reading }) => (reading.ok ? [{ mailbox, ...reading.value }] : []));
@@ -142,22 +180,18 @@ export const sentMails = (
   return { status, items };
 };
 
-const sentMail = (window: DayWindow, sources: Sources): Timeline["sentMail"] => {
-  const { status, items } = sentMails(window, sources);
-  return { status, times: items.map((mail) => mail.at) };
-};
-
 export const buildTimeline = (window: DayWindow, sources: Sources): Timeline => {
   const day = windowInterval(window);
   const summary = usableSummary(window, sources);
   const threads = dayThreads(window, sources, summary);
-  const mail = sentMail(window, sources);
-  if (summary === null) return { status: "missing", pieces: [], focusBlocks: [], categoryLabels: {}, threads, sentMail: mail };
+  const mail = sentMails(window, sources);
+  if (summary === null) return { status: "missing", pieces: [], focusBlocks: [], categoryLabels: {}, windows: [], threads, sentMail: mail };
   return {
     status: summary.hosts.every((host) => host.status === "complete") ? "complete" : "partial",
     pieces: clipped(summary.timeline, day),
     focusBlocks: clipped(summary.focusBlocks, day),
     categoryLabels: Object.fromEntries(summary.categories.map((category) => [category.id, category.label])),
+    windows: screenWindows(clipped(summary.windows, day)),
     threads,
     sentMail: mail,
   };
@@ -199,11 +233,6 @@ const byMinutes = <T extends { readonly minutes: number; readonly label: string 
 
 /** When something placed in a part happened: an instant, with start equal to end, or an appointment. */
 export type Moment = Interval & { readonly part: number | null };
-
-const t3Window = ({ app, title }: WindowPiece): boolean => T3_APP.test(app ?? "") || T3_TITLE.test(title ?? "");
-
-const ownWindow = (piece: WindowPiece): boolean =>
-  (piece.app !== null || piece.title !== null) && piece.app !== REDACTED && piece.title !== REDACTED && !t3Window(piece);
 
 /** The screen time with T3 Code in front, and the time an agent ran while the user had no screen time. */
 export const splitTime = (pieces: readonly Interval[], windows: readonly WindowPiece[], runs: readonly Interval[]) => {
