@@ -12,7 +12,7 @@ export type Collected = {
   readonly reportInputs: ReportInputs;
   /** The day's T3 Code threads in full, for the agent to read; never stored. */
   readonly conversations: List<Conversation>;
-  /** What the report draws, for render only. */
+  /** What the report's timeline draws, for compose only. */
   readonly timeline: Timeline;
   /** Why a source is missing or partial, for the agent; never stored. */
   readonly problems: readonly string[];

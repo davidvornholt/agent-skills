@@ -353,7 +353,7 @@ afterAll(() => rmSync(directory, { recursive: true, force: true }));
 
 test("reads every source into the metrics", () => {
   expect(collected.dayMetrics).toMatchObject({
-    activeMinutes: 330,
+    activeMinutes: 569,
     offComputerMinutes: 120,
     appointmentMinutes: 150,
     appointmentOffScreenMinutes: null,
@@ -405,6 +405,7 @@ test("reads every source into the metrics", () => {
         category: "code",
         runs: [{ start: Date.parse("2026-10-29T08:30:00.000Z"), end: Date.parse("2026-10-29T09:15:00.000Z") }],
         prompts: [{ at: Date.parse("2026-10-29T08:20:00.000Z"), fromPhone: true }],
+        pullRequests: [{ repository: "davidvornholt/postlude", number: 14, mergedAt: Date.parse("2026-10-29T10:00:00.000Z") }],
       },
     ],
   });
@@ -451,12 +452,16 @@ test("reads the day thread's own messages on the z890, with its delegates' repor
   expect(onZ890.collected.timeline.threads.items.map((thread) => [thread.id, thread.prompts.length, thread.runs.length])).toEqual([["t-garden", 2, 1]]);
 });
 
-test("keeps only each part's own windows, not the summary's list of them", () => {
+test("keeps each part's own windows, and the timeline's windows with titles only for the user's own", () => {
   expect(collected.reportInputs.parts[1]?.windows).toContainEqual({ app: "org.example.Writer", title: "Garden plan - Writer", minutes: 70 });
-  const file = JSON.stringify(collected);
-  // Below the least time a part lists, and T3 Code's own window.
-  for (const title of ["Calculator", "T3 Code (Beta)"]) expect(file).not.toContain(title);
-  expect(Object.keys(collected.timeline)).not.toContain("windows");
+  expect(collected.timeline.windows).toContainEqual({
+    start: Date.parse("2026-10-29T11:30:00+01:00"),
+    end: Date.parse("2026-10-29T11:31:00+01:00"),
+    app: "Calculator",
+    title: "Split the bill - Calculator",
+  });
+  // T3 Code's own window.
+  expect(JSON.stringify(collected)).not.toContain("T3 Code (Beta)");
 });
 
 test("says an older copy of the skill on the z890 is why T3 Code is missing", () => {
@@ -487,11 +492,12 @@ test("says where pim failed but withholds its error text", () => {
   );
 });
 
-test("passes mail subjects on only in the list of sent mail, and never recipients, notes, or pim's or sp's error text", () => {
+test("passes mail subjects on only in the lists of sent mail, and never recipients, notes, or pim's or sp's error text", () => {
   expect(collected.reportInputs.sentMail.status).toBe("partial");
   expect(collected.reportInputs.sentMail.items).toHaveLength(201);
   expect(collected.reportInputs.sentMail.items[0]).toEqual({ mailbox: "me@example.com", subject: SUBJECT, sentAt: "2026-10-29T09:00:00+01:00", part: 0 });
-  const withoutSentMail = (run: Collected) => JSON.stringify({ ...run, reportInputs: { ...run.reportInputs, sentMail: null } });
+  const withoutSentMail = (run: Collected) =>
+    JSON.stringify({ ...run, reportInputs: { ...run.reportInputs, sentMail: null }, timeline: { ...run.timeline, sentMail: null } });
   for (const output of [JSON.stringify(collected), stderr, JSON.stringify(spDown.collected), spDown.stderr]) {
     for (const secret of SECRETS) expect(output).not.toContain(secret);
   }
