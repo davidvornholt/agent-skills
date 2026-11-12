@@ -52,10 +52,10 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--surface); color: var(--ink); }
   body { font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
-  /* Every section keeps a column of readable width, and only the timeline may use the frame's full width. Postlude says how wide the report is in its text column (--column), and the column keeps that width when Postlude shows the frame wider, so only the timeline moves while the frame grows and shrinks. The column's width is rounded the way the browser rounds a frame's width, so in the column the sections fill it exactly, as they do without Postlude's column; their left margin is a whole pixel, so the text never sits between two pixels, and Postlude's whole-pixel steps on each side keep it on the same ones. */
+  /* Every section keeps a column of readable width, and only the timeline may use the frame's full width. Postlude says how wide the report is in its text column (--column). Where it can show the timeline wide, its frame is wider than the column all along, by the same whole number of pixels on each side, and covers what lies beyond the column until the timeline is wide; the sections keep to the column's width in the middle of the page, so they sit where they would in a frame the column's width. The column's width is rounded the way the browser rounds a frame's width, so the sections fill it exactly, as they do without Postlude's column, and their left margin is a whole pixel, so the text never sits between two pixels. */
   main { max-width: 1480px; margin: 0 auto; padding: 24px 20px 32px; }
   main > *, main > .wide > :not(.timeline) { --text-width: min(720px, round(var(--column, 760px) - 40px, 1px)); max-width: var(--text-width); margin-inline: auto; margin-left: max(0px, round((100% - var(--text-width)) / 2, 1px)); }
-  main > .wide { max-width: none; margin-inline: 0; }
+  main > .wide { position: relative; max-width: none; margin-inline: 0; }
   h1 { font-size: 22px; line-height: 1.25; font-weight: 600; margin: 0; }
   h2 { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
   h3 { font-size: 13px; font-weight: 600; margin: 14px 0 4px; }
@@ -111,16 +111,17 @@
   .section-note { margin: -6px 0 10px; }
   .tooltip { position: fixed; z-index: 1; pointer-events: none; max-width: min(420px, calc(100vw - 8px)); padding: 4px 8px; border-radius: 6px; background: var(--tooltip-surface); color: var(--tooltip-ink); font-size: 12px; }
   /* The timeline: rows for the parts, the screen time by area, events, and T3 Code threads by area; marks placed in percent of the drawn hours. */
-  .timeline { font-size: 12px; }
-  /* The labels take more room as the timeline grows, without a step while Postlude widens the frame. */
-  .tl-row { display: grid; grid-template-columns: minmax(80px, clamp(180px, 180px + (100% - 620px) * 0.15, 240px)) 1fr; gap: 10px; align-items: center; }
+  .timeline { font-size: 12px; container-type: inline-size; }
+  /* Until Postlude shows it wide, the timeline is as wide as it would be in a frame the column's width, in the same place. */
+  [data-timeline="column"] main > .wide > .timeline { --timeline-width: round(var(--column) - 40px, 1px); max-width: var(--timeline-width); margin-left: max(0px, round((100% - var(--timeline-width)) / 2, 1px)); }
+  .tl-row { display: grid; grid-template-columns: minmax(80px, 180px) 1fr; gap: 10px; align-items: center; }
   .tl-label { color: var(--ink-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tl-track { position: relative; height: 18px; border-bottom: 1px solid var(--line);
     background-image: linear-gradient(to right, var(--line) 1px, transparent 1px); background-size: calc(100% / var(--hours)) 100%; }
   .tl-axis .tl-ticks { position: relative; height: 16px; color: var(--ink-muted); }
   .tl-ticks span { position: absolute; transform: translateX(-50%); }
   .tl-ticks span:first-child { transform: none; }
-  .tl-ticks .minor { opacity: 0; transition: opacity 200ms ease; }
+  .tl-ticks .minor { display: none; }
   .tl-group { margin: 10px 0 2px; color: var(--ink-muted); }
   .tl-mark { position: absolute; top: 3px; height: 12px; min-width: 2px; }
   .tl-screen { background: var(--screen); }
@@ -150,12 +151,10 @@
   dl.facts dd { margin: 0; }
   dl.facts ul { margin: 0; padding-left: 18px; }
   dl.facts details { margin-top: 4px; }
-  /* The minor axis labels fade in once the frame is wide enough for them. */
-  @media (min-width: 1100px) {
-    .tl-ticks .minor { opacity: 1; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .tl-ticks .minor { transition: none; }
+  /* A timeline as wide as a 1100px frame gives it has room for longer labels and twice as many hours on its axis. */
+  @container (min-width: 1060px) {
+    .tl-row { grid-template-columns: minmax(80px, 240px) 1fr; }
+    .tl-ticks .minor { display: block; }
   }
   @media (max-width: 520px) {
     dl.facts { grid-template-columns: 1fr; gap: 2px; }
@@ -410,6 +409,15 @@
     window.parent.postMessage({ type: "postlude:report-height", height: Math.ceil(document.body.getBoundingClientRect().height) }, "*");
   };
 
+  // The part of the frame Postlude shows: all of it, or the column in its middle while the timeline keeps to the column.
+  let column = null;
+  const shownPart = () => {
+    const width = window.innerWidth;
+    if (column === null || document.documentElement.dataset.timeline !== "column") return { left: 0, right: width };
+    const left = Math.max(0, (width - column) / 2);
+    return { left, right: width - left };
+  };
+
   const tooltip = document.querySelector(".tooltip");
   let tipTarget = null;
   let tipOffset = { x: 0, y: 0 };
@@ -419,8 +427,10 @@
     tipOffset = { x: x - box.left, y: y - box.top };
     tooltip.textContent = target.dataset.tip;
     tooltip.hidden = false;
+    const { left, right } = shownPart();
+    tooltip.style.maxWidth = `${Math.min(420, right - left - 8)}px`;
     const width = tooltip.offsetWidth;
-    tooltip.style.left = `${Math.max(4, Math.min(x + 12, window.innerWidth - width - 4))}px`;
+    tooltip.style.left = `${Math.max(left + 4, Math.min(x + 12, right - width - 4))}px`;
     tooltip.style.top = `${Math.max(4, y - 34)}px`;
   };
   document.addEventListener("pointermove", (event) => {
@@ -439,7 +449,7 @@
   };
   document.addEventListener("focusout", hideTooltip);
   document.addEventListener("pointerleave", hideTooltip);
-  // A shown tooltip stays by its target when the target's text changes, and when the target moves, as it does in the frame while Postlude widens it. The observer follows the width in the frame it changes in, where a resize event can come a frame late.
+  // A shown tooltip stays by its target when the target's text changes, and when the target moves, as it does when the timeline changes its width or the frame does. The observer follows the frame's width in the frame it changes in, where a resize event can come a frame late.
   const placeAgain = () => {
     if (tipTarget === null || tooltip.hidden) return;
     const box = tipTarget.getBoundingClientRect();
@@ -447,19 +457,60 @@
   };
   new ResizeObserver(placeAgain).observe(document.documentElement);
 
-  // Postlude says how wide the report is in its text column, whether it can show the report wide, which needs a screen with room for it, and whether it does. The report keeps everything but the timeline at the column's width, and only then says it has a width button; Postlude widens only a report that has said so, so nothing else moves when the frame does. A Postlude that says nothing never shows the button. A press asks Postlude for the other width, and the button changes when Postlude says the frame has.
+  // The timeline changes its width in one step, and the two widths cross-fade, so nothing lays out again while Postlude uncovers or covers the frame's sides. The old one is a copy laid over the new one that fades out as the new one fades in; it is hidden from assistive technology and lets the pointer through.
+  const timeline = document.querySelector(".timeline");
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  let crossFade = null;
+  const showTimeline = (wide) => {
+    const root = document.documentElement;
+    const next = wide ? "wide" : "column";
+    if (root.dataset.timeline === next) return;
+    const shown = root.dataset.timeline !== undefined;
+    const opacity = timeline === null ? 1 : Number(getComputedStyle(timeline).opacity);
+    crossFade?.ghost.remove();
+    crossFade?.fadeIn.cancel();
+    crossFade = null;
+    if (timeline === null || !shown || reducedMotion.matches) {
+      root.dataset.timeline = next;
+      return;
+    }
+    const section = timeline.parentElement;
+    const from = timeline.getBoundingClientRect();
+    const within = section.getBoundingClientRect();
+    const ghost = timeline.cloneNode(true);
+    ghost.removeAttribute("role");
+    ghost.removeAttribute("aria-label");
+    ghost.setAttribute("aria-hidden", "true");
+    ghost.inert = true;
+    Object.assign(ghost.style, { position: "absolute", left: `${from.left - within.left}px`, top: `${from.top - within.top}px`, width: `${from.width}px`, maxWidth: "none", margin: "0", pointerEvents: "none" });
+    root.dataset.timeline = next;
+    section.append(ghost);
+    const timing = { duration: 300, easing: "cubic-bezier(0.2, 0, 0, 1)" };
+    const fadeOut = ghost.animate([{ opacity }, { opacity: 0 }], timing);
+    const fadeIn = timeline.animate([{ opacity: 0 }, { opacity: 1 }], timing);
+    const fade = { ghost, fadeIn };
+    crossFade = fade;
+    fadeOut.onfinish = () => {
+      ghost.remove();
+      if (crossFade === fade) crossFade = null;
+    };
+  };
+
+  // Postlude says how wide the report is in its text column, whether it can show the timeline wide, which needs a screen with room for it, and whether it does. The report keeps everything but the timeline at the column's width, and the timeline too until it is shown wide, and only then says it has a width button; Postlude makes room for the wide timeline only in a report that has said so, so nothing moves when the frame first takes that room. A Postlude that says nothing never shows the button. A press asks Postlude for the other width, and the timeline and the button change when Postlude says it shows the timeline at that width.
   const widthToggle = document.querySelector("[data-width-toggle]");
   let offeredWidth = false;
-  const showWidth = (available, wide, column) => {
-    document.documentElement.style.setProperty("--column", `${column}px`);
+  const showWidth = (available, wide, columnWidth) => {
+    column = columnWidth;
+    document.documentElement.style.setProperty("--column", `${columnWidth}px`);
     if (!widthToggle) return;
+    showTimeline(wide);
     const label = wide ? "Narrow the timeline" : "Widen the timeline";
     widthToggle.hidden = !available;
     widthToggle.dataset.wide = String(wide);
     widthToggle.dataset.tip = label;
     widthToggle.setAttribute("aria-label", label);
     if (tipTarget === widthToggle && !available) tooltip.hidden = true;
-    else if (tipTarget === widthToggle) placeAgain();
+    else placeAgain();
     if (offeredWidth) return;
     offeredWidth = true;
     window.parent.postMessage({ type: "postlude:report-width-control" }, "*");

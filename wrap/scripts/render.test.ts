@@ -151,7 +151,7 @@ describe("renderReport", () => {
     );
   });
 
-  test("lets the timeline use the full width and keeps everything else in the text column, at Postlude's column width when it says one", () => {
+  test("lets the timeline use the full width and keeps everything else in the text column, at Postlude's column width when it says one, and the timeline too until Postlude shows it wide", () => {
     const sections = [...html.matchAll(/<section( class="wide")?[^>]*>\s*(?:<div class="section-head">)?<h2>([^<]*)<\/h2>/g)].map((match) => [
       match[2],
       match[1] !== undefined,
@@ -161,7 +161,10 @@ describe("renderReport", () => {
     expect(template).toContain(
       "main > *, main > .wide > :not(.timeline) { --text-width: min(720px, round(var(--column, 760px) - 40px, 1px)); max-width: var(--text-width); margin-inline: auto; margin-left: max(0px, round((100% - var(--text-width)) / 2, 1px)); }",
     );
-    expect(template).toContain("main > .wide { max-width: none; margin-inline: 0; }");
+    expect(template).toContain("main > .wide { position: relative; max-width: none; margin-inline: 0; }");
+    expect(template).toContain(
+      '[data-timeline="column"] main > .wide > .timeline { --timeline-width: round(var(--column) - 40px, 1px); max-width: var(--timeline-width); margin-left: max(0px, round((100% - var(--timeline-width)) / 2, 1px)); }',
+    );
   });
 
   test("takes Postlude's column, then says it has a width button, shows it only when Postlude says it can widen the report, and asks Postlude for the other width", () => {
@@ -181,10 +184,26 @@ describe("renderReport", () => {
     expect(template).toContain('{ type: "postlude:report-width-request", wide: widthToggle.dataset.wide !== "true" }');
   });
 
-  test("keeps a shown tooltip by its target in every frame while Postlude widens or narrows the report", () => {
+  test("changes the timeline's width in one step and cross-fades the two widths, at once the first time and with reduced motion", () => {
+    const showTimeline = template.slice(template.indexOf("const showTimeline = "), template.indexOf("const widthToggle = "));
+    expect(showTimeline).toContain('const next = wide ? "wide" : "column";');
+    expect(showTimeline).toContain("if (timeline === null || !shown || reducedMotion.matches) {");
+    expect(showTimeline).toContain('ghost.setAttribute("aria-hidden", "true");');
+    expect(showTimeline).toContain("ghost.inert = true;");
+    expect(showTimeline).toContain("const fadeOut = ghost.animate([{ opacity }, { opacity: 0 }], timing);");
+    expect(showTimeline).toContain("const fadeIn = timeline.animate([{ opacity: 0 }, { opacity: 1 }], timing);");
+    // Only opacity moves: the copy is laid out once, where the timeline was, and nothing else changes size while the two fade.
+    expect(showTimeline).not.toMatch(/requestAnimationFrame|transition/);
+    const showWidth = template.slice(template.indexOf("const showWidth = "), template.indexOf("widthToggle?.addEventListener"));
+    expect(showWidth.indexOf("showTimeline(wide);")).toBeLessThan(showWidth.indexOf('"postlude:report-width-control"'));
+  });
+
+  test("keeps a shown tooltip by its target and within the part of the frame Postlude shows", () => {
     // A resize event can reach a frame's document an animation frame after its width has changed, and the tooltip would trail its target for that frame.
     expect(template).toContain("new ResizeObserver(placeAgain).observe(document.documentElement);");
     expect(template).not.toContain('addEventListener("resize"');
+    expect(template).toContain('if (column === null || document.documentElement.dataset.timeline !== "column") return { left: 0, right: width };');
+    expect(template).toContain("Math.max(left + 4, Math.min(x + 12, right - width - 4))");
   });
 
   test("leaves the pull requests' summaries to the agent", () => {
@@ -427,10 +446,11 @@ describe("renderTimeline", () => {
     expect(axisLabels(6)).toEqual(["04", "05", "06", "07", "08", "09"]);
     expect(axisLabels(12)).toEqual(["04", "05·", "06", "07·", "08", "09·", "10", "11·", "12", "13·", "14", "15·"]);
     expect(axisLabels(24)).toEqual(["04", "06·", "08", "10·", "12", "14·", "16", "18·", "20", "22·", "00", "02·"]);
+    // The timeline's own width decides, as a frame 1100px wide gives it, since Postlude's frame can be wider than the timeline it shows.
+    expect(template).toContain(".timeline { font-size: 12px; container-type: inline-size; }");
     expect(template).toMatch(
-      /\.tl-ticks \.minor \{ opacity: 0; transition: opacity 200ms ease; \}[\s\S]*@media \(min-width: 1100px\) \{\s*\.tl-ticks \.minor \{ opacity: 1; \}/,
+      /\.tl-ticks \.minor \{ display: none; \}[\s\S]*@container \(min-width: 1060px\) \{[^}]*\}\s*\.tl-ticks \.minor \{ display: block; \}/,
     );
-    expect(template).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.tl-ticks \.minor \{ transition: none; \}/);
   });
 
   test(`joins a row's screen time across gaps shorter than ${MARK_GAP_MINUTES} minutes, and counts only the screen time`, () => {
