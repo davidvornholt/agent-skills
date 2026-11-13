@@ -73,6 +73,8 @@ You compose the report: which blocks it has, in what order, under what headings,
 
    Tell a reader who no longer remembers the day what happened, concretely: what the user asked for, what the agents found, built or decided, and what came of it. A ticked-off task or a thread that was worked on isn't news by itself, and tasks mainly show what the work was about. Look up whatever else you need to understand the day.
 
+   Keep what you write to about 700 to 800 words, so the report reads in a few minutes: tell what came of each thread of work rather than every step on the way, and leave the details to the data blocks.
+
    The report looks back. A part may say where a thread of work ended, such as a fix that is in a pull request, but nothing reads as a to-do for the user, because the brief skill covers what's ahead.
 
    Say who started each thing: the user by hand, agents the user asked from the desk or the phone, or agents on their own, such as scheduled tasks, the night shift, the curator, and delegated work. `startedBy` and the message authors tell them apart.
