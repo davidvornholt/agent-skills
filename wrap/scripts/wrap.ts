@@ -2,15 +2,15 @@
 
 import { hostname } from "node:os";
 import { readLocalT3, readSources } from "./collect.ts";
+import { agentAreaPayload, composeDocument } from "./compose.ts";
 import { dayWindow, isDay, journalDayAt } from "./day.ts";
 import { buildCollected, type Collected } from "./day-report.ts";
 import { METRICS_VERSION } from "./metrics.ts";
-import { agentAreaPayload, loadTemplate, renderReport } from "./render.ts";
 
 const USAGE = `Usage:
   wrap.ts collect [YYYY-MM-DD]                    Read every source for the journal day (default: the current one) and print the metrics and report lists as JSON.
-  wrap.ts render <collected.json> --model <id>    Read the summary on stdin and print the stdin for \`postlude agent-area put <day>\`.
-  wrap.ts t3-threads                              Print this machine's T3 Code threads as JSON (collect runs it on the z890 over SSH).`;
+  wrap.ts compose <collected.json> --model <id>   Read the report as JSON on stdin, {"threads": {"<thread id>": "<name>", ...}, "blocks": [<block>, ...]} as SKILL.md describes, and print the stdin for \`postlude agent-area check|put <day>\`.
+  wrap.ts t3 <YYYY-MM-DD>                         Print this machine's T3 Code threads, and the day's threads with their runs, prompts, messages and pull requests, as JSON (collect runs it on the z890 over SSH).`;
 
 class UsageError extends Error {}
 
@@ -35,19 +35,21 @@ const main = async (args: readonly string[]): Promise<string> => {
     const window = dayWindow(day);
     return JSON.stringify(buildCollected(window, await readSources(window, hostname())), null, 2);
   }
-  if (command === "render") {
+  if (command === "compose") {
     const file = rest[0];
     const modelIndex = rest.indexOf("--model");
     const model = modelIndex === -1 ? undefined : rest[modelIndex + 1];
     if (file === undefined || file.startsWith("--") || model === undefined || model.trim() === "" || rest.length !== 3) {
-      throw new UsageError("render takes the collected file and --model <id>.");
+      throw new UsageError("compose takes the collected file and --model <id>.");
     }
     const collected = parseCollected(JSON.parse(await Bun.file(file).text()));
-    const reportHtml = renderReport(await loadTemplate(), collected, await Bun.stdin.text());
-    return JSON.stringify(agentAreaPayload(collected, reportHtml, model.trim()));
+    const reportDocument = composeDocument(await Bun.stdin.text(), collected);
+    return JSON.stringify(agentAreaPayload(collected, reportDocument, model.trim()));
   }
-  if (command === "t3-threads" && rest.length === 0) {
-    const reading = await readLocalT3();
+  if (command === "t3") {
+    const day = rest[0];
+    if (rest.length !== 1 || day === undefined || !isDay(day)) throw new UsageError("t3 takes one date as YYYY-MM-DD.");
+    const reading = await readLocalT3(dayWindow(day), Date.now());
     if (!reading.ok) throw new Error(reading.error);
     return JSON.stringify(reading.value);
   }

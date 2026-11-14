@@ -1,32 +1,64 @@
+import { CODE_BLOCK_MAX_LINES } from "../conversations.ts";
 import { dayWindow } from "../day.ts";
-import type { CalendarEvent, Sources, SpTask } from "../sources.ts";
+import type { CalendarEvent, Sources, SpTask, T3PullRequest } from "../sources.ts";
 
 export const DAY = "2026-10-29";
 export const WINDOW = dayWindow(DAY);
 
 export const summary = {
-  summaryVersion: 8,
+  summaryVersion: 10,
   day: DAY,
   window: { start: WINDOW.start, end: WINDOW.end },
   hosts: [
-    { host: "david-z890-nixos", status: "complete", activeMinutes: 300 },
+    { host: "david-z890-nixos", status: "complete", activeMinutes: 509 },
     { host: "david-x1-nixos", status: "partial", activeMinutes: 60 },
   ],
-  activeMinutes: 330,
-  firstActivityAt: "2026-10-29T08:12:00+01:00",
-  lastActivityAt: "2026-10-29T23:40:00+01:00",
-  focusMinutes: 200,
-  scatteredMinutes: 130,
-  focusBlocks: [{ start: "2026-10-29T08:12:00+01:00", end: "2026-10-29T11:32:00+01:00", category: "code" }],
-  categories: [
-    { id: "mail", label: "Mail", minutes: 80 },
-    { id: "code", label: "Code", minutes: 200 },
-    { id: "admin", label: "Admin", minutes: 50 },
+  // The totals and focus blocks follow from the timeline by the summary's rules, which focus-rule.test.ts checks.
+  activeMinutes: 569,
+  firstActivityAt: "2026-10-29T08:00:00+01:00",
+  lastActivityAt: "2026-10-29T18:30:00+01:00",
+  focusMinutes: 449,
+  scatteredMinutes: 120,
+  focusBlocks: [
+    { start: "2026-10-29T08:00:00+01:00", end: "2026-10-29T11:30:00+01:00", category: "code" },
+    { start: "2026-10-29T13:00:00+01:00", end: "2026-10-29T14:00:00+01:00", category: "admin" },
+    { start: "2026-10-29T14:00:00+01:00", end: "2026-10-29T17:00:00+01:00", category: "code" },
   ],
-  unattributedMinutes: 0,
+  categories: [
+    { id: "mail", label: "Mail", minutes: 23, t3Projects: [] },
+    { id: "code", label: "Code", minutes: 389, t3Projects: ["~/dev/postlude", "~/dev/sp-cli"] },
+    { id: "admin", label: "Admin", minutes: 67, t3Projects: [] },
+  ],
+  unattributedMinutes: 90,
   activeIntervals: [
-    { start: "2026-10-29T08:00:00+01:00", end: "2026-10-29T12:00:00+01:00" },
-    { start: "2026-10-29T13:00:00+01:00", end: "2026-10-29T18:30:00+01:00" },
+    { start: "2026-10-29T08:00:00.000+01:00", end: "2026-10-29T09:40:00.000+01:00" },
+    { start: "2026-10-29T09:41:00.000+01:00", end: "2026-10-29T12:00:00.000+01:00" },
+    { start: "2026-10-29T13:00:00.000+01:00", end: "2026-10-29T18:30:00.000+01:00" },
+  ],
+  // A minute away at 09:40, which the morning's focus block spans; 18 minutes of mail, too few for focus, then 7 of admin, and 5 more of mail.
+  timeline: [
+    { start: "2026-10-29T08:00:00.000+01:00", end: "2026-10-29T09:40:00.000+01:00", category: "code", project: "~/dev/postlude" },
+    { start: "2026-10-29T09:41:00.000+01:00", end: "2026-10-29T11:30:00.000+01:00", category: "code", project: "~/dev/postlude" },
+    { start: "2026-10-29T11:30:00.000+01:00", end: "2026-10-29T11:48:00.000+01:00", category: "mail", project: null },
+    { start: "2026-10-29T11:48:00.000+01:00", end: "2026-10-29T11:55:00.000+01:00", category: "admin", project: null },
+    { start: "2026-10-29T11:55:00.000+01:00", end: "2026-10-29T12:00:00.000+01:00", category: "mail", project: null },
+    { start: "2026-10-29T13:00:00.000+01:00", end: "2026-10-29T14:00:00.000+01:00", category: "admin", project: null },
+    { start: "2026-10-29T14:00:00.000+01:00", end: "2026-10-29T17:00:00.000+01:00", category: "code", project: "~/dev/sp-cli" },
+    { start: "2026-10-29T17:00:00.000+01:00", end: "2026-10-29T18:30:00.000+01:00", category: null, project: null },
+  ],
+  windows: [
+    { start: "2026-10-29T08:00:00.000+01:00", end: "2026-10-29T09:40:00.000+01:00", app: "com.t3tools.T3Code", title: "T3 Code" },
+    { start: "2026-10-29T09:41:00.000+01:00", end: "2026-10-29T11:30:00.000+01:00", app: "com.t3tools.T3Code", title: "T3 Code" },
+    { start: "2026-10-29T11:30:00.000+01:00", end: "2026-10-29T11:31:00.000+01:00", app: "org.example.Calculator", title: "Split the bill - Calculator" },
+    { start: "2026-10-29T11:31:00.000+01:00", end: "2026-10-29T11:48:00.000+01:00", app: "org.example.Mail", title: "Inbox - Mail" },
+    { start: "2026-10-29T11:48:00.000+01:00", end: "2026-10-29T11:55:00.000+01:00", app: "<redacted>", title: "<redacted>" },
+    { start: "2026-10-29T11:55:00.000+01:00", end: "2026-10-29T12:00:00.000+01:00", app: "org.example.Mail", title: "Inbox - Mail" },
+    { start: "2026-10-29T13:00:00.000+01:00", end: "2026-10-29T14:00:00.000+01:00", app: "accounts.exe", title: null },
+    { start: "2026-10-29T14:00:00.000+01:00", end: "2026-10-29T17:00:00.000+01:00", app: "t3code", title: "T3 Code (Beta)" },
+    { start: "2026-10-29T17:00:00.000+01:00", end: "2026-10-29T17:40:00.000+01:00", app: "org.example.Writer", title: "Garden plan - Writer" },
+    { start: "2026-10-29T17:40:00.000+01:00", end: "2026-10-29T17:50:00.000+01:00", app: "org.example.Browser", title: "<redacted>" },
+    { start: "2026-10-29T17:50:00.000+01:00", end: "2026-10-29T18:00:00.000+01:00", app: null, title: null },
+    { start: "2026-10-29T18:00:00.000+01:00", end: "2026-10-29T18:30:00.000+01:00", app: "org.example.Writer", title: "Garden plan - Writer" },
   ],
 };
 
@@ -39,8 +71,15 @@ const task = (fields: Partial<SpTask> & Pick<SpTask, "id" | "title">): SpTask =>
   projectId: "p-home",
   parentId: null,
   subTaskIds: [],
-  tagIds: [],
   timeSpentOnDay: {},
+  dueDay: null,
+  dueWithTime: null,
+  wontDoOn: null,
+  ...fields,
+});
+
+const pullRequest = (fields: Partial<T3PullRequest> & Pick<T3PullRequest, "repository" | "number" | "linkedAt">): T3PullRequest => ({
+  mergedAt: null,
   ...fields,
 });
 
@@ -52,7 +91,7 @@ export const event = (fields: Partial<CalendarEvent> & Pick<CalendarEvent, "summ
 });
 
 export const spTasks: SpTask[] = [
-  task({ id: "garden", title: "Garden", tagIds: ["t-off"], subTaskIds: ["dig", "plant"], timeSpentOnDay: { [DAY]: minutes(45) } }),
+  task({ id: "garden", title: "Garden", subTaskIds: ["dig", "plant"], timeSpentOnDay: { [DAY]: minutes(45) } }),
   task({
     id: "dig",
     title: "Dig",
@@ -63,7 +102,7 @@ export const spTasks: SpTask[] = [
     timeSpentOnDay: { [DAY]: minutes(30) },
   }),
   task({ id: "plant", title: "Plant", parentId: "garden", timeSpentOnDay: { [DAY]: minutes(15) } }),
-  task({ id: "walk", title: "Walk", tagIds: ["t-off"], timeSpentOnDay: { [DAY]: minutes(20), "2026-10-28": minutes(10) } }),
+  task({ id: "walk", title: "Walk", timeSpentOnDay: { [DAY]: minutes(20), "2026-10-28": minutes(10) } }),
   task({
     id: "code",
     title: "Write tests",
@@ -71,10 +110,14 @@ export const spTasks: SpTask[] = [
     isDone: true,
     doneOn: at("2026-10-29T10:00:00+01:00"),
     timeSpentOnDay: { [DAY]: minutes(50) },
+    dueDay: DAY,
   }),
-  task({ id: "late", title: "Shop", tagIds: ["t-off"], isDone: true, doneOn: at("2026-10-30T03:59:59+01:00"), timeSpentOnDay: { [DAY]: minutes(5) } }),
-  task({ id: "next-day", title: "Next day", isDone: true, doneOn: at("2026-10-30T04:00:00+01:00") }),
+  task({ id: "late", title: "Shop", isDone: true, doneOn: at("2026-10-30T03:59:59+01:00"), timeSpentOnDay: { [DAY]: minutes(5) } }),
+  // Due at a time on the day and done only after it ended, so it was still open at the end.
+  task({ id: "next-day", title: "Next day", isDone: true, doneOn: at("2026-10-30T04:00:00+01:00"), dueWithTime: at("2026-10-29T15:00:00+01:00") }),
   task({ id: "day-before", title: "Day before", isDone: true, doneOn: at("2026-10-28T20:00:00+01:00") }),
+  task({ id: "call", title: "Call the plumber", dueDay: DAY }),
+  task({ id: "skipped", title: "Skipped", isDone: true, dueDay: DAY, wontDoOn: at("2026-10-29T09:00:00+01:00") }),
 ];
 
 export const sources: Sources = {
@@ -83,10 +126,6 @@ export const sources: Sources = {
     ok: true,
     value: {
       tasks: spTasks,
-      tags: [
-        { id: "t-off", title: "off-computer" },
-        { id: "t-urgent", title: "urgent" },
-      ],
       projects: [
         { id: "p-home", title: "Home" },
         { id: "p-work", title: "Work" },
@@ -98,9 +137,31 @@ export const sources: Sources = {
     value: {
       incomplete: false,
       prs: [
-        { repository: "davidvornholt/postlude", title: "Start of day", mergedAt: "2026-10-29T03:00:00Z" },
-        { repository: "davidvornholt/sp-cli", title: "Afternoon", mergedAt: "2026-10-29T15:00:00Z" },
-        { repository: "davidvornholt/pim", title: "End of day belongs to the next day", mergedAt: "2026-10-30T03:00:00Z" },
+        {
+          repository: "davidvornholt/postlude",
+          number: 12,
+          title: "Start of day",
+          summary: "The morning page now opens with the weather.",
+          mergedAt: "2026-10-29T03:00:00Z",
+        },
+        { repository: "davidvornholt/sp-cli", number: 7, title: "Afternoon", summary: null, mergedAt: "2026-10-29T15:00:00Z" },
+        { repository: "davidvornholt/pim", number: 3, title: "End of day belongs to the next day", summary: null, mergedAt: "2026-10-30T03:00:00Z" },
+      ],
+    },
+  },
+  closedPrs: {
+    ok: true,
+    value: {
+      incomplete: false,
+      prs: [
+        {
+          repository: "davidvornholt/sp-cli",
+          number: 8,
+          title: "Try a second parser",
+          summary: "Reads the task list with a second parser.",
+          closedAt: "2026-10-29T10:45:00Z",
+        },
+        { repository: "davidvornholt/pim", number: 2, title: "Closed the day before", summary: null, closedAt: "2026-10-29T02:59:59Z" },
       ],
     },
   },
@@ -109,10 +170,32 @@ export const sources: Sources = {
     value: [
       {
         mailbox: "b@example.com",
-        reading: { ok: true, value: { sentAt: ["2026-10-29T09:00:00+01:00", "2026-10-30T02:00:00+01:00", "2026-10-28T23:00:00+01:00"], limitReached: false } },
+        reading: {
+          ok: true,
+          value: {
+            sent: [
+              { at: "2026-10-29T09:00:00+01:00", subject: "Garden plan for Saturday" },
+              { at: "2026-10-30T02:00:00+01:00", subject: "Late reply" },
+              { at: "2026-10-28T23:00:00+01:00", subject: "Sent the day before" },
+            ],
+            limitReached: false,
+          },
+        },
       },
       { mailbox: "a@example.com", reading: { ok: false, error: "login failed" } },
-      { mailbox: "c@example.com", reading: { ok: true, value: { sentAt: ["2026-10-29T20:00:00+01:00", "2026-10-29T19:00:00+01:00"], limitReached: true } } },
+      {
+        mailbox: "c@example.com",
+        reading: {
+          ok: true,
+          value: {
+            sent: [
+              { at: "2026-10-29T20:00:00+01:00", subject: "Re: Invoice for October" },
+              { at: "2026-10-29T19:00:00+01:00", subject: "Invoice for October" },
+            ],
+            limitReached: true,
+          },
+        },
+      },
     ],
   },
   calendar: {
@@ -144,14 +227,93 @@ export const sources: Sources = {
   },
   t3: {
     ok: true,
-    value: [
-      { title: "Settled today", project: "postlude", settledAt: "2026-10-29T16:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-28T10:00:00.000Z" },
-      { title: "Settled yesterday", project: "postlude", settledAt: "2026-10-28T16:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-27T10:00:00.000Z" },
-      { title: "Long open", project: "dev", settledAt: null, snoozedUntil: null, createdAt: "2026-10-25T10:00:00.000Z" },
-      { title: "Recently opened", project: "dev", settledAt: null, snoozedUntil: null, createdAt: "2026-10-28T10:00:00.000Z" },
-      { title: "Snoozed", project: "dev", settledAt: null, snoozedUntil: "2026-11-02T08:00:00.000Z", createdAt: "2026-10-20T10:00:00.000Z" },
-      { title: "Settled later", project: "nix-config", settledAt: "2026-10-30T12:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-20T10:00:00.000Z" },
-    ],
+    value: {
+      dayThreads: [
+        {
+          id: "t-night",
+          title: "Night build",
+          project: "~/dev/nix-config",
+          firstPromptAt: "2026-10-28T20:00:00.000Z",
+          startedBy: "phone",
+          pullRequests: [],
+        },
+        {
+          id: "t-parser",
+          title: "Fix the parser",
+          project: "~/dev/postlude",
+          firstPromptAt: "2026-10-29T08:20:00.000Z",
+          startedBy: "user",
+          pullRequests: [
+            // Merged as the journal day ended, so it belongs to the next day.
+            pullRequest({ repository: "davidvornholt/pim", number: 3, linkedAt: "2026-10-29T09:30:00.000Z", mergedAt: "2026-10-30T03:00:00Z" }),
+          ],
+        },
+        {
+          id: "t-tidy",
+          title: "Tidy tests",
+          project: "~/dev/sp-cli",
+          firstPromptAt: "2026-10-29T13:50:00.000Z",
+          startedBy: "user",
+          pullRequests: [
+            pullRequest({ repository: "davidvornholt/sp-cli", number: 7, linkedAt: "2026-10-29T14:10:00.000Z", mergedAt: "2026-10-29T15:00:00Z" }),
+            pullRequest({ repository: "davidvornholt/sp-cli", number: 8, linkedAt: "2026-10-29T10:00:00.000Z" }),
+          ],
+        },
+        { id: "t-docs", title: "Write docs", project: "~/dev/sp-cli", firstPromptAt: null, startedBy: "thread", pullRequests: [] },
+        { id: "t-deploy", title: "Watch the deploy", project: "~/dev/nix-config", firstPromptAt: null, startedBy: "schedule", pullRequests: [] },
+      ],
+      runs: [
+        // Began before the journal day, so the timeline clips it to the day's start.
+        { threadId: "t-night", start: "2026-10-29T02:30:00.000Z", end: "2026-10-29T03:30:00.000Z" },
+        { threadId: "t-parser", start: "2026-10-29T08:30:00.000Z", end: "2026-10-29T09:15:00.000Z" },
+        { threadId: "t-parser", start: "2026-10-29T09:25:00.000Z", end: "2026-10-29T10:00:00.000Z" },
+        { threadId: "t-tidy", start: "2026-10-29T14:00:00.000Z", end: "2026-10-29T14:40:00.000Z" },
+        { threadId: "t-tidy", start: "2026-10-29T14:45:00.000Z", end: "2026-10-29T15:00:00.000Z" },
+        { threadId: "t-docs", start: "2026-10-29T14:20:00.000Z", end: "2026-10-29T14:30:00.000Z" },
+        // Still running when T3 was read, so the timeline clips it to the day's end.
+        { threadId: "t-deploy", start: "2026-10-30T02:00:00.000Z", end: "2026-10-30T06:00:00.000Z" },
+      ],
+      prompts: [
+        { threadId: "t-parser", at: "2026-10-29T08:20:00.000Z", fromPhone: false },
+        { threadId: "t-parser", at: "2026-10-29T09:25:00.000Z", fromPhone: true },
+        { threadId: "t-tidy", at: "2026-10-29T13:50:00.000Z", fromPhone: false },
+        { threadId: "t-tidy", at: "2026-10-29T14:45:00.000Z", fromPhone: false },
+      ],
+      messages: [
+        // Before the journal day.
+        { threadId: "t-night", at: "2026-10-29T02:45:00.000Z", author: "agent", text: "The night build is green." },
+        { threadId: "t-parser", at: "2026-10-29T08:20:00.000Z", author: "user", text: "The parser drops dates like 29.10. without a year. Can you fix that?" },
+        {
+          threadId: "t-parser",
+          at: "2026-10-29T09:10:00.000Z",
+          author: "agent",
+          text: "Dates without a year now parse, and postlude#14 adds a test for them.",
+        },
+        { threadId: "t-parser", at: "2026-10-29T09:25:00.000Z", author: "phone", text: "Merge it once the checks pass." },
+        { threadId: "t-tidy", at: "2026-10-29T13:50:00.000Z", author: "user", text: "Split the task list tests by command." },
+        {
+          threadId: "t-tidy",
+          at: "2026-10-29T14:30:00.000Z",
+          author: "delegates",
+          text: "Delegated task (Split the tests) [completed]:\nThe tests now sit in one file per command.",
+        },
+        {
+          threadId: "t-tidy",
+          at: "2026-10-29T14:40:00.000Z",
+          author: "agent",
+          text: `The old helper is gone:\n\n\`\`\`ts\n${Array.from({ length: CODE_BLOCK_MAX_LINES + 1 }, (_, index) => `const line${index} = ${index};`).join("\n")}\n\`\`\`\n\nA short block stays:\n\n\`\`\`sh\nbun test\n\`\`\``,
+        },
+        { threadId: "t-deploy", at: "2026-10-30T02:00:00.000Z", author: "schedule", text: "Check whether the deploy finished." },
+      ],
+      threads: [
+        { title: "Settled today", project: "postlude", settledAt: "2026-10-29T16:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-28T10:00:00.000Z" },
+        { title: "Settled yesterday", project: "postlude", settledAt: "2026-10-28T16:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-27T10:00:00.000Z" },
+        { title: "Long open", project: "dev", settledAt: null, snoozedUntil: null, createdAt: "2026-10-25T10:00:00.000Z" },
+        { title: "Recently opened", project: "dev", settledAt: null, snoozedUntil: null, createdAt: "2026-10-28T10:00:00.000Z" },
+        { title: "Snoozed", project: "dev", settledAt: null, snoozedUntil: "2026-11-02T08:00:00.000Z", createdAt: "2026-10-20T10:00:00.000Z" },
+        { title: "Settled later", project: "nix-config", settledAt: "2026-10-30T12:00:00.000Z", snoozedUntil: null, createdAt: "2026-10-20T10:00:00.000Z" },
+      ],
+    },
   },
   kontor: { ok: false, error: "kontor could not run: Executable not found in $PATH" },
 };

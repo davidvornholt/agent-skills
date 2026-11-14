@@ -6,8 +6,8 @@
 // - missing: the source was unreachable, and its numbers are null.
 //
 // Definitions:
-// - Activity numbers and categories are copied from the activity summary (Contract 1). They are null when the summary is unavailable or every host is missing. Since summary version 7 (metrics version 5) they include the time David uses the Windows VM directly at the desk, not only while it is streamed. Since summary version 8 (metrics version 6) Learning also counts more school subjects, their topics and school course pages.
-// - offComputerMinutes: time tracked in Super Productivity on the day on tasks tagged OFF_COMPUTER_TAG, or whose parent task carries the tag. Only tasks without subtasks count, because a parent's tracked time is the sum of its subtasks'. SP files time under its own date keys, which follow its "start of next day" setting rather than the 04:00 journal boundary.
+// - Activity numbers and categories are copied from the activity summary. They are null when the summary is unavailable or every host is missing. Since summary version 7 (metrics version 5) they include the time David uses the Windows VM directly at the desk, not only while it is streamed. Since summary version 8 (metrics version 6) Learning also counts more school subjects, their topics and school course pages.
+// - offComputerMinutes: all time tracked in Super Productivity on the day. Despite the name, the user tracks time at the computer there too. Only tasks without subtasks count, because a parent's tracked time is the sum of its subtasks'. SP files time under its own date keys, which follow its "start of next day" setting rather than the 04:00 journal boundary.
 // - appointmentMinutes: the union of all timed calendar events, clipped to the journal day, so overlapping events count once. All-day events, cancelled events, and meetings the account's own attendee entry declined don't count. A meeting whose answer couldn't be read is left out, and its calendar is partial.
 // - appointmentOffScreenMinutes: the part of that union outside the summary's activeIntervals. It needs every activity host complete, because screen time on a host that wasn't fully read would count as off screen.
 // - landedPrs: pull requests authored by the davidvornholt account and merged during the journal day, in any repository.
@@ -18,9 +18,8 @@ import type { DayWindow } from "./day.ts";
 import { clip, type Interval, subtract, totalMinutes, union } from "./intervals.ts";
 import type { CalendarEvent, Reading, SentMailData, Sources, SpData } from "./sources.ts";
 
-export const METRICS_VERSION = 6;
-export const SUMMARY_VERSION = 8;
-export const OFF_COMPUTER_TAG = "off-computer";
+export const METRICS_VERSION = 7;
+export const SUMMARY_VERSION = 10;
 
 export type CoverageStatus = "complete" | "partial" | "missing";
 export type Coverage = { readonly source: string; readonly status: CoverageStatus };
@@ -43,15 +42,27 @@ export type DayMetrics = {
   readonly coverage: readonly Coverage[];
 };
 
-type Summary = {
+/** A stretch of the summary's timeline in which the category and the T3 project stay the same; null where the time has none. */
+export type TimelinePiece = Interval & { readonly category: string | null; readonly project: string | null };
+export type FocusBlock = Interval & { readonly category: string };
+/** A category with the T3 projects the summary files under it, spelled as the timeline's projects are. */
+export type SummaryCategory = Category & { readonly t3Projects: readonly string[] };
+/** A stretch in which the same window was in front: its app id, or the Windows guest's executable, and its title. Either is null when the log has none, and "<redacted>" when an exclude pattern matches. */
+export type WindowPiece = Interval & { readonly app: string | null; readonly title: string | null };
+
+export type Summary = {
   readonly hosts: readonly { readonly host: string; readonly status: CoverageStatus; readonly activeMinutes: number | null }[];
   readonly activeMinutes: number | null;
   readonly firstActivityAt: string | null;
   readonly lastActivityAt: string | null;
   readonly focusMinutes: number | null;
   readonly scatteredMinutes: number | null;
-  readonly categories: readonly Category[];
+  readonly categories: readonly SummaryCategory[];
   readonly activeIntervals: readonly Interval[] | null;
+  readonly timeline: readonly TimelinePiece[];
+  /** The windows in front, with their titles; the report's timeline cards name the titles of the user's own windows. */
+  readonly windows: readonly WindowPiece[];
+  readonly focusBlocks: readonly FocusBlock[];
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -63,6 +74,20 @@ const minutesOrNull = (value: unknown, path: string): number | null => {
   if (value === null) return null;
   if (isMinutes(value)) return value;
   throw new Error(`${path} is not a number of minutes`);
+};
+
+const textOrNull = (value: unknown, path: string): string | null => {
+  if (value === null || typeof value === "string") return value;
+  throw new Error(`${path} is not text or null`);
+};
+
+const intervals = <T>(raw: unknown, key: string, extra: (entry: Record<string, unknown>, path: string) => T): (Interval & T)[] => {
+  if (!Array.isArray(raw)) throw new Error(`${key} is not a list`);
+  return raw.map((entry, index) => {
+    const path = `${key}[${index}]`;
+    if (!isRecord(entry) || !isInstant(entry.start) || !isInstant(entry.end)) throw new Error(`${path} needs a start and an end`);
+    return { start: Date.parse(entry.start), end: Date.parse(entry.end), ...extra(entry, path) };
+  });
 };
 
 const instantOrNull = (value: unknown, path: string): string | null => {
@@ -86,15 +111,30 @@ export const parseSummary = (raw: unknown, day: string): Summary => {
   });
   if (!Array.isArray(raw.categories)) throw new Error("categories is not a list");
   const categories = raw.categories.map((category, index) => {
-    if (!isRecord(category) || typeof category.id !== "string" || typeof category.label !== "string" || !isMinutes(category.minutes)) {
-      throw new Error(`categories[${index}] needs an id, a label, and minutes`);
+    if (
+      !isRecord(category) ||
+      typeof category.id !== "string" ||
+      typeof category.label !== "string" ||
+      !isMinutes(category.minutes) ||
+      !Array.isArray(category.t3Projects) ||
+      !category.t3Projects.every((project) => typeof project === "string")
+    ) {
+      throw new Error(`categories[${index}] needs an id, a label, minutes, and a list of T3 projects`);
     }
-    return { id: category.id, label: category.label, minutes: category.minutes };
+    return { id: category.id, label: category.label, minutes: category.minutes, t3Projects: category.t3Projects as string[] };
   });
-  if (!Array.isArray(raw.activeIntervals)) throw new Error("activeIntervals is not a list");
-  const activeIntervals = raw.activeIntervals.map((interval, index) => {
-    if (!isRecord(interval) || !isInstant(interval.start) || !isInstant(interval.end)) throw new Error(`activeIntervals[${index}] needs a start and an end`);
-    return { start: Date.parse(interval.start), end: Date.parse(interval.end) };
+  const activeIntervals = intervals(raw.activeIntervals, "activeIntervals", () => ({}));
+  const timeline = intervals(raw.timeline, "timeline", (entry, path) => ({
+    category: textOrNull(entry.category, `${path}.category`),
+    project: textOrNull(entry.project, `${path}.project`),
+  }));
+  const windows = intervals(raw.windows, "windows", (entry, path) => ({
+    app: textOrNull(entry.app, `${path}.app`),
+    title: textOrNull(entry.title, `${path}.title`),
+  }));
+  const focusBlocks = intervals(raw.focusBlocks, "focusBlocks", (entry, path) => {
+    if (typeof entry.category !== "string") throw new Error(`${path}.category is not text`);
+    return { category: entry.category };
   });
   return {
     hosts,
@@ -105,6 +145,9 @@ export const parseSummary = (raw: unknown, day: string): Summary => {
     scatteredMinutes: minutesOrNull(raw.scatteredMinutes, "scatteredMinutes"),
     categories,
     activeIntervals,
+    timeline,
+    windows,
+    focusBlocks,
   };
 };
 
@@ -129,21 +172,8 @@ const activityPart = (reading: Reading<unknown>, day: string): Part<Summary | nu
 };
 
 const offComputerMinutes = (sp: SpData, day: string): Part<number | null> => {
-  const tag = sp.tags.find((candidate) => candidate.title.trim().toLowerCase() === OFF_COMPUTER_TAG);
-  if (!tag) {
-    return {
-      value: null,
-      coverage: [{ source: "sp", status: "partial" }],
-      problems: [`Super Productivity has no tag named "${OFF_COMPUTER_TAG}", so off-computer time is unknown.`],
-    };
-  }
-  const byId = new Map(sp.tasks.map((task) => [task.id, task]));
-  let milliseconds = 0;
-  for (const task of sp.tasks) {
-    if (task.subTaskIds.some((id) => byId.has(id))) continue;
-    const parent = task.parentId === null ? undefined : byId.get(task.parentId);
-    if (task.tagIds.includes(tag.id) || parent?.tagIds.includes(tag.id)) milliseconds += task.timeSpentOnDay[day] ?? 0;
-  }
+  const ids = new Set(sp.tasks.map((task) => task.id));
+  const milliseconds = sp.tasks.filter((task) => !task.subTaskIds.some((id) => ids.has(id))).reduce((sum, task) => sum + (task.timeSpentOnDay[day] ?? 0), 0);
   return { value: Math.round(milliseconds / 60_000), coverage: [{ source: "sp", status: "complete" }], problems: [] };
 };
 
@@ -167,7 +197,7 @@ const githubPart = (reading: Sources["github"], window: DayWindow): Part<number 
 const mailboxCount = (mailbox: string, reading: Reading<SentMailData>, window: DayWindow): Part<number | null> => {
   const source = `mail:${mailbox}`;
   if (!reading.ok) return { value: null, coverage: [{ source, status: "missing" }], problems: [`Sent mail of ${mailbox} unavailable: ${reading.error}`] };
-  const times = reading.value.sentAt.map((sentAt) => Date.parse(sentAt));
+  const times = reading.value.sent.map((mail) => Date.parse(mail.at));
   const valid = times.filter((ms) => !Number.isNaN(ms));
   const problems: string[] = [];
   if (valid.length < times.length) problems.push(`Some sent mail of ${mailbox} has no readable date.`);
@@ -262,7 +292,10 @@ export const computeDayMetrics = (window: DayWindow, sources: Sources): Computed
     lastActivityAt: summary?.lastActivityAt ?? null,
     focusMinutes: summary?.focusMinutes ?? null,
     scatteredMinutes: summary?.scatteredMinutes ?? null,
-    categories: (summary?.categories ?? []).toSorted((a, b) => b.minutes - a.minutes || compareText(a.id, b.id)),
+    // Postlude stores only the minutes per category, not which projects the user files under it.
+    categories: (summary?.categories ?? [])
+      .map(({ id, label, minutes }) => ({ id, label, minutes }))
+      .toSorted((a, b) => b.minutes - a.minutes || compareText(a.id, b.id)),
     offComputerMinutes: sp.value,
     appointmentMinutes: appointments === null ? null : totalMinutes(appointments),
     appointmentOffScreenMinutes: appointments === null || activeIntervals === null ? null : totalMinutes(subtract(appointments, activeIntervals)),

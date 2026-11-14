@@ -13,17 +13,17 @@ test("computes every metric of a day with all sources", () => {
     dayMetrics: {
       metricsVersion: METRICS_VERSION,
       day: DAY,
-      activeMinutes: 330,
-      firstActivityAt: "2026-10-29T08:12:00+01:00",
-      lastActivityAt: "2026-10-29T23:40:00+01:00",
-      focusMinutes: 200,
-      scatteredMinutes: 130,
+      activeMinutes: 569,
+      firstActivityAt: "2026-10-29T08:00:00+01:00",
+      lastActivityAt: "2026-10-29T18:30:00+01:00",
+      focusMinutes: 449,
+      scatteredMinutes: 120,
       categories: [
-        { id: "code", label: "Code", minutes: 200 },
-        { id: "mail", label: "Mail", minutes: 80 },
-        { id: "admin", label: "Admin", minutes: 50 },
+        { id: "code", label: "Code", minutes: 389 },
+        { id: "admin", label: "Admin", minutes: 67 },
+        { id: "mail", label: "Mail", minutes: 23 },
       ],
-      offComputerMinutes: 70,
+      offComputerMinutes: 120,
       appointmentMinutes: 180,
       appointmentOffScreenMinutes: null,
       landedPrs: 2,
@@ -89,6 +89,10 @@ describe("activity", () => {
     expect(() => parseSummary({ ...summary, summaryVersion: 6 }, DAY)).toThrow(/summaryVersion 6/);
     // A host whose activity-digest predates the wider Learning category.
     expect(() => parseSummary({ ...summary, summaryVersion: 7 }, DAY)).toThrow(/summaryVersion 7/);
+    // A host whose activity-digest predates the timeline by category and T3 project.
+    expect(() => parseSummary({ ...summary, summaryVersion: 8 }, DAY)).toThrow(/summaryVersion 8/);
+    // A host whose activity-digest predates window titles.
+    expect(() => parseSummary({ ...summary, summaryVersion: 9 }, DAY)).toThrow(/summaryVersion 9/);
     expect(() => parseSummary(summary, "2026-10-28")).toThrow(/not 2026-10-28/);
     const { dayMetrics, problems } = metrics({ summary: { ok: true, value: { ...summary, summaryVersion: 1 } } });
     expect(dayMetrics.activeMinutes).toBeNull();
@@ -112,6 +116,37 @@ describe("activity", () => {
     expect(() => parseSummary(withoutIntervals, DAY)).toThrow(/activeIntervals is not a list/);
   });
 
+  test("rejects a category without the T3 projects filed under it, which the metrics then leave out", () => {
+    const categories = summary.categories.map(({ t3Projects: _, ...category }) => category);
+    expect(() => parseSummary({ ...summary, categories }, DAY)).toThrow(/categories\[0\] needs an id, a label, minutes, and a list of T3 projects/);
+  });
+
+  test("reads the timeline and focus blocks as epoch milliseconds", () => {
+    const parsed = parseSummary(summary, DAY);
+    expect(parsed.timeline[0]).toEqual({
+      start: Date.parse("2026-10-29T08:00:00+01:00"),
+      end: Date.parse("2026-10-29T09:40:00+01:00"),
+      category: "code",
+      project: "~/dev/postlude",
+    });
+    expect(parsed.timeline.at(-1)).toMatchObject({ category: null, project: null });
+    expect(parsed.focusBlocks[0]).toEqual({ start: Date.parse("2026-10-29T08:00:00+01:00"), end: Date.parse("2026-10-29T11:30:00+01:00"), category: "code" });
+    expect(() => parseSummary({ ...summary, timeline: undefined }, DAY)).toThrow(/timeline is not a list/);
+    expect(() => parseSummary({ ...summary, timeline: [{ ...summary.timeline[0], project: 1 }] }, DAY)).toThrow(/timeline\[0\]\.project/);
+  });
+
+  test("reads the windows, and rejects a summary whose windows are malformed", () => {
+    expect(parseSummary(summary, DAY).windows.find((window) => window.app === "accounts.exe")).toEqual({
+      start: Date.parse("2026-10-29T13:00:00+01:00"),
+      end: Date.parse("2026-10-29T14:00:00+01:00"),
+      app: "accounts.exe",
+      title: null,
+    });
+    expect(() => parseSummary({ ...summary, windows: undefined }, DAY)).toThrow(/windows is not a list/);
+    expect(() => parseSummary({ ...summary, windows: [{ ...summary.windows[0], app: 1 }] }, DAY)).toThrow(/windows\[0\]\.app/);
+    expect(() => parseSummary({ ...summary, windows: [{ ...summary.windows[0], end: "later" }] }, DAY)).toThrow(/windows\[0\] needs a start and an end/);
+  });
+
   test("leaves the off-screen appointment time null unless every host is complete", () => {
     const withLaptop = (status: string) => ({
       ok: true as const,
@@ -127,20 +162,19 @@ describe("activity", () => {
   });
 });
 
-describe("off-computer time", () => {
-  test("is unknown, not zero, when the tag doesn't exist", () => {
+describe("tracked time", () => {
+  test("counts all time tracked in Super Productivity, each task without subtasks once", () => {
     if (!sources.sp.ok) throw new Error("fixture");
-    const sp = { ok: true as const, value: { ...sources.sp.value, tags: [{ id: "t-off", title: "outside" }] } };
-    const { dayMetrics, problems } = metrics({ sp });
-    expect(dayMetrics.offComputerMinutes).toBeNull();
-    expect(coverageOf({ sp }, "sp")).toEqual([{ source: "sp", status: "partial" }]);
-    expect(problems).toContain('Super Productivity has no tag named "off-computer", so off-computer time is unknown.');
+    // Garden's own total repeats its subtasks', so only Dig and Plant count; Walk's time on the day before doesn't.
+    const tasks = sources.sp.value.tasks.filter((task) => ["garden", "dig", "plant", "walk"].includes(task.id));
+    expect(metrics({ sp: { ok: true, value: { ...sources.sp.value, tasks } } }).dayMetrics.offComputerMinutes).toBe(65);
   });
 
-  test("matches the tag title regardless of case and spaces", () => {
+  test("is zero, not unknown, when nothing was tracked", () => {
     if (!sources.sp.ok) throw new Error("fixture");
-    const sp = { ok: true as const, value: { ...sources.sp.value, tags: [{ id: "t-off", title: " Off-Computer " }] } };
-    expect(metrics({ sp }).dayMetrics.offComputerMinutes).toBe(70);
+    const { dayMetrics } = metrics({ sp: { ok: true, value: { ...sources.sp.value, tasks: [] } } });
+    expect(dayMetrics.offComputerMinutes).toBe(0);
+    expect(dayMetrics.coverage).toContainEqual({ source: "sp", status: "complete" });
   });
 });
 
@@ -160,7 +194,16 @@ describe("sent mail", () => {
       value: [
         {
           mailbox: "c@example.com",
-          reading: { ok: true as const, value: { sentAt: ["2026-10-29T20:00:00+01:00", "2026-10-28T19:00:00+01:00"], limitReached: true } },
+          reading: {
+            ok: true as const,
+            value: {
+              sent: [
+                { at: "2026-10-29T20:00:00+01:00", subject: "Today" },
+                { at: "2026-10-28T19:00:00+01:00", subject: "Yesterday" },
+              ],
+              limitReached: true,
+            },
+          },
         },
       ],
     };
@@ -171,7 +214,21 @@ describe("sent mail", () => {
   test("marks unreadable send dates as partial", () => {
     const mail = {
       ok: true as const,
-      value: [{ mailbox: "d@example.com", reading: { ok: true as const, value: { sentAt: ["", "2026-10-29T20:00:00+01:00"], limitReached: false } } }],
+      value: [
+        {
+          mailbox: "d@example.com",
+          reading: {
+            ok: true as const,
+            value: {
+              sent: [
+                { at: "", subject: "No date" },
+                { at: "2026-10-29T20:00:00+01:00", subject: "Today" },
+              ],
+              limitReached: false,
+            },
+          },
+        },
+      ],
     };
     expect(metrics({ mail }).dayMetrics.sentMails).toEqual([{ mailbox: "d@example.com", count: 1 }]);
     expect(coverageOf({ mail }, "mail")).toEqual([{ source: "mail:d@example.com", status: "partial" }]);

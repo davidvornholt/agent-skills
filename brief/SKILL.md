@@ -18,7 +18,7 @@ Read Super Productivity through `sp`. The X1 and the z890 each run a copy that s
 
 Today's plan is `sp tasks list --today --brief`, and the open tasks are `sp tasks list --brief`. Open tasks with a deadline in the next seven days need the user. Resolve project ids with `sp projects list`.
 
-For yesterday, take the tasks checked off that day and those with time tracked that day. A checked-off task is out of the user's hands, often handed to an agent session, so the sessions say whether its work is finished. Tracked time is work away from the computer. `--brief` drops `doneOn`, so this query uses the full output:
+For yesterday, take the tasks checked off that day and those with time tracked that day. A checked-off task is out of the user's hands, often handed to an agent session, so the sessions say whether its work is finished. `--brief` drops `doneOn`, so this query uses the full output:
 
 ```sh
 Y=<yesterday>
