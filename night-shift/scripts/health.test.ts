@@ -9,6 +9,7 @@ const BROKEN_URL = "https://rota.vornholt.online/api/healthz";
 
 // A stand-in curl that never touches the network. It answers like curl does:
 // HEALTH_STATUS is the status for the URL in HEALTH_URL (200 for all others), and "000" with exit 7 means it could not connect.
+// HEALTH_EXIT is the exit status of that URL's status request when it is not a connection error.
 const FAKE_CURL = `#!/usr/bin/env bash
 for arg in "$@"; do url=$arg; done
 if [[ "$*" == *'%{http_code}'* ]]; then
@@ -16,9 +17,14 @@ if [[ "$*" == *'%{http_code}'* ]]; then
   [ "$url" = "$HEALTH_URL" ] && status=$HEALTH_STATUS
   printf '%s' "$status"
   [ "$status" = 000 ] && exit 7
+  exit "\${HEALTH_EXIT:-0}"
+fi
+if [ "$url" = "$HEALTH_URL" ]; then
+  # Like curl: only -f turns an HTTP error into a failing exit status.
+  [[ "$1" == *f* ]] && exit 22
+  printf 'error page'
   exit 0
 fi
-[ "$url" = "$HEALTH_URL" ] && exit 22
 printf '2.4.1'
 `;
 
@@ -34,9 +40,9 @@ afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-const run = async (url: string, status: string) => {
+const run = async (url: string, status: string, curlExit = "0") => {
   const child = Bun.spawn(["bash", SCRIPT], {
-    env: { ...process.env, PATH: `${join(dir, "bin")}:${process.env.PATH ?? ""}`, HEALTH_URL: url, HEALTH_STATUS: status },
+    env: { ...process.env, PATH: `${join(dir, "bin")}:${process.env.PATH ?? ""}`, HEALTH_URL: url, HEALTH_STATUS: status, HEALTH_EXIT: curlExit },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -72,4 +78,11 @@ test("exits 1 when only the version request fails", async () => {
   expect(exitCode).toBe(1);
   expect(lines.slice(0, 12).every((line) => line.startsWith("200 "))).toBe(true);
   expect(lines[12]).toBe("immich version:");
+});
+
+test("exits 1 when an endpoint answers 200 but the transfer then fails", async () => {
+  const { lines, exitCode } = await run(BROKEN_URL, "200", "28");
+  expect(exitCode).toBe(1);
+  expect(lines).toHaveLength(13);
+  expect(lines).toContain(`200 ${BROKEN_URL}`);
 });

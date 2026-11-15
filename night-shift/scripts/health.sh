@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prints the HTTP status of each public endpoint, then the immich version.
-# Exits 1 if any endpoint answers anything but 200 (000 means no connection) or the version request fails, after printing the whole report.
+# Exits 1 if any endpoint answers anything but 200 (000 means no connection), any request fails, or the version request fails, after printing the whole report.
 failed=0
 for url in \
   https://david.vornholt.online/ \
@@ -15,8 +15,8 @@ for url in \
   https://fes-kirchheim.de/ \
   https://cg-bibi.de/api/healthz \
   https://immich.vornholt.online/api/server/ping; do
-  # curl prints 000 itself when it cannot connect, so its exit status adds nothing here.
-  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$url") || true
+  # curl prints 000 itself when it cannot connect. A nonzero exit after a 200, such as a timeout, still fails.
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$url") || failed=1
   printf '%s %s\n' "${code:-000}" "$url"
   [ "$code" = 200 ] || failed=1
 done
