@@ -7,7 +7,6 @@
     "end": "2026-11-08T06:30:00Z"
   },
   "summary": "Atrium has been down since Saturday evening and needs a restart (item 1). Otherwise 2 pull requests landed, 1 issue was closed, and nothing was reverted.",
-  "opened": 3,
   "landed": [
     {
       "repo": "wordhold",
