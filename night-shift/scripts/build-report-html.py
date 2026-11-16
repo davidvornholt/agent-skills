@@ -21,27 +21,30 @@ TZ = ZoneInfo(DATA["timezone"])
 KINDS = {
     "asked": "You asked",
     "issue": "Open issue",
-    "hunt": "Bug hunt",
-    "follow-up": "Tonight's follow-up",
+    "found": "Found tonight",
     "update": "Updates",
 }
+# Fixed heights let the builder place axis and line labels exactly.
+PLOT = 160
+# Axis steps of 1, 2, 2.5 and 5 times a power of ten, so at most five gridlines cover the largest total.
+STEPS = sorted({m * 10**p for p in range(7) for m in (1, 2, 5)} | {25 * 10**p for p in range(6)})
 
 PAGE_THEME = """:root {
   color-scheme: light;
   --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --ring: rgba(11,11,11,0.10);
-  --accent: #2a78d6; --accent-wash: rgba(42,120,214,0.08); --radius: 12px; --bar: #2a78d6;
+  --accent: #2a78d6; --accent-wash: rgba(42,120,214,0.08); --radius: 12px;
 }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
     --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --ring: rgba(255,255,255,0.10);
-    --accent: #3987e5; --accent-wash: rgba(57,135,229,0.12); --bar: #3987e5;
+    --accent: #3987e5; --accent-wash: rgba(57,135,229,0.12);
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
   --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --ring: rgba(255,255,255,0.10);
-  --accent: #3987e5; --accent-wash: rgba(57,135,229,0.12); --bar: #3987e5;
+  --accent: #3987e5; --accent-wash: rgba(57,135,229,0.12);
 }
 body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
 main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
@@ -50,10 +53,25 @@ main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
 INLINE_THEME = """:root {
   --surface: var(--card); --ink: var(--foreground); --ink-2: var(--muted-foreground); --ring: var(--border);
   --accent: var(--primary, #2a78d6); --accent-wash: color-mix(in srgb, var(--accent) 12%, transparent);
-  --bar: var(--chart-1, var(--accent));
 }
 body { margin: 0; color: var(--ink); font: 14px/1.5 var(--font-sans, system-ui), sans-serif; }
 main { padding: 0; }
+"""
+# The categorical palette from the dataviz skill, checked for color-vision deficiency in both modes; series take it in order.
+SERIES = """:root {
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+  --grid: #e1e0d9; --axis: #c3c2b7;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767;
+    --grid: #2c2c2a; --axis: #383835;
+  }
+}
+:root[data-theme="dark"] {
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767;
+  --grid: #2c2c2a; --axis: #383835;
+}
 """
 STYLE = """* { box-sizing: border-box; }
 a { color: var(--accent); }
@@ -76,22 +94,37 @@ ul.plain li { margin: 3px 0; }
 .key { font-weight: 600; margin-right: 6px; }
 .badge { font-size: 12px; font-weight: 600; margin-left: 6px; white-space: nowrap; }
 footer { margin-top: 32px; font-size: 13px; color: var(--ink-2); }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; margin: 16px 0 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 8px; margin: 16px 0 0; }
 .tile { display: flex; flex-direction: column; justify-content: space-between; background: var(--surface); border: 1px solid var(--ring); border-radius: var(--radius, 12px); padding: 10px 12px; }
 .tile .label { color: var(--ink-2); font-size: 13px; }
-.tile .value { font-size: 24px; font-weight: 600; }
-.lane { margin: 12px 0 0; }
-.lane-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13.5px; }
-.lane-head .peak { color: var(--ink-2); text-align: right; }
-.cols, .ticks { display: flex; gap: 2px; }
-.cols { height: 56px; align-items: flex-end; border-bottom: 1px solid var(--ring); margin-top: 4px; }
-.col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end; justify-content: center; }
-.col span { width: 100%; max-width: 24px; background: var(--bar); border-radius: 4px 4px 0 0; }
-.ticks { margin-top: 4px; font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.ticks span { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: visible; display: flex; justify-content: center; }
+.tile .value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.chart { background: var(--surface); border: 1px solid var(--ring); border-radius: var(--radius, 12px); padding: 16px; margin: 12px 0 0; }
+.chart h3 { margin: 0; }
+.legend { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 0; margin: 6px 0 0; font-size: 13px; color: var(--ink-2); }
+.legend li, .d { display: flex; align-items: center; gap: 5px; }
+.legend i, .d i { flex: none; width: 12px; height: 3px; border-radius: 2px; }
+.legend b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.plotgrid { display: grid; grid-template-columns: max-content 1fr max-content; column-gap: 8px; padding-top: 12px; }
+.yaxis, .ends, .plot { position: relative; }
+.yaxis .t, .ends .d { position: absolute; transform: translateY(-50%); font-size: 12px; white-space: nowrap; }
+.yaxis .t { right: 0; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ends .d { left: 0; color: var(--ink); }
+.sizer { position: static !important; transform: none !important; height: 0; overflow: hidden; visibility: hidden; }
+.plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.plot line { stroke: var(--grid); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.plot line.base { stroke: var(--axis); }
+.plot path { fill: none; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.plot path.halo { stroke: var(--surface); stroke-width: 4; }
+.plot path.line { stroke-width: 2; }
+.bands { position: absolute; inset: 0; display: flex; }
+.bands span { flex: 1 1 0; }
+.bands span:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.xticks { position: relative; height: 22px; font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.xticks span { position: absolute; top: 4px; transform: translateX(-50%); white-space: nowrap; }
+.chart .note { margin: 4px 0 0; font-size: 13.5px; }
 .hrow { display: grid; grid-template-columns: 9.5em 1fr; gap: 8px; align-items: center; margin: 6px 0; font-size: 13.5px; }
 .htrack { display: flex; align-items: center; gap: 6px; }
-.hbar { height: 14px; background: var(--bar); border-radius: 0 4px 4px 0; }
+.hbar { height: 14px; background: var(--s1); border-radius: 0 4px 4px 0; }
 .hval { font-variant-numeric: tabular-nums; }
 details { margin-top: 8px; font-size: 13px; }
 table { border-collapse: collapse; margin-top: 6px; font-variant-numeric: tabular-nums; }
@@ -113,53 +146,153 @@ def hour(t: datetime) -> str:
     return t.astimezone(TZ).strftime("%H:%M")
 
 
+def hour_floor(t: datetime) -> datetime:
+    return t.replace(minute=0, second=0, microsecond=0)
+
+
+def plural(n: int, word: str) -> str:
+    return f"{n:,} {word}{'' if n == 1 else 's'}"
+
+
+def signed(n: int) -> str:
+    return f"+{n:,}" if n > 0 else f"\u2212{-n:,}" if n < 0 else "0"
+
+
+def times(key: str) -> list:
+    if not isinstance(DATA[key], list):
+        sys.exit(f"{key} is a list of ISO times, one per issue; see report-data.example.json")
+    return [when(t) for t in DATA[key]]
+
+
+LANDED = [when(x["at"]) for x in DATA["landed"]]
+FILED, RESOLVED = times("filed"), times("resolved")
+
+
 def tiles(waiting: int) -> str:
     stats = [
-        ("Landed", len(DATA["landed"])),
-        ("Pull requests opened", DATA["opened"]),
-        ("Issues resolved", DATA["resolved"]),
-        ("Issues filed", DATA["filed"]),
-        ("Waiting for you", waiting),
+        ("Landed", f"{len(LANDED):,}"),
+        ("Pull requests opened", f"{DATA['opened']:,}"),
+        ("Issues filed", f"{len(FILED):,}"),
+        ("Issues resolved", f"{len(RESOLVED):,}"),
+        ("Change in open issues", signed(len(FILED) - len(RESOLVED))),
+        ("Waiting for you", f"{waiting:,}"),
     ]
-    cells = "".join(f'<div class="tile"><div class="label">{e(k)}</div><div class="value">{v:,}</div></div>' for k, v in stats)
+    cells = "".join(f'<div class="tile"><div class="label">{e(k)}</div><div class="value">{v}</div></div>' for k, v in stats)
     return f'<div class="tiles">{cells}</div>'
 
 
+def spread(ys: list, gap: float, low: float, high: float) -> list:
+    """Move label centers at least gap apart, inside low to high, keeping their order."""
+    order = sorted(range(len(ys)), key=lambda i: ys[i])
+    out = [ys[i] for i in order]
+    out[0] = max(out[0], low)
+    for k in range(1, len(out)):
+        out[k] = max(out[k], out[k - 1] + gap)
+    if out[-1] > high:
+        out[-1] = high
+        for k in range(len(out) - 2, -1, -1):
+            out[k] = min(out[k], out[k + 1] - gap)
+    placed = [0.0] * len(ys)
+    for k, i in enumerate(order):
+        placed[i] = out[k]
+    return placed
+
+
+def line_chart(title: str, series: list, start: datetime, end: datetime, note: str = "") -> str:
+    """Running totals over the night as step lines, one per (name, label, times, color slot)."""
+    first = hour_floor(start)
+    span = (end - first).total_seconds()
+    hours = -(-int(span) // 3600)
+
+    def x(t: datetime) -> float:
+        return (t - first).total_seconds() / span * 1000
+
+    top = max(len(ts) for _, _, ts, _ in series)
+    step = next(s for s in STEPS if -(-top // s) <= 5)
+    ymax = step * max(-(-top // step), 1)
+
+    def y(v: int) -> float:
+        return PLOT - v / ymax * PLOT
+
+    levels = range(0, ymax + 1, step)
+    grid = "".join(f'<line x1="0" x2="1000" y1="{y(v):.1f}" y2="{y(v):.1f}"{' class="base"' if v == 0 else ""}/>' for v in levels)
+    yticks = "".join(f'<span class="t" style="top:{y(v):.1f}px">{v:,}</span>' for v in levels)
+    paths = ""
+    for _, _, ts, slot in series:
+        d = f"M0 {PLOT}" + "".join(f" H{x(t):.1f} V{y(i):.1f}" for i, t in enumerate(sorted(ts), 1)) + f" H{x(end):.1f}"
+        # A ring in the card's color keeps a line legible where another crosses it.
+        paths += f'<path class="halo" d="{d}"/><path class="line" d="{d}" style="stroke:var(--s{slot})"/>'
+    # Label each line at its end, unless the chart has one line and its title names it.
+    ends = ""
+    if len(series) > 1:
+        places = spread([y(len(ts)) for _, _, ts, _ in series], 15, 0, PLOT)
+        labels = "".join(
+            f'<span class="d" style="top:{p:.1f}px"><i style="background:var(--s{slot})"></i>{e(label)}</span>'
+            for (_, label, _, slot), p in zip(series, places)
+        )
+        sizers = "".join(f'<span class="d sizer"><i></i>{e(label)}</span>' for _, label, _, _ in series)
+        ends = f"{labels}{sizers}"
+    bands, rows = [], []
+    for i in range(hours):
+        a, b = first + timedelta(hours=i), min(first + timedelta(hours=i + 1), end)
+        counts = [sum(a <= t < b for t in ts) for _, _, ts, _ in series]
+        totals = [sum(t < b for t in ts) for _, _, ts, _ in series]
+        tip = "\n".join([f"{hour(a)}\u2013{hour(b)}"] + [f"{s[0]}: {n} ({t:,} in total)" for s, n, t in zip(series, counts, totals)])
+        bands.append(f'<span style="flex-grow:{(b - a).total_seconds() / 3600:.2f}" title="{e(tip)}"></span>')
+        rows.append(f"<tr><td>{hour(a)}</td>{''.join(f'<td>{n}</td>' for n in counts)}</tr>")
+    every = -(-hours // 4)  # at most about five labels, so they fit a phone
+    xticks = "".join(
+        f'<span style="left:{x(first + timedelta(hours=i)) / 10:.2f}%">{hour(first + timedelta(hours=i))}</span>'
+        for i in range(0, hours, every)
+    )
+    legend = ""
+    if len(series) > 1:
+        items = "".join(
+            f'<li><i style="background:var(--s{slot})"></i>{e(name)} <b>{len(ts):,}</b></li>' for name, _, ts, slot in series
+        )
+        legend = f'<ul class="legend">{items}</ul>'
+    summary = ", ".join(f"{name} {len(ts):,}" for name, _, ts, _ in series)
+    head = "".join(f"<th>{e(name)}</th>" for name, _, _, _ in series)
+    total = "".join(f"<td>{len(ts):,}</td>" for _, _, ts, _ in series)
+    table = (
+        f"<details><summary>Show as a table</summary><table><tr><th>Hour</th>{head}</tr>{''.join(rows)}"
+        f"<tr><th>Total</th>{total}</tr></table></details>"
+    )
+    return (
+        f'<figure class="chart"><figcaption><h3>{e(title)}</h3>{legend}</figcaption>'
+        f'<div class="plotgrid" role="img" aria-label="{e(title)}, {hour(first)} to {hour(end)}: {e(summary)}">'
+        f'<div class="yaxis" style="height:{PLOT}px">{yticks}<span class="t sizer">{ymax:,}</span></div>'
+        f'<div class="plot" style="height:{PLOT}px"><svg viewBox="0 0 1000 {PLOT}" preserveAspectRatio="none" aria-hidden="true">'
+        f'{grid}{paths}</svg><div class="bands">{"".join(bands)}</div></div>'
+        f'<div class="ends" style="height:{PLOT}px">{ends}</div>'
+        f'<div></div><div class="xticks">{xticks}</div><div></div></div>'
+        f'{f"<p class=note>{e(note)}</p>" if note else ""}{table}</figure>'
+    )
+
+
 def timeline() -> str:
-    """One row of hourly columns per lane: pull requests landed, then each kind of other timed work."""
-    lanes = {"Pull requests landed": [when(x["at"]) for x in DATA["landed"]]}
+    """Running totals of pull requests and issues, then of the other timed work, such as comments."""
+    lanes = {}
     for a in DATA["activity"]:
         lanes.setdefault(a["lane"], []).append(when(a["at"]))
-    stamps = [t for ts in lanes.values() for t in ts]
+    if len(lanes) > 5:
+        sys.exit(f"{len(lanes)} activity lanes; merge them into at most 5, so each keeps its own color")
+    stamps = [*LANDED, *FILED, *RESOLVED, *(t for ts in lanes.values() for t in ts)]
     # Cover the whole shift, and stretch it if something happened outside it, rather than hide that event.
-    start = min([when(DATA["shift"]["start"]), *stamps]).replace(minute=0, second=0, microsecond=0)
+    start = min([when(DATA["shift"]["start"]), *stamps])
     end = max([when(DATA["shift"]["end"]), *stamps])
-    hours = [start + timedelta(hours=i) for i in range(int((end - start).total_seconds() // 3600) + 1)]
-    counts = {name: Counter(int((t - start).total_seconds() // 3600) for t in ts) for name, ts in lanes.items()}
-    rows = []
-    for name, c in counts.items():
-        top = max(c.values(), default=0)
-        peak = max(range(len(hours)), key=lambda i: c[i]) if top else None
-        if top > 1:
-            note = f"{sum(c.values())} in total, most at {hour(hours[peak])} ({top})"
-        else:
-            note = f"{sum(c.values())} in total, at most 1 an hour" if top else "none"
-        cols = "".join(
-            f'<span class="col" title="{hour(t)}: {c[i]}"><span style="height:{c[i] / top * 100 if top else 0:.0f}%"></span></span>'
-            for i, t in enumerate(hours)
-        )
-        rows.append(
-            f'<div class="lane"><div class="lane-head"><span>{e(name)}</span><span class="peak">{e(note)}</span></div>'
-            f'<div class="cols" role="img" aria-label="{e(name)} per hour: {e(note)}">{cols}</div></div>'
-        )
-    step = -(-len(hours) // 6)  # at most about six labels, so they fit a phone
-    ticks = "".join(f"<span>{hour(t) if i % step == 0 else ''}</span>" for i, t in enumerate(hours))
-    head = "".join(f"<th>{e(name)}</th>" for name in counts)
-    body = "".join(
-        f"<tr><td>{hour(t)}</td>{''.join(f'<td>{c[i]}</td>' for c in counts.values())}</tr>" for i, t in enumerate(hours)
-    )
-    table = f"<details><summary>Show as a table</summary><table><tr><th>Hour</th>{head}</tr>{body}</table></details>"
-    return f'<h2>Through the night</h2>{"".join(rows)}<div class="ticks">{ticks}</div>{table}'
+    net = len(FILED) - len(RESOLVED)
+    verb = "is" if abs(net) == 1 else "are"
+    change = f"{net:,} more {verb} open than" if net > 0 else f"{-net:,} fewer {verb} open than" if net < 0 else "as many are open as"
+    note = f"{plural(len(FILED), 'issue')} filed and {len(RESOLVED):,} resolved, so {change} before the shift."
+    work = [("Pull requests landed", "Landed", LANDED, 1), ("Issues filed", "Filed", FILED, 2), ("Issues resolved", "Resolved", RESOLVED, 3)]
+    charts = line_chart("Pull requests and issues, in total", work, start, end, note)
+    if lanes:
+        # Other work continues the palette, so no color means two things on the page.
+        other = [(name, name, ts, slot) for slot, (name, ts) in enumerate(lanes.items(), 4)]
+        title = "Other timed work, in total" if len(other) > 1 else f"{other[0][0]}: {len(other[0][2]):,} in total"
+        charts += line_chart(title, other, start, end)
+    return f"<h2>Through the night</h2>{charts}"
 
 
 def kinds_chart() -> str:
@@ -243,7 +376,7 @@ page = f"""<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{e(DATA['title'])}</title>
 <style>
-{INLINE_THEME if INLINE else PAGE_THEME}{STYLE}</style>
+{INLINE_THEME if INLINE else PAGE_THEME}{SERIES}{STYLE}</style>
 </head>
 <body>
 <main>
