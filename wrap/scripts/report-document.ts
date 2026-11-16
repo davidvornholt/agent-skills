@@ -7,6 +7,9 @@ export const REPORT_DOCUMENT_VERSION = 1;
 /** The longest label or heading Postlude takes: a tile's or a row's label, a list item's meta, a section's heading. */
 export const LABEL_MAX_LENGTH = 200;
 
+/** The most pull requests Postlude takes on one run (`pullRequestsPerRun` in day-report-timeline.ts). */
+export const PULL_REQUESTS_PER_RUN = 40;
+
 export type Span = string | { readonly emphasis: string } | { readonly code: string } | { readonly link: string; readonly href: string };
 export type RichText = readonly Span[];
 

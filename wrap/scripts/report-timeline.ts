@@ -9,6 +9,7 @@ import { cardSummary } from "./pr-summary.ts";
 import {
   LABEL_MAX_LENGTH,
   label,
+  PULL_REQUESTS_PER_RUN,
   type PullRequestRef,
   repositoryName,
   type TimelineBlock,
@@ -90,19 +91,40 @@ const eventGroup = (collected: Collected): TimelineGroup => {
 
 type Landed = TimelineThread["pullRequests"][number];
 
-/** Each pull request goes to the last run that started by the time it merged, or to the first run when none had. */
+type Placed = { readonly ref: PullRequestRef; readonly mergedAt: number };
+
+/**
+ * A run that landed more pull requests than Postlude takes on one run, drawn as consecutive runs of at most that many, each starting at the merge time of its first pull request. Together they cover the run exactly. A pull request that merged before the run started or after it ended puts its boundary at the run's start or end, which leaves a part with no length, as Postlude allows.
+ */
+const splitRun = (run: Interval, placed: readonly Placed[]): TimelineMark[] => {
+  const ordered = placed.toSorted((a, b) => a.mergedAt - b.mergedAt);
+  const chunks = Array.from({ length: Math.ceil(ordered.length / PULL_REQUESTS_PER_RUN) }, (_, index) =>
+    ordered.slice(index * PULL_REQUESTS_PER_RUN, (index + 1) * PULL_REQUESTS_PER_RUN),
+  );
+  let from = run.start;
+  return chunks.map((chunk, index): TimelineMark => {
+    const next = chunks[index + 1]?.[0];
+    const to = next === undefined ? run.end : Math.min(Math.max(next.mergedAt, from), run.end);
+    const part = { start: from, end: to };
+    from = to;
+    return { kind: "run", ...span(part), pullRequests: chunk.map((pr) => pr.ref) };
+  });
+};
+
+/** Each pull request goes to the last run that started by the time it merged, or to the first run when none had. A run with more pull requests than Postlude takes is split at merge times. */
 const runMarks = (runs: readonly Interval[], landed: readonly Landed[], refs: ReadonlyMap<string, PullRequestRef>): TimelineMark[] => {
   const joined = union(runs);
-  const byRun = joined.map((): PullRequestRef[] => []);
+  const byRun = joined.map((): Placed[] => []);
   for (const pr of landed) {
     const ref = refs.get(`${pr.repository}#${pr.number}`);
     if (ref === undefined) continue;
     const at = joined.findLastIndex((run) => run.start <= pr.mergedAt);
-    byRun[Math.max(at, 0)]?.push(ref);
+    byRun[Math.max(at, 0)]?.push({ ref, mergedAt: pr.mergedAt });
   }
-  return joined.map((run, index): TimelineMark => {
-    const pullRequests = byRun[index] ?? [];
-    return { kind: "run", ...span(run), ...(pullRequests.length === 0 ? {} : { pullRequests }) };
+  return joined.flatMap((run, index): TimelineMark[] => {
+    const placed = byRun[index] ?? [];
+    if (placed.length > PULL_REQUESTS_PER_RUN) return splitRun(run, placed);
+    return [{ kind: "run", ...span(run), ...(placed.length === 0 ? {} : { pullRequests: placed.map((pr) => pr.ref) }) }];
   });
 };
 

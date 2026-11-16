@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { toBerlinIso } from "./day.ts";
 import { buildCollected, type Collected } from "./day-report.ts";
 import { LABEL_MAX_LENGTH, type TimelineBlock, type TimelineMark } from "./report-document.ts";
 import { THREADS_PER_AREA, timelineBlock } from "./report-timeline.ts";
@@ -11,6 +12,7 @@ const TITLES = ["The parser", "Tidying tests"];
 const NAMES = new Map([["t-tidy", "Task tool tests"]]);
 const NO_NAMES = new Map<string, string>();
 const at = (iso: string) => Date.parse(iso);
+const iso = (ms: number) => toBerlinIso(ms);
 
 const block = timelineBlock(collected, "Timeline", TITLES, NAMES);
 
@@ -279,6 +281,85 @@ describe("timelineBlock", () => {
         pullRequests: [{ repository: "postlude", number: 12, title: "Start of day" }],
       },
     ]);
+  });
+
+  describe("a run that landed more pull requests than Postlude takes on one run", () => {
+    // Postlude's pullRequestsPerRun, written out here so that a wrong mirror in the code is caught.
+    const POSTLUDE_LIMIT = 40;
+    const start = at("2026-10-29T21:34:00+01:00");
+    const end = at("2026-10-30T03:26:00+01:00");
+    const drawRuns = (mergedAts: readonly number[], run = { start, end }) => {
+      const landed = mergedAts.map((mergedAt, index) => ({ repository: "davidvornholt/postlude", number: index + 1, mergedAt }));
+      const landedPrs = {
+        status: "complete" as const,
+        items: landed.map((pr) => ({
+          repository: pr.repository,
+          number: pr.number,
+          ref: `${pr.repository}#${pr.number}`,
+          part: null,
+          title: `PR ${pr.number}`,
+          summary: null,
+          mergedAt: new Date(pr.mergedAt).toISOString(),
+        })),
+      };
+      const drawn = timelineBlock(
+        withTimeline(
+          { ...bare, threads: { status: "complete", items: [thread({ id: "a", title: "Night shift", runs: [run], pullRequests: landed })] } },
+          { ...quiet, landedPrs },
+        ),
+        "Timeline",
+        [],
+        NO_NAMES,
+      );
+      return row(drawn, "Night shift").marks.flatMap((mark) => (mark.kind === "run" ? [mark] : []));
+    };
+    const numbersOf = (marks: ReturnType<typeof drawRuns>) => marks.flatMap((mark) => (mark.pullRequests ?? []).map((pr) => pr.number));
+
+    test("splits the run at merge times, so that no run holds more than Postlude takes and none is dropped", () => {
+      // 63 pull requests, one every five minutes from 21:40.
+      const mergedAts = Array.from({ length: 63 }, (_, index) => start + (6 + index * 5) * 60_000);
+      const runs = drawRuns(mergedAts);
+      expect(runs.map((mark) => mark.pullRequests?.length)).toEqual([POSTLUDE_LIMIT, 23]);
+      expect(numbersOf(runs)).toEqual(Array.from({ length: 63 }, (_, index) => index + 1));
+      // Together the runs still cover the stretch, without a gap or an overlap, and each pull request sits in the run it merged in.
+      expect(runs[0]?.start).toBe("2026-10-29T21:34:00+01:00");
+      expect(runs.at(-1)?.end).toBe("2026-10-30T03:26:00+01:00");
+      expect(runs[0]?.end).toBe(runs[1]?.start);
+      expect(runs[1]?.start).toBe(iso(mergedAts[POSTLUDE_LIMIT] ?? 0));
+    });
+
+    test("leaves a run of exactly the limit whole", () => {
+      const runs = drawRuns(Array.from({ length: POSTLUDE_LIMIT }, (_, index) => start + (index + 1) * 60_000));
+      expect(runs).toHaveLength(1);
+      expect(runs[0]).toMatchObject({ start: "2026-10-29T21:34:00+01:00", end: "2026-10-30T03:26:00+01:00" });
+      expect(runs[0]?.pullRequests).toHaveLength(POSTLUDE_LIMIT);
+    });
+
+    test("keeps the runs in order and gapless when the pull requests merged in the same second or after the run ended", () => {
+      const sameSecond = drawRuns(Array.from({ length: 2 * POSTLUDE_LIMIT + 1 }, () => start + 60_000));
+      expect(sameSecond.map((mark) => mark.pullRequests?.length)).toEqual([POSTLUDE_LIMIT, POSTLUDE_LIMIT, 1]);
+      const afterwards = drawRuns(Array.from({ length: POSTLUDE_LIMIT + 5 }, (_, index) => end + (index + 1) * 60_000));
+      expect(afterwards.map((mark) => mark.pullRequests?.length)).toEqual([POSTLUDE_LIMIT, 5]);
+      for (const marks of [sameSecond, afterwards]) {
+        expect(marks[0]?.start).toBe("2026-10-29T21:34:00+01:00");
+        expect(marks.at(-1)?.end).toBe("2026-10-30T03:26:00+01:00");
+        for (const [index, mark] of marks.entries()) {
+          expect(Date.parse(mark.end)).toBeGreaterThanOrEqual(Date.parse(mark.start));
+          const before = marks[index - 1];
+          if (before !== undefined) expect(mark.start).toBe(before.end);
+        }
+      }
+    });
+
+    test("splits a run that lasted a second, as Postlude allows a run with no length", () => {
+      const short = { start, end: start + 1000 };
+      const mergedAts = Array.from({ length: POSTLUDE_LIMIT + 1 }, (_, index) => short.end + (index + 1) * 60_000);
+      const runs = drawRuns(mergedAts, short);
+      expect(runs.map((mark) => mark.pullRequests?.length)).toEqual([POSTLUDE_LIMIT, 1]);
+      expect(runs[0]?.start).toBe("2026-10-29T21:34:00+01:00");
+      expect(runs[0]?.end).toBe("2026-10-29T21:34:01+01:00");
+      expect(runs[1]).toMatchObject({ start: "2026-10-29T21:34:01+01:00", end: "2026-10-29T21:34:01+01:00" });
+    });
   });
 
   test(`draws the ${THREADS_PER_AREA} threads of an area with the most prompts, in order of their first activity, and the rest in one row named by its threads`, () => {
