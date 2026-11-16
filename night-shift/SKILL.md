@@ -83,4 +83,4 @@ The page opens with the night's counts, running totals of landings, issues filed
 
 Number the items in parts 3 to 5 in one sequence. Leave everything else out, such as deferred review findings, bugs you noticed, and engineering choices. File an issue for one that is worth fixing, as `worker.md` defines it, and put other notes on their pull request.
 
-When the shift ends, build the page with `scripts/build-report-html.py <data.json> <out.html> inline` and show it in this thread with `html_preview` and `html_render`. Don't repeat or extend it in your final message.
+When the shift ends, build the page with `scripts/build-report-html.py <data.json> <out.html> inline` and show it in this thread with `html_preview` and `html_render`. Don't repeat or extend it in your final message. Then, if tonight merged a change to this machine's configuration, switch to it by running nix-config's `bin/rebuild` from a fresh worktree of `origin/main`. Do this last, because a switch can restart T3 Code and the services workers use.
