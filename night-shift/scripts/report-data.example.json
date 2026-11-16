@@ -14,7 +14,7 @@
       "ref": "#254",
       "href": "https://github.com/davidvornholt/wordhold/pull/254",
       "text": "A word list that fails to upload no longer clears the list you were editing.",
-      "kind": "hunt",
+      "kind": "found",
       "at": "2026-11-08T01:42:00Z"
     },
     {
@@ -34,8 +34,8 @@
       "text": "Shifts on a public holiday showed twice. Closed, because last week's release already fixed it."
     }
   ],
-  "resolved": 2,
-  "filed": 2,
+  "resolved": ["2026-11-07T23:30:00Z", "2026-11-08T01:42:00Z"],
+  "filed": ["2026-11-07T23:05:00Z", "2026-11-08T02:20:00Z"],
   "activity": [
     {
       "lane": "LinkedIn comments",
