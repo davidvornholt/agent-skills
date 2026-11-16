@@ -288,7 +288,7 @@ describe("timelineBlock", () => {
     const POSTLUDE_LIMIT = 40;
     const start = at("2026-10-29T21:34:00+01:00");
     const end = at("2026-10-30T03:26:00+01:00");
-    const drawRuns = (mergedAts: readonly number[]) => {
+    const drawRuns = (mergedAts: readonly number[], run = { start, end }) => {
       const landed = mergedAts.map((mergedAt, index) => ({ repository: "davidvornholt/postlude", number: index + 1, mergedAt }));
       const landedPrs = {
         status: "complete" as const,
@@ -304,7 +304,7 @@ describe("timelineBlock", () => {
       };
       const drawn = timelineBlock(
         withTimeline(
-          { ...bare, threads: { status: "complete", items: [thread({ id: "a", title: "Night shift", runs: [{ start, end }], pullRequests: landed })] } },
+          { ...bare, threads: { status: "complete", items: [thread({ id: "a", title: "Night shift", runs: [run], pullRequests: landed })] } },
           { ...quiet, landedPrs },
         ),
         "Timeline",
@@ -335,7 +335,7 @@ describe("timelineBlock", () => {
       expect(runs[0]?.pullRequests).toHaveLength(POSTLUDE_LIMIT);
     });
 
-    test("keeps every run a stretch of time when the pull requests merged in the same second or after the run ended", () => {
+    test("keeps the runs in order and gapless when the pull requests merged in the same second or after the run ended", () => {
       const sameSecond = drawRuns(Array.from({ length: 2 * POSTLUDE_LIMIT + 1 }, () => start + 60_000));
       expect(sameSecond.map((mark) => mark.pullRequests?.length)).toEqual([POSTLUDE_LIMIT, POSTLUDE_LIMIT, 1]);
       const afterwards = drawRuns(Array.from({ length: POSTLUDE_LIMIT + 5 }, (_, index) => end + (index + 1) * 60_000));
@@ -344,11 +344,21 @@ describe("timelineBlock", () => {
         expect(marks[0]?.start).toBe("2026-10-29T21:34:00+01:00");
         expect(marks.at(-1)?.end).toBe("2026-10-30T03:26:00+01:00");
         for (const [index, mark] of marks.entries()) {
-          expect(Date.parse(mark.end)).toBeGreaterThan(Date.parse(mark.start));
+          expect(Date.parse(mark.end)).toBeGreaterThanOrEqual(Date.parse(mark.start));
           const before = marks[index - 1];
           if (before !== undefined) expect(mark.start).toBe(before.end);
         }
       }
+    });
+
+    test("splits a run that lasted a second, as Postlude allows a run with no length", () => {
+      const short = { start, end: start + 1000 };
+      const mergedAts = Array.from({ length: POSTLUDE_LIMIT + 1 }, (_, index) => short.end + (index + 1) * 60_000);
+      const runs = drawRuns(mergedAts, short);
+      expect(runs.map((mark) => mark.pullRequests?.length)).toEqual([POSTLUDE_LIMIT, 1]);
+      expect(runs[0]?.start).toBe("2026-10-29T21:34:00+01:00");
+      expect(runs[0]?.end).toBe("2026-10-29T21:34:01+01:00");
+      expect(runs[1]).toMatchObject({ start: "2026-10-29T21:34:01+01:00", end: "2026-10-29T21:34:01+01:00" });
     });
   });
 

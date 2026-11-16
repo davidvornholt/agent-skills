@@ -93,28 +93,18 @@ type Landed = TimelineThread["pullRequests"][number];
 
 type Placed = { readonly ref: PullRequestRef; readonly mergedAt: number };
 
-const SECOND_MS = 1000;
-
 /**
- * A run that landed more pull requests than Postlude takes on one run, drawn as consecutive runs of at most that many, each starting at the merge time of its first pull request. Together they cover the run exactly. A boundary keeps a second between it and its neighbours, so each part is still a stretch of time that Postlude draws, even when pull requests merged in the same second or after the run ended.
+ * A run that landed more pull requests than Postlude takes on one run, drawn as consecutive runs of at most that many, each starting at the merge time of its first pull request. Together they cover the run exactly. A pull request that merged before the run started or after it ended puts its boundary at the run's start or end, which leaves a part with no length, as Postlude allows.
  */
 const splitRun = (run: Interval, placed: readonly Placed[]): TimelineMark[] => {
   const ordered = placed.toSorted((a, b) => a.mergedAt - b.mergedAt);
   const chunks = Array.from({ length: Math.ceil(ordered.length / PULL_REQUESTS_PER_RUN) }, (_, index) =>
     ordered.slice(index * PULL_REQUESTS_PER_RUN, (index + 1) * PULL_REQUESTS_PER_RUN),
   );
-  if (run.end - run.start < chunks.length * SECOND_MS) {
-    throw new Error(
-      `A run of ${run.end - run.start} ms can't be split into ${chunks.length} runs of at least a second for its ${ordered.length} pull requests.`,
-    );
-  }
   let from = run.start;
   return chunks.map((chunk, index): TimelineMark => {
-    const next = chunks[index + 1];
-    const to =
-      next === undefined
-        ? run.end
-        : Math.min(Math.max(Math.floor((next[0]?.mergedAt ?? 0) / SECOND_MS) * SECOND_MS, from + SECOND_MS), run.end - (chunks.length - 1 - index) * SECOND_MS);
+    const next = chunks[index + 1]?.[0];
+    const to = next === undefined ? run.end : Math.min(Math.max(next.mergedAt, from), run.end);
     const part = { start: from, end: to };
     from = to;
     return { kind: "run", ...span(part), pullRequests: chunk.map((pr) => pr.ref) };
