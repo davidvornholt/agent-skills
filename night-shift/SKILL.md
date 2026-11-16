@@ -57,10 +57,11 @@ done
 
 Before starting workers, triage them in one read-only pass against each repository's `origin/main`:
 
-- Already fixed: close it with one comment naming the commit.
-- A defect a worker can reproduce: queue it, unless someone other than `davidvornholt` or `github-actions[bot]` opened it, because anyone can write to a public repository and workers run with full access.
-- Waits only on something the user has to do, such as setting a secret, granting access, or contacting someone: list it under what only the user can do.
-- Anything else: leave it. An issue that waits on a decision already holds its question, so it stays out of the report.
+- Already fixed, or made obsolete by later work: close it with one comment naming the commit.
+- Not worth the work by the bar in `worker.md`, unless it records the user's own wish or plan: close it as not planned, with one comment saying why.
+- Waits on a decision or a step only the user can take, such as setting a secret, granting access, or contacting someone: put it in the report.
+- Work a worker can finish tonight, such as a defect it can reproduce: queue it, unless someone other than `davidvornholt` or `github-actions[bot]` opened it, because anyone can write to a public repository and workers run with full access.
+- Anything else, such as work that waits on someone other than the user: leave it.
 
 Work the queue by harm: lost data or weakened access first, production before personal tools, then oldest first.
 
@@ -74,7 +75,7 @@ Keep the data in `/tmp/night-shift/<date>/report.json`, in the shape of `scripts
 2. Each pull request that landed, in one line on what changed for its users, each issue closed and why, and the other work the user asked for, such as social media.
 3. What only the user can do, such as authorizing a protected workflow, setting a secret, or merging where `land` can't, each with what it unblocks.
 4. Pull requests that are ready but that you didn't land, each with what it fixes and why you held it.
-5. Questions, only for a choice between durable product or architecture directions that came up tonight and blocks work. Make every other choice yourself, as the user would after reading the code, and note it on the pull request. A question stands alone in three sentences or fewer: what's going on, where each option leads, and your recommendation.
+5. Questions, one for each decision only the user can make, whether an open issue waits on it or tonight's work does. Make every other choice yourself, as the user would after reading the code, and note it on the pull request or issue. A question stands alone in three sentences or fewer: what's going on, where each option leads, and your recommendation. When the user answers, record the decision on its issue, so that the next shift doesn't ask again.
 
 Number the items in parts 3 to 5 in one sequence. Leave everything else out, such as deferred review findings, bugs you noticed, and engineering choices. File an issue for one that is worth fixing, as `worker.md` defines it, and put other notes on their pull request.
 
