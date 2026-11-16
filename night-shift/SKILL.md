@@ -37,7 +37,7 @@ Work through this list while usage lasts:
 1. Do what the user named tonight, including the Super Productivity tasks they handed over.
 2. Land what is ready, as `worker.md` describes: open bot pull requests, and pull requests by `davidvornholt` that are marked ready for review and aren't off limits, because a draft may still be in progress.
 3. Resolve issues.
-4. Hunt bugs: GPT-6 Astra reads a repository without changing it, and a Claude worker fixes what it can reproduce.
+4. Hunt bugs: GPT-6 Astra reads a repository without changing it and reports only bugs worth fixing, as `worker.md` defines them, and a Claude worker fixes what it can reproduce. Hunt each repository once, and don't queue a follow-up from tonight's own work that falls below that bar.
 
 ## Super Productivity tasks
 
@@ -81,6 +81,6 @@ Keep the data in `/tmp/night-shift/<date>/report.json`, in the shape of `scripts
 
 The page opens with the night's counts, running totals of landings, issues filed and issues resolved, and of other timed actions, and where the landed work came from, so record what they need as you go: each landed pull request's merge time as `at` and its `kind` (`asked` by the user, `issue` open before the shift, `found` for a problem found tonight, or `update`), the time of each issue filed tonight in `filed` and of each issue closed tonight, including by landed pull requests, in `resolved`, an `activity` entry for each timed action that isn't a pull request, such as a comment, and the count `opened`.
 
-Number the items in parts 3 to 5 in one sequence. Leave everything else out, such as deferred review findings, bugs you noticed, and engineering choices. File an issue for each one someone would otherwise run into, and put other notes on their pull request.
+Number the items in parts 3 to 5 in one sequence. Leave everything else out, such as deferred review findings, bugs you noticed, and engineering choices. File an issue for one that is worth fixing, as `worker.md` defines it, and put other notes on their pull request.
 
 When the shift ends, build the page with `scripts/build-report-html.py <data.json> <out.html> inline` and show it in this thread with `html_preview` and `html_render`. Don't repeat or extend it in your final message.
