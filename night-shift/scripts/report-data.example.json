@@ -1,19 +1,29 @@
 {
   "title": "Night shift, 7–8 November",
   "built": "8 Nov 2026, 07:30 CET",
+  "timezone": "Europe/Berlin",
+  "shift": {
+    "start": "2026-11-07T21:10:00Z",
+    "end": "2026-11-08T06:30:00Z"
+  },
   "summary": "Atrium has been down since Saturday evening and needs a restart (item 1). Otherwise 2 pull requests landed, 1 issue was closed, and nothing was reverted.",
+  "opened": 3,
   "landed": [
     {
       "repo": "wordhold",
       "ref": "#254",
       "href": "https://github.com/davidvornholt/wordhold/pull/254",
-      "text": "A word list that fails to upload no longer clears the list you were editing."
+      "text": "A word list that fails to upload no longer clears the list you were editing.",
+      "kind": "hunt",
+      "at": "2026-11-08T01:42:00Z"
     },
     {
       "repo": "rota",
       "ref": "#145",
       "href": "https://github.com/davidvornholt/rota/pull/145",
-      "text": "Dependency updates, with no change you would notice."
+      "text": "Dependency updates, with no change you would notice.",
+      "kind": "update",
+      "at": "2026-11-07T22:15:00Z"
     }
   ],
   "closed": [
@@ -24,7 +34,23 @@
       "text": "Shifts on a public holiday showed twice. Closed, because last week's release already fixed it."
     }
   ],
-  "other": ["Wrote 14 LinkedIn comments and 1 reply, and stopped when LinkedIn paused search on your account at 03:30."],
+  "resolved": 2,
+  "filed": 2,
+  "activity": [
+    {
+      "lane": "LinkedIn comments",
+      "at": "2026-11-07T22:05:00Z"
+    },
+    {
+      "lane": "LinkedIn comments",
+      "at": "2026-11-07T23:10:00Z"
+    },
+    {
+      "lane": "LinkedIn comments",
+      "at": "2026-11-08T00:12:00Z"
+    }
+  ],
+  "other": ["Wrote 3 LinkedIn comments, and stopped when LinkedIn paused search on your account at 03:30."],
   "todo": [
     {
       "n": 1,
