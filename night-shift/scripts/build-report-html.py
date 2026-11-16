@@ -171,9 +171,10 @@ FILED, RESOLVED = times("filed"), times("resolved")
 def tiles(waiting: int) -> str:
     stats = [
         ("Landed", f"{len(LANDED):,}"),
-        ("Pull requests opened", f"{DATA['opened']:,}"),
         ("Issues filed", f"{len(FILED):,}"),
         ("Issues resolved", f"{len(RESOLVED):,}"),
+        # Below 1, the shift left more issues open than it started with.
+        ("Resolved per filed issue", f"{len(RESOLVED) / len(FILED):.2f}" if FILED else "–"),
         ("Change in open issues", signed(len(FILED) - len(RESOLVED))),
         ("Waiting for you", f"{waiting:,}"),
     ]
