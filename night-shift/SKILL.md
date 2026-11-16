@@ -79,6 +79,8 @@ Keep the data in `/tmp/night-shift/<date>/report.json`, in the shape of `scripts
 4. Pull requests that are ready but that you didn't land, each with what it fixes and why you held it.
 5. Questions, only for a choice between durable product or architecture directions that came up tonight and blocks work. Make every other choice yourself, as the user would after reading the code, and note it on the pull request. A question stands alone in three sentences or fewer: what's going on, where each option leads, and your recommendation.
 
+The page opens with the night's counts, landings and timed actions per hour, and where the landed work came from, so record what they need as you go: each landed pull request's merge time as `at` and its `kind` (`asked` by the user, `issue` open before the shift, `hunt` for a bug a hunt found tonight, `follow-up` for a gap found in tonight's own work, or `update`), an `activity` entry for each timed action that isn't a pull request, such as a comment, and the counts `opened`, `resolved` (issues closed tonight, including by landed pull requests) and `filed`.
+
 Number the items in parts 3 to 5 in one sequence. Leave everything else out, such as deferred review findings, bugs you noticed, and engineering choices. File an issue for each one someone would otherwise run into, and put other notes on their pull request.
 
 When the shift ends, build the page with `scripts/build-report-html.py <data.json> <out.html> inline` and show it in this thread with `html_preview` and `html_render`. Don't repeat or extend it in your final message.
