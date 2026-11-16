@@ -10,6 +10,9 @@ export const LABEL_MAX_LENGTH = 200;
 /** The most pull requests Postlude takes on one run (`pullRequestsPerRun` in day-report-timeline.ts). */
 export const PULL_REQUESTS_PER_RUN = 40;
 
+/** The most marks Postlude takes on one timeline row (`marksPerRow` in day-report-timeline.ts). */
+export const MARKS_PER_ROW = 2000;
+
 export type Span = string | { readonly emphasis: string } | { readonly code: string } | { readonly link: string; readonly href: string };
 export type RichText = readonly Span[];
 
@@ -100,8 +103,8 @@ export type Block = SectionBlock | ParagraphBlock | PartsBlock | FactsBlock | Li
 
 export type ReportDocument = { readonly version: typeof REPORT_DOCUMENT_VERSION; readonly blocks: readonly Block[] };
 
-/** A label cut to the length Postlude takes, with an ellipsis where it was cut. */
-export const label = (text: string): string => (text.length <= LABEL_MAX_LENGTH ? text : `${text.slice(0, LABEL_MAX_LENGTH - 1).trimEnd()}…`);
+/** A label cut to the length Postlude takes, or to max where it must leave room for more, with an ellipsis where it was cut. */
+export const label = (text: string, max = LABEL_MAX_LENGTH): string => (text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`);
 
 /** A repository as the report names it: as the pull request's ref ("name#12", or "owner/name#12" when two of the day's repositories share a name) does. */
 export const repositoryName = (pr: { readonly ref: string }): string => label(pr.ref.slice(0, pr.ref.lastIndexOf("#")));

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { toBerlinIso } from "./day.ts";
 import { buildCollected, type Collected } from "./day-report.ts";
-import { LABEL_MAX_LENGTH, type TimelineBlock, type TimelineMark } from "./report-document.ts";
+import { LABEL_MAX_LENGTH, PULL_REQUESTS_PER_RUN, type TimelineBlock, type TimelineMark } from "./report-document.ts";
 import { THREADS_PER_AREA, timelineBlock } from "./report-timeline.ts";
 import { APPS_PER_MARK, FOCUS_MIN_MINUTES, SWITCH_GRACE_MINUTES, THREADS_PER_MARK, WINDOWS_PER_MARK } from "./screen-marks.ts";
 import { sources, WINDOW } from "./testing/fixtures.ts";
@@ -359,6 +359,84 @@ describe("timelineBlock", () => {
       expect(runs[0]?.start).toBe("2026-10-29T21:34:00+01:00");
       expect(runs[0]?.end).toBe("2026-10-29T21:34:01+01:00");
       expect(runs[1]).toMatchObject({ start: "2026-10-29T21:34:01+01:00", end: "2026-10-29T21:34:01+01:00" });
+    });
+  });
+
+  describe("a row with more marks than Postlude takes on one row", () => {
+    // Postlude's marksPerRow, written out here so that a wrong mirror in the code is caught.
+    const POSTLUDE_LIMIT = 2000;
+    const nine = at("2026-10-29T09:00:00+01:00");
+    const run = { start: nine, end: nine + 3_600_000 };
+    const prompts = (count: number) => Array.from({ length: count }, (_, index) => ({ at: nine + index * 1000, fromPhone: false }));
+    const busy = (count: number, fields: Partial<TimelineThread> = {}) =>
+      thread({ id: "busy", title: "Busy thread", runs: [run], prompts: prompts(count), ...fields });
+    const draw = (items: readonly TimelineThread[], inputs: Partial<Collected["reportInputs"]> = quiet) =>
+      rowsOf(timelineBlock(withTimeline({ ...bare, threads: { status: "complete", items } }, inputs), "Timeline", [], NO_NAMES));
+
+    test("draws it as consecutive rows of at most that many, the earliest marks first, and drops none", () => {
+      const rows = draw([busy(POSTLUDE_LIMIT + 1)]);
+      expect(rows.map((entry) => [entry.label, entry.note, entry.marks.length])).toEqual([
+        ["Busy thread (1 of 2)", "postlude", POSTLUDE_LIMIT],
+        ["Busy thread (2 of 2)", "postlude", 2],
+      ]);
+      expect(rows.flatMap((entry) => entry.marks)).toEqual([
+        { kind: "run", start: "2026-10-29T09:00:00+01:00", end: "2026-10-29T10:00:00+01:00" },
+        ...prompts(POSTLUDE_LIMIT + 1).map((prompt) => ({ kind: "prompt" as const, at: iso(prompt.at) })),
+      ]);
+    });
+
+    test("leaves a row of exactly the limit whole", () => {
+      const rows = draw([busy(POSTLUDE_LIMIT - 1)]);
+      expect(rows.map((entry) => [entry.label, entry.marks.length])).toEqual([["Busy thread", POSTLUDE_LIMIT]]);
+    });
+
+    test("splits a row that a run split for its pull requests pushed over the limit", () => {
+      // 1,999 prompts and a run that landed 41 pull requests, which becomes two runs: 2,001 marks.
+      const landed = Array.from({ length: PULL_REQUESTS_PER_RUN + 1 }, (_, index) => ({
+        repository: "davidvornholt/postlude",
+        number: index + 1,
+        mergedAt: nine + (index + 1) * 60_000,
+      }));
+      const landedPrs = {
+        status: "complete" as const,
+        items: landed.map((pr) => ({
+          repository: pr.repository,
+          number: pr.number,
+          ref: `postlude#${pr.number}`,
+          part: null,
+          title: `PR ${pr.number}`,
+          summary: null,
+          mergedAt: new Date(pr.mergedAt).toISOString(),
+        })),
+      };
+      const rows = draw([busy(POSTLUDE_LIMIT - 1, { pullRequests: landed })], { ...quiet, landedPrs }).filter((entry) => entry.label.startsWith("Busy thread"));
+      expect(rows.map((entry) => entry.marks.length)).toEqual([POSTLUDE_LIMIT, 1]);
+      const runs = rows.flatMap((entry) => entry.marks.flatMap((mark) => (mark.kind === "run" ? [mark] : [])));
+      expect(runs.flatMap((mark) => (mark.pullRequests ?? []).map((pr) => pr.number))).toEqual(landed.map((pr) => pr.number));
+      expect(rows.flatMap((entry) => entry.marks).filter((mark) => mark.kind === "prompt")).toHaveLength(POSTLUDE_LIMIT - 1);
+    });
+
+    test("cuts a long label so that its number still fits", () => {
+      const rows = draw([busy(POSTLUDE_LIMIT + 1, { title: "x".repeat(LABEL_MAX_LENGTH) })]);
+      for (const [index, entry] of rows.entries()) {
+        expect(entry.label.length).toBeLessThanOrEqual(LABEL_MAX_LENGTH);
+        expect(entry.label).toEndWith(`… (${index + 1} of 2)`);
+      }
+    });
+
+    test("shows a row's total only on its first row, because it is the whole row's", () => {
+      // No day has room for this many stretches of one area, a minute each and three apart, but the rule holds for every row.
+      const pieces = Array.from({ length: POSTLUDE_LIMIT + 1 }, (_, index) => ({
+        start: nine + index * 240_000,
+        end: nine + index * 240_000 + 60_000,
+        category: "code",
+        project: null,
+      }));
+      const rows = rowsOf(timelineBlock(withTimeline({ ...bare, pieces }, quiet), "Timeline", [], NO_NAMES));
+      expect(rows.map((entry) => [entry.label, entry.total, entry.marks.length])).toEqual([
+        ["Code (1 of 2)", { minutes: POSTLUDE_LIMIT + 1 }, POSTLUDE_LIMIT],
+        ["Code (2 of 2)", undefined, 1],
+      ]);
     });
   });
 
