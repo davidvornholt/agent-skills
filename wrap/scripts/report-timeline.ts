@@ -9,6 +9,7 @@ import { cardSummary } from "./pr-summary.ts";
 import {
   LABEL_MAX_LENGTH,
   label,
+  MARKS_PER_ROW,
   PULL_REQUESTS_PER_RUN,
   type PullRequestRef,
   repositoryName,
@@ -193,6 +194,25 @@ const threadGroups = (collected: Collected, areaOrder: readonly string[], names:
     });
 };
 
+const markTime = (mark: TimelineMark): number => Date.parse("at" in mark ? mark.at : mark.start);
+
+/** A row with more marks than Postlude takes on one row, drawn as consecutive rows of at most that many, the earliest marks first, numbered in their labels. Each keeps the note, and only the first the total, which is the whole row's. */
+const fitRow = (row: TimelineRow): TimelineRow[] => {
+  if (row.marks.length <= MARKS_PER_ROW) return [row];
+  const { total, ...shared } = row;
+  const ordered = row.marks.toSorted((a, b) => markTime(a) - markTime(b));
+  const count = Math.ceil(ordered.length / MARKS_PER_ROW);
+  return Array.from({ length: count }, (_, index): TimelineRow => {
+    const suffix = ` (${index + 1} of ${count})`;
+    return {
+      ...shared,
+      label: `${label(row.label, LABEL_MAX_LENGTH - suffix.length)}${suffix}`,
+      ...(index === 0 && total !== undefined ? { total } : {}),
+      marks: ordered.slice(index * MARKS_PER_ROW, (index + 1) * MARKS_PER_ROW),
+    };
+  });
+};
+
 const notesOf = (collected: Collected): string[] =>
   [
     collected.timeline.status === "partial"
@@ -223,7 +243,9 @@ export const timelineBlock = (collected: Collected, heading: string, titles: rea
       areas.rows.map((row) => row.label),
       names,
     ),
-  ].filter((group) => group.rows.length > 0);
+  ]
+    .filter((group) => group.rows.length > 0)
+    .map((group) => ({ ...group, rows: group.rows.flatMap(fitRow) }));
   const notes = notesOf(collected);
   return { kind: "timeline", heading, groups, ...(notes.length === 0 ? {} : { notes }) };
 };
