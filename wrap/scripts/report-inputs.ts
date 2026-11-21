@@ -55,7 +55,7 @@ export type Facts = {
     readonly mergedAt: string;
     readonly minutes: number;
   }>;
-  /** The screen time with T3 Code in front, and the time at least one agent ran while the user was away from the screen; null when screen time or T3 Code wasn't available. */
+  /** The screen time with T3 Code in front, and the time at least one agent ran while the user had no screen time, outside the pauses; null when screen time or T3 Code wasn't available. */
   readonly split: { readonly t3Minutes: number; readonly agentsAloneMinutes: number } | null;
   /** The time the user paused the activity log on every host, which is neither screen time nor time away; null when screen time wasn't available. */
   readonly pausedMinutes: number | null;

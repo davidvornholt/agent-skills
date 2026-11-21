@@ -66,7 +66,7 @@ describe("figures", () => {
             {
               term: "Focus",
               details: [
-                ["6 h 29 min of your screen time was in T3 Code. Of the 3 h 45 min with an agent running, you were away from the screen for 1 h 31 min."],
+                ["6 h 29 min of your screen time was in T3 Code. Of the 3 h 45 min with an agent running, you had no screen time for 1 h 31 min."],
                 ["3 focus blocks; the longest was 3 h 29 min on Code, 08:00–11:30."],
               ],
             },

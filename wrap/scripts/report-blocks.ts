@@ -122,7 +122,7 @@ const focusFacts = (inputs: ReportInputs): string[] => {
   const alone =
     split === null || agents === null || agents.wallMinutes === 0
       ? ""
-      : ` Of the ${minutesText(agents.wallMinutes)} with an agent running, you were away from the screen for ${minutesText(split.agentsAloneMinutes)}.`;
+      : ` Of the ${minutesText(agents.wallMinutes)} with an agent running, you had no screen time for ${minutesText(split.agentsAloneMinutes)}.`;
   return [
     split === null ? null : `${minutesText(split.t3Minutes)} of your screen time was in T3 Code.${alone}`,
     focus === null || longest === null
