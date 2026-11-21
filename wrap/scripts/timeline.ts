@@ -50,7 +50,6 @@ export type SentMail = { readonly at: number; readonly mailbox: string; readonly
 export type Timeline = {
   readonly status: ListStatus;
   readonly pieces: readonly TimelinePiece[];
-  /** The time the user paused the activity log on every host, which has no screen time. */
   readonly paused: readonly Interval[];
   readonly focusBlocks: readonly FocusBlock[];
   readonly categoryLabels: Readonly<Record<string, string>>;
