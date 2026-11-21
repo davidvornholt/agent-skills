@@ -55,8 +55,10 @@ export type Facts = {
     readonly mergedAt: string;
     readonly minutes: number;
   }>;
-  /** The screen time with T3 Code in front, and the time at least one agent ran while the user had no screen time; null when screen time or T3 Code wasn't available. */
+  /** The screen time with T3 Code in front, and the time at least one agent ran while the user had no screen time, outside the pauses; null when screen time or T3 Code wasn't available. */
   readonly split: { readonly t3Minutes: number; readonly agentsAloneMinutes: number } | null;
+  /** The time the user paused the activity log on every host, which is neither screen time nor time away; null when screen time wasn't available. */
+  readonly pausedMinutes: number | null;
   readonly focus: {
     readonly blocks: number;
     readonly longest: { readonly minutes: number; readonly start: string; readonly end: string; readonly area: string } | null;
@@ -305,9 +307,11 @@ const facts = (window: DayWindow, sources: Sources, timeline: Timeline, windows:
         ? null
         : splitTime(
             timeline.pieces,
+            timeline.paused,
             windows,
             threads.flatMap((thread) => thread.runs),
           ),
+    pausedMinutes: timeline.status === "missing" ? null : totalMinutes(timeline.paused),
     focus:
       timeline.status === "missing"
         ? null

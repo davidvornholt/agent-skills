@@ -63,7 +63,7 @@ You compose the report: which blocks it has, in what order, under what headings,
 
    Open with a few short paragraphs about what the parts can't show:
 
-   - the shape of the day: start and stop, the main stretches, and how the screen time split between steering agents (`t3Minutes`) and everything else the user did, which the windows show, and how long agents ran alone (`agentsAloneMinutes`)
+   - the shape of the day: start and stop, the main stretches, and how the screen time split between steering agents (`t3Minutes`) and everything else the user did, which the windows show, and how long agents ran alone (`agentsAloneMinutes`). Paused time (`pausedMinutes`) is time the user kept out of the activity log, so the collected day has no windows, prompts or T3 Code messages from it: say how long it was, and don't guess what filled it.
    - patterns worth noticing
    - at most one or two outcomes that defined the day
 

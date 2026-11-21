@@ -20,6 +20,7 @@ const piece = (start: string, end: string) => ({ start: at(start), end: at(end),
 const timeline = (pieces: Timeline["pieces"]): Timeline => ({
   status: "complete",
   pieces,
+  paused: [],
   focusBlocks: [],
   categoryLabels: { code: "Code" },
   windows: [],
@@ -237,6 +238,18 @@ describe("part threads", () => {
       // The minute away at 09:40 is screen time neither of the user nor in T3 Code, while an agent ran.
       { screenMinutes: 239, t3Minutes: 209, agentsAloneMinutes: 31 },
       { screenMinutes: 330, t3Minutes: 180, agentsAloneMinutes: 60 },
+    ]);
+  });
+
+  test("leave paused time out of the time agents ran alone, and count it in its part", () => {
+    // Half of the deploy's last hour in the journal day.
+    const pausedIntervals = [{ start: "2026-10-30T03:00:00.000+01:00", end: "2026-10-30T03:30:00.000+01:00" }];
+    const paused = { ...sources, summary: { ok: true as const, value: { ...summary, pausedMinutes: 30, pausedIntervals } } };
+    const built = buildTimeline(WINDOW, paused);
+    const parts = buildParts(built, partBounds(WINDOW, built), [], dayWindows(WINDOW, paused));
+    expect(parts.map(({ agentsAloneMinutes, pausedMinutes }) => ({ agentsAloneMinutes, pausedMinutes }))).toEqual([
+      { agentsAloneMinutes: 31, pausedMinutes: 0 },
+      { agentsAloneMinutes: 30, pausedMinutes: 30 },
     ]);
   });
 });

@@ -26,7 +26,7 @@ test("compose prints the stdin for postlude agent-area check and put", async () 
   expect(result.exitCode).toBe(0);
   const payload = JSON.parse(result.stdout);
   expect(payload.dayMetrics).toEqual(collected.dayMetrics);
-  expect(payload.metricsVersion).toBe(7);
+  expect(payload.metricsVersion).toBe(8);
   expect(payload.reportModel).toBe("Claude Opus 5.5");
   expect(payload.reportDocument.version).toBe(1);
   expect(payload.reportDocument.blocks[0]).toEqual({ kind: "paragraph", text: ["A calm day."] });

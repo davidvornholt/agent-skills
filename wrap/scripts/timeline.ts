@@ -50,6 +50,7 @@ export type SentMail = { readonly at: number; readonly mailbox: string; readonly
 export type Timeline = {
   readonly status: ListStatus;
   readonly pieces: readonly TimelinePiece[];
+  readonly paused: readonly Interval[];
   readonly focusBlocks: readonly FocusBlock[];
   readonly categoryLabels: Readonly<Record<string, string>>;
   /** The windows in front, leaving out redacted ones. */
@@ -67,8 +68,10 @@ export type DayPart = {
   readonly screenMinutes: number;
   /** Of screenMinutes, the time with T3 Code in front. */
   readonly t3Minutes: number;
-  /** The time at least one agent ran while the user had no screen time. */
+  /** The time at least one agent ran while the user had no screen time, leaving out the time the activity log was paused. */
   readonly agentsAloneMinutes: number;
+  /** The time the user paused the activity log on every host. It is neither screen time nor time away. */
+  readonly pausedMinutes: number;
   readonly areas: readonly { readonly label: string; readonly minutes: number }[];
   readonly projects: readonly { readonly project: string; readonly screenMinutes: number; readonly agentMinutes: number }[];
   readonly threads: readonly {
@@ -185,10 +188,11 @@ export const buildTimeline = (window: DayWindow, sources: Sources): Timeline => 
   const summary = usableSummary(window, sources);
   const threads = dayThreads(window, sources, summary);
   const mail = sentMails(window, sources);
-  if (summary === null) return { status: "missing", pieces: [], focusBlocks: [], categoryLabels: {}, windows: [], threads, sentMail: mail };
+  if (summary === null) return { status: "missing", pieces: [], paused: [], focusBlocks: [], categoryLabels: {}, windows: [], threads, sentMail: mail };
   return {
     status: summary.hosts.every((host) => host.status === "complete") ? "complete" : "partial",
     pieces: clipped(summary.timeline, day),
+    paused: clip(summary.pausedIntervals, day),
     focusBlocks: clipped(summary.focusBlocks, day),
     categoryLabels: Object.fromEntries(summary.categories.map((category) => [category.id, category.label])),
     windows: screenWindows(clipped(summary.windows, day)),
@@ -234,10 +238,13 @@ const byMinutes = <T extends { readonly minutes: number; readonly label: string 
 /** When something placed in a part happened: an instant, with start equal to end, or an appointment. */
 export type Moment = Interval & { readonly part: number | null };
 
-/** The screen time with T3 Code in front, and the time an agent ran while the user had no screen time. */
-export const splitTime = (pieces: readonly Interval[], windows: readonly WindowPiece[], runs: readonly Interval[]) => {
+/** The screen time with T3 Code in front, and the time an agent ran while the user had no screen time, outside the pauses. */
+export const splitTime = (pieces: readonly Interval[], paused: readonly Interval[], windows: readonly WindowPiece[], runs: readonly Interval[]) => {
   const t3 = windows.filter(t3Window);
-  return { t3Minutes: totalMinutes(subtract(pieces, subtract(pieces, t3))), agentsAloneMinutes: totalMinutes(subtract(runs, pieces)) };
+  return {
+    t3Minutes: totalMinutes(subtract(pieces, subtract(pieces, t3))),
+    agentsAloneMinutes: totalMinutes(subtract(runs, [...pieces, ...paused])),
+  };
 };
 
 const partWindows = (windows: readonly WindowPiece[], bound: Interval): DayPart["windows"] => {
@@ -259,6 +266,7 @@ const partWindows = (windows: readonly WindowPiece[], bound: Interval): DayPart[
 export const buildParts = (timeline: Timeline, bounds: PartBounds, moments: readonly Moment[], windows: readonly WindowPiece[]): DayPart[] =>
   bounds.map((bound, index): DayPart => {
     const pieces = clipped(timeline.pieces, bound);
+    const paused = clip(timeline.paused, bound);
     const threads = timeline.threads.items.map((thread) => ({
       thread,
       runs: clip(thread.runs, bound),
@@ -296,9 +304,11 @@ export const buildParts = (timeline: Timeline, bounds: PartBounds, moments: read
       screenMinutes: totalMinutes(pieces),
       ...splitTime(
         pieces,
+        paused,
         windows,
         threads.flatMap((entry) => entry.runs),
       ),
+      pausedMinutes: totalMinutes(paused),
       areas: [...areas]
         .map(([label, ms]) => ({ label, minutes: minutes(ms) }))
         .filter((area) => area.minutes > 0)

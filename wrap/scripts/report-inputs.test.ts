@@ -23,6 +23,7 @@ test("builds the parts and lists of a day with all sources", () => {
         screenMinutes: 239,
         t3Minutes: 209,
         agentsAloneMinutes: 31,
+        pausedMinutes: 0,
         areas: [
           { label: "Code", minutes: 209 },
           { label: "Mail", minutes: 23 },
@@ -48,6 +49,7 @@ test("builds the parts and lists of a day with all sources", () => {
         screenMinutes: 330,
         t3Minutes: 180,
         agentsAloneMinutes: 60,
+        pausedMinutes: 0,
         areas: [
           { label: "Code", minutes: 180 },
           { label: "Not categorised", minutes: 90 },
@@ -167,6 +169,7 @@ test("builds the parts and lists of a day with all sources", () => {
         ],
       },
       split: { t3Minutes: 389, agentsAloneMinutes: 91 },
+      pausedMinutes: 0,
       // The longest by its time at the computer, which leaves out the minute away within it.
       focus: { blocks: 3, longest: { minutes: 209, start: "2026-10-29T08:00:00+01:00", end: "2026-10-29T11:30:00+01:00", area: "Code" } },
       dueToday: { count: 3, done: 1 },

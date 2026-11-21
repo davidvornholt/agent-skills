@@ -6,10 +6,10 @@
 // - missing: the source was unreachable, and its numbers are null.
 //
 // Definitions:
-// - Activity numbers and categories are copied from the activity summary. They are null when the summary is unavailable or every host is missing. Since summary version 7 (metrics version 5) they include the time David uses the Windows VM directly at the desk, not only while it is streamed. Since summary version 8 (metrics version 6) Learning also counts more school subjects, their topics and school course pages.
+// - Activity numbers and categories are copied from the activity summary. They are null when the summary is unavailable or every host is missing. Since summary version 7 (metrics version 5) they include the time David uses the Windows VM directly at the desk, not only while it is streamed. Since summary version 8 (metrics version 6) Learning also counts more school subjects, their topics and school course pages. Since summary version 11 (metrics version 8) they leave out the time David paused the activity log.
 // - offComputerMinutes: all time tracked in Super Productivity on the day. Despite the name, the user tracks time at the computer there too. Only tasks without subtasks count, because a parent's tracked time is the sum of its subtasks'. SP files time under its own date keys, which follow its "start of next day" setting rather than the 04:00 journal boundary.
 // - appointmentMinutes: the union of all timed calendar events, clipped to the journal day, so overlapping events count once. All-day events, cancelled events, and meetings the account's own attendee entry declined don't count. A meeting whose answer couldn't be read is left out, and its calendar is partial.
-// - appointmentOffScreenMinutes: the part of that union outside the summary's activeIntervals. It needs every activity host complete, because screen time on a host that wasn't fully read would count as off screen.
+// - appointmentOffScreenMinutes: the part of that union outside the summary's activeIntervals and pausedIntervals, because a pause says nothing about where David was. It needs every activity host complete, because screen time on a host that wasn't fully read would count as off screen.
 // - landedPrs: pull requests authored by the davidvornholt account and merged during the journal day, in any repository.
 // - sentMails: messages in each mailbox's Sent folder dated within the journal day, except the test mailboxes in collect.ts.
 
@@ -18,8 +18,8 @@ import type { DayWindow } from "./day.ts";
 import { clip, type Interval, subtract, totalMinutes, union } from "./intervals.ts";
 import type { CalendarEvent, Reading, SentMailData, Sources, SpData } from "./sources.ts";
 
-export const METRICS_VERSION = 7;
-export const SUMMARY_VERSION = 10;
+export const METRICS_VERSION = 8;
+export const SUMMARY_VERSION = 11;
 
 export type CoverageStatus = "complete" | "partial" | "missing";
 export type Coverage = { readonly source: string; readonly status: CoverageStatus };
@@ -59,6 +59,8 @@ export type Summary = {
   readonly scatteredMinutes: number | null;
   readonly categories: readonly SummaryCategory[];
   readonly activeIntervals: readonly Interval[] | null;
+  /** The time the user paused the activity log on every host, which has no screen time. */
+  readonly pausedIntervals: readonly Interval[];
   readonly timeline: readonly TimelinePiece[];
   /** The windows in front, with their titles; the report's timeline cards name the titles of the user's own windows. */
   readonly windows: readonly WindowPiece[];
@@ -124,6 +126,7 @@ export const parseSummary = (raw: unknown, day: string): Summary => {
     return { id: category.id, label: category.label, minutes: category.minutes, t3Projects: category.t3Projects as string[] };
   });
   const activeIntervals = intervals(raw.activeIntervals, "activeIntervals", () => ({}));
+  const pausedIntervals = intervals(raw.pausedIntervals, "pausedIntervals", () => ({}));
   const timeline = intervals(raw.timeline, "timeline", (entry, path) => ({
     category: textOrNull(entry.category, `${path}.category`),
     project: textOrNull(entry.project, `${path}.project`),
@@ -145,6 +148,7 @@ export const parseSummary = (raw: unknown, day: string): Summary => {
     scatteredMinutes: minutesOrNull(raw.scatteredMinutes, "scatteredMinutes"),
     categories,
     activeIntervals,
+    pausedIntervals,
     timeline,
     windows,
     focusBlocks,
@@ -283,6 +287,7 @@ export const computeDayMetrics = (window: DayWindow, sources: Sources): Computed
   const summary = activity.value;
   const appointments = calendar.value.appointments;
   const activeIntervals = summary?.activeIntervals ?? null;
+  const pausedIntervals = summary?.pausedIntervals ?? [];
 
   const dayMetrics: DayMetrics = {
     metricsVersion: METRICS_VERSION,
@@ -298,7 +303,8 @@ export const computeDayMetrics = (window: DayWindow, sources: Sources): Computed
       .toSorted((a, b) => b.minutes - a.minutes || compareText(a.id, b.id)),
     offComputerMinutes: sp.value,
     appointmentMinutes: appointments === null ? null : totalMinutes(appointments),
-    appointmentOffScreenMinutes: appointments === null || activeIntervals === null ? null : totalMinutes(subtract(appointments, activeIntervals)),
+    appointmentOffScreenMinutes:
+      appointments === null || activeIntervals === null ? null : totalMinutes(subtract(appointments, [...activeIntervals, ...pausedIntervals])),
     landedPrs: github.value,
     sentMails: mailboxes.map(({ mailbox, part }) => ({ mailbox, count: part.value })),
     coverage: [...activity.coverage, ...sp.coverage, ...github.coverage, ...mailCoverage, ...calendar.coverage],

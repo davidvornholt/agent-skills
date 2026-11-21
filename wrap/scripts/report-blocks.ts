@@ -51,7 +51,7 @@ const sentMailTotal = (metrics: DayMetrics): { readonly total: number | null; re
 /** The day in numbers. Agent time is the time at least one agent was running, and its note what the threads' runs add up to. */
 export const tiles = (collected: Collected): DataBlocks => {
   const metrics = collected.dayMetrics;
-  const { prompts, agents } = collected.reportInputs.facts;
+  const { prompts, agents, pausedMinutes } = collected.reportInputs.facts;
   const first = metrics.firstActivityAt;
   const last = metrics.lastActivityAt;
   const promptNote =
@@ -69,6 +69,10 @@ export const tiles = (collected: Collected): DataBlocks => {
         ]
           .filter((part) => part !== null)
           .join(" · ");
+  const screenNote = [
+    first === null || last === null ? null : `From ${toBerlinClock(Date.parse(first))} to ${toBerlinClock(Date.parse(last))}`,
+    pausedMinutes === null || pausedMinutes === 0 ? null : `${minutesText(pausedMinutes)} paused`,
+  ].filter((part) => part !== null);
   const mail = sentMailTotal(metrics);
   const offScreen = metrics.appointmentOffScreenMinutes;
   return {
@@ -76,10 +80,7 @@ export const tiles = (collected: Collected): DataBlocks => {
       {
         kind: "tiles",
         tiles: [
-          withNote(
-            { label: "Screen time", value: minutes(metrics.activeMinutes) },
-            first === null || last === null ? null : `From ${toBerlinClock(Date.parse(first))} to ${toBerlinClock(Date.parse(last))}`,
-          ),
+          withNote({ label: "Screen time", value: minutes(metrics.activeMinutes) }, screenNote.length === 0 ? null : screenNote.join(" · ")),
           withNote(
             { label: "Focus", value: minutes(metrics.focusMinutes) },
             metrics.scatteredMinutes === null ? null : `Short stretches: ${minutesText(metrics.scatteredMinutes)}`,

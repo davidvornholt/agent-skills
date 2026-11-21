@@ -28,6 +28,15 @@ describe("tiles", () => {
     });
   });
 
+  test("note paused time under the screen time", () => {
+    const [block] = tiles(withInputs({ facts: { ...collected.reportInputs.facts, pausedMinutes: 45 } })).blocks;
+    expect(block?.kind === "tiles" ? block.tiles[0] : null).toEqual({
+      label: "Screen time",
+      value: { minutes: 569 },
+      note: ["From 08:00 to 18:30 · 45 min paused"],
+    });
+  });
+
   test("leave a value out when its source wasn't read, rather than show zero", () => {
     const [block] = tiles(buildCollected(WINDOW, { ...daySources, t3: unavailable, mail: unavailable })).blocks;
     expect(block?.kind === "tiles" ? block.tiles.filter((tile) => tile.value === null).map((tile) => tile.label) : []).toEqual([
