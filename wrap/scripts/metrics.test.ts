@@ -93,6 +93,8 @@ describe("activity", () => {
     expect(() => parseSummary({ ...summary, summaryVersion: 8 }, DAY)).toThrow(/summaryVersion 8/);
     // A host whose activity-digest predates window titles.
     expect(() => parseSummary({ ...summary, summaryVersion: 9 }, DAY)).toThrow(/summaryVersion 9/);
+    // A host whose activity-digest predates pausing the activity log.
+    expect(() => parseSummary({ ...summary, summaryVersion: 10 }, DAY)).toThrow(/summaryVersion 10/);
     expect(() => parseSummary(summary, "2026-10-28")).toThrow(/not 2026-10-28/);
     const { dayMetrics, problems } = metrics({ summary: { ok: true, value: { ...summary, summaryVersion: 1 } } });
     expect(dayMetrics.activeMinutes).toBeNull();
@@ -111,9 +113,11 @@ describe("activity", () => {
     ]);
   });
 
-  test("rejects a summary without active intervals", () => {
-    const { activeIntervals: _, ...withoutIntervals } = summary;
-    expect(() => parseSummary(withoutIntervals, DAY)).toThrow(/activeIntervals is not a list/);
+  test("rejects a summary without active or paused intervals", () => {
+    const { activeIntervals: _, ...withoutActive } = summary;
+    expect(() => parseSummary(withoutActive, DAY)).toThrow(/activeIntervals is not a list/);
+    const { pausedIntervals: __, ...withoutPaused } = summary;
+    expect(() => parseSummary(withoutPaused, DAY)).toThrow(/pausedIntervals is not a list/);
   });
 
   test("rejects a category without the T3 projects filed under it, which the metrics then leave out", () => {
@@ -153,6 +157,10 @@ describe("activity", () => {
       value: { ...summary, hosts: summary.hosts.map((host) => (host.host === "david-x1-nixos" ? { ...host, status } : host)) },
     });
     expect(metrics({ summary: withLaptop("complete") }).dayMetrics.appointmentOffScreenMinutes).toBe(90);
+    // Three quarters of lunch paused: that time is neither at the screen nor away from it.
+    const pausedIntervals = [{ start: "2026-10-29T12:00:00.000+01:00", end: "2026-10-29T12:45:00.000+01:00" }];
+    const paused = withLaptop("complete");
+    expect(metrics({ summary: { ...paused, value: { ...paused.value, pausedMinutes: 45, pausedIntervals } } }).dayMetrics.appointmentOffScreenMinutes).toBe(45);
     for (const status of ["partial", "missing"]) {
       const { dayMetrics, problems } = metrics({ summary: withLaptop(status) });
       expect(dayMetrics.appointmentMinutes).toBe(180);

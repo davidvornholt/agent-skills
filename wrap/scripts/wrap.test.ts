@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildCollected } from "./day-report.ts";
+import { METRICS_VERSION } from "./metrics.ts";
 import { COMPOSITION, PARTS } from "./testing/composition.ts";
 import { sources, summary, WINDOW } from "./testing/fixtures.ts";
 
@@ -26,7 +27,7 @@ test("compose prints the stdin for postlude agent-area check and put", async () 
   expect(result.exitCode).toBe(0);
   const payload = JSON.parse(result.stdout);
   expect(payload.dayMetrics).toEqual(collected.dayMetrics);
-  expect(payload.metricsVersion).toBe(7);
+  expect(payload.metricsVersion).toBe(METRICS_VERSION);
   expect(payload.reportModel).toBe("Claude Opus 5.5");
   expect(payload.reportDocument.version).toBe(1);
   expect(payload.reportDocument.blocks[0]).toEqual({ kind: "paragraph", text: ["A calm day."] });

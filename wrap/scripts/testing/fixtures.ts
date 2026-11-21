@@ -6,7 +6,7 @@ export const DAY = "2026-10-29";
 export const WINDOW = dayWindow(DAY);
 
 export const summary = {
-  summaryVersion: 10,
+  summaryVersion: 11,
   day: DAY,
   window: { start: WINDOW.start, end: WINDOW.end },
   hosts: [
@@ -35,6 +35,8 @@ export const summary = {
     { start: "2026-10-29T09:41:00.000+01:00", end: "2026-10-29T12:00:00.000+01:00" },
     { start: "2026-10-29T13:00:00.000+01:00", end: "2026-10-29T18:30:00.000+01:00" },
   ],
+  pausedMinutes: 0,
+  pausedIntervals: [],
   // A minute away at 09:40, which the morning's focus block spans; 18 minutes of mail, too few for focus, then 7 of admin, and 5 more of mail.
   timeline: [
     { start: "2026-10-29T08:00:00.000+01:00", end: "2026-10-29T09:40:00.000+01:00", category: "code", project: "~/dev/postlude" },
