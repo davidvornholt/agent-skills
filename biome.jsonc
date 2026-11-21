@@ -1,6 +1,9 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  // .github/settings.json is synced from davidvornholt/standards, which formats it at
+  // its own line width, and `standards check` already rejects any local edit.
+  "files": { "includes": ["**", "!.github/settings.json"] },
   "formatter": { "indentStyle": "space", "lineWidth": 160 },
   "linter": { "rules": { "preset": "recommended" } },
   "javascript": { "globals": ["Bun"] }
