@@ -19,22 +19,26 @@ export type Collected = {
   readonly problems: readonly string[];
 };
 
-/** The journal day's pauses of the activity log, which hold even when no host could be read; none when the summary can't be read. */
-const pauses = (window: DayWindow, sources: Sources): Interval[] => {
-  if (!sources.summary.ok) return [];
+/** The journal day's pauses of the activity log, which hold even when no host could be read, or null when the summary can't be read. */
+const pauses = (window: DayWindow, sources: Sources): Interval[] | null => {
+  if (!sources.summary.ok) return null;
   try {
     return clip(parseSummary(sources.summary.value, window.day).pausedIntervals, { start: window.startMs, end: window.endMs });
   } catch {
-    return [];
+    return null;
   }
 };
 
 /**
- * The sources without what happened in T3 Code while the user paused the activity log: the prompts and messages in a pause, whoever wrote them, the threads settled in one, and the day threads with no prompt or run in the journal day outside the pauses.
+ * The sources without what happened in T3 Code while the user paused the activity log: the prompts and messages in a pause, whoever wrote them, the threads settled in one, a first prompt in one, and the day threads with no prompt or run in the journal day outside the pauses. Without the pauses, T3 Code is left out.
  */
 export const withoutPaused = (window: DayWindow, sources: Sources): Sources => {
+  if (!sources.t3.ok) return sources;
   const paused = pauses(window, sources);
-  if (!sources.t3.ok || paused.length === 0) return sources;
+  if (paused === null) {
+    return { ...sources, t3: { ok: false, error: "left out, because the activity summary, which says when the activity log was paused, couldn't be read" } };
+  }
+  if (paused.length === 0) return sources;
   const inPause = (at: string | null) => {
     const ms = at === null ? Number.NaN : Date.parse(at);
     return paused.some((pause) => ms >= pause.start && ms < pause.end);
@@ -53,7 +57,9 @@ export const withoutPaused = (window: DayWindow, sources: Sources): Sources => {
       ok: true,
       value: {
         threads: t3.threads.filter((thread) => !inPause(thread.settledAt)),
-        dayThreads: t3.dayThreads.filter((thread) => outside.has(thread.id)),
+        dayThreads: t3.dayThreads
+          .filter((thread) => outside.has(thread.id))
+          .map((thread) => (inPause(thread.firstPromptAt) ? { ...thread, firstPromptAt: null } : thread)),
         runs: t3.runs.filter(kept),
         prompts: prompts.filter(kept),
         messages: t3.messages.filter((message) => kept(message) && !inPause(message.at)),

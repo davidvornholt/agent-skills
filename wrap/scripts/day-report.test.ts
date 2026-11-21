@@ -33,3 +33,22 @@ test("leaves out the prompts in a pause, and a thread with no prompt or run outs
   expect(full.reportInputs.facts.prompts).toEqual({ count: 4, fromPhone: 1, threads: 2 });
   expect(paused.reportInputs.facts.prompts).toEqual({ count: 2, fromPhone: 1, threads: 1 });
 });
+
+test("leaves out a first prompt in a pause, and with it the thread's lead time", () => {
+  // Over the tidy thread's first prompt only.
+  const paused = pausedAt({ start: "2026-10-29T14:45:00.000+01:00", end: "2026-10-29T14:55:00.000+01:00" });
+
+  expect(full.reportInputs.facts.leadTimes.items.map((item) => item.thread)).toEqual(["Tidy tests"]);
+  expect(threadIds(paused)).toContain("t-tidy");
+  expect(paused.reportInputs.facts.leadTimes.items).toEqual([]);
+});
+
+test("leaves out T3 Code when the summary, which holds the pauses, can't be read", () => {
+  const unread = buildCollected(WINDOW, { ...sources, summary: { ok: false, error: "digest failed" } });
+
+  expect(unread.conversations.status).toBe("missing");
+  expect(unread.timeline.threads.status).toBe("missing");
+  expect(unread.problems).toContain(
+    "T3 Code unavailable: left out, because the activity summary, which says when the activity log was paused, couldn't be read",
+  );
+});
