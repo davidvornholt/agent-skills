@@ -33,7 +33,7 @@ Spend by subscription: GPT-6 Astra hunts bugs, Claude fixes and coordinates. Use
 Work through this list while usage lasts:
 
 1. Do what the user named tonight, including the Super Productivity tasks they handed over.
-2. Land what is ready, as `worker.md` describes: open bot pull requests, and pull requests by `davidvornholt` that are marked ready for review and aren't off limits, because a draft may still be in progress.
+2. Land what is ready, as `worker.md` describes: open bot pull requests, and pull requests by `davidvornholt` that are marked ready for review and aren't off limits, because a draft may still be in progress. Never land a pull request in a fork, whose default branch only mirrors upstream. Instead, a Claude worker follows up on the user's pull requests to `super-productivity/super-productivity` and sends the next ones from `davidvornholt/super-productivity`, as `contribute-upstream` describes.
 3. Resolve issues.
 4. Hunt bugs: GPT-6 Astra reads a repository without changing it and reports only bugs worth fixing, as `worker.md` defines them, and a Claude worker fixes those it can reproduce and also judges worth fixing. Hunt each repository once, and hold follow-ups from tonight's own work to the same bar.
 
