@@ -1,6 +1,6 @@
 {
   "upstream": "github:davidvornholt/standards",
-  "sha": "1475800422fa1d1381254c55d02476fdadbdec17",
+  "sha": "2399eef8bcc242fa0d0c004ea1560a91cdeb2748",
   "files": {
     ".agents/skills/ci-pipelines/SKILL.md": "749a5d50c43e67ffd11ffb85da874df6accab0e8559fa15abd769170f0426c17",
     ".agents/skills/declarative-infra/agents/openai.yaml": "7732c5756d4d9dc276ed218b94a09b7c952cab3ef8a3d2a1b62fd1c0e4da2d6e",
@@ -22,8 +22,8 @@
     ".github/actions/sops-secret/action.yml": "c7eaf24946b47f3c5185bc9635739419754423a4d2662c8574197d0888daef7c",
     ".github/settings.json": "3135884c82545bdfd92e92f78dc8c881d40b6e0e20c73b78971c7d90fda6af4e",
     ".github/workflows/standards-auto-merge.yml": "62d26e4a2df34fbb530d849fd9028f7280a64c2193712d84f677438447392af1",
-    ".github/workflows/standards-sync.yml": "f1371b667c0657ce6883bd0651b6d1fa6af305894fad77c390cd212338d55c51",
-    ".github/workflows/standards.yml": "86dfe07b80d143ae29672e50b3d6116dd45620f3abb2a0132bedabf781a9a47a",
+    ".github/workflows/standards-sync.yml": "44ebb7792f04736a1ccc87880f9a83a7faf8ed92c3401f7bdc1f6b3d927b02ee",
+    ".github/workflows/standards.yml": "513cbdd37b6c117e57ee044f495a538f805b403f2319be83acd63cb76a1c6579",
     "AGENTS.md": "7a01cc6021570dca6f50fe7a866467b9efd1c27abec6e961c8658fa5173a63c2",
     "sync-standards.json": "949b2edef6ec1a118a4d0062660456593054e94a35d3e8920a24b1b804cdec1c"
   }
