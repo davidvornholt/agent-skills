@@ -166,9 +166,12 @@ def times(key: str) -> list:
 
 LANDED = [when(x["at"]) for x in DATA["landed"]]
 FILED, RESOLVED = times("filed"), times("resolved")
+OPEN = DATA.get("open")
+if not isinstance(OPEN, int) or isinstance(OPEN, bool):
+    sys.exit("open is the number of issues still open when the shift ends; see report-data.example.json")
 
 
-def tiles(waiting: int) -> str:
+def tiles() -> str:
     stats = [
         ("Landed", f"{len(LANDED):,}"),
         ("Issues filed", f"{len(FILED):,}"),
@@ -176,7 +179,7 @@ def tiles(waiting: int) -> str:
         # Below 1, the shift left more issues open than it started with.
         ("Resolved per filed issue", f"{len(RESOLVED) / len(FILED):.2f}" if FILED else "–"),
         ("Change in open issues", signed(len(FILED) - len(RESOLVED))),
-        ("Waiting for you", f"{waiting:,}"),
+        ("Issues still open", f"{OPEN:,}"),
     ]
     cells = "".join(f'<div class="tile"><div class="label">{e(k)}</div><div class="value">{v}</div></div>' for k, v in stats)
     return f'<div class="tiles">{cells}</div>'
@@ -385,7 +388,7 @@ page = f"""<!doctype html>
   <p class="built">Built {e(DATA['built'])}</p>
   <p class="summary">{e(DATA['summary'])}</p>
   {jump}
-  {tiles(count)}
+  {tiles()}
   {timeline()}
   {kinds_chart()}
   {landed_section(DATA.get('landed', []))}
