@@ -1,16 +1,22 @@
 ---
 name: contribute-upstream
-description: Use when contributing a change to a project the user doesn't maintain, from their fork, including opening the upstream pull request and closing the fork pull request afterwards. Not for the user's own repositories, where their standards apply.
+description: Use when contributing a change to a project the user doesn't maintain from their fork, including sending its pull requests upstream and following up on them. Not for the user's own repositories, where their standards apply.
 ---
 
 # Contributing upstream
 
-The user contributes to projects they don't maintain from a fork. A change gets a pull request in the fork first and is reviewed there, usually with review-fix. It goes upstream only when the user decides to send it. Upstream's conventions apply, not the user's own standards.
+The user contributes to projects they don't maintain from a fork. A change gets a pull request in the fork first and is reviewed there, usually with review-fix. It goes upstream only when the user decides to send it, or leaves that decision to the session. Upstream's conventions apply, not the user's own standards.
 
 Issues that `review-fix` files from a fork pull request go in the fork, with `gh issue create -R <owner>/<fork>`, because `gh` can otherwise default to upstream. Say in the issue whether the defect also exists on upstream. File an issue upstream only when the user decides to.
+
+## Sending a pull request
+
+Before sending, check the change against upstream's current default branch. If upstream fixed the problem or reworked the code in the meantime, close the fork pull request with a comment that names the upstream commit instead. To hold one back, say in a comment on it why and what it waits for, so that the next session doesn't check it again.
 
 Before branching, sync the fork with `gh repo sync <owner>/<fork>`, then branch from upstream's default branch. The fork's default branch only mirrors upstream. If upstream moves on before the upstream pull request is open, rebase onto it and run the checks again.
 
 Write the upstream pull request in upstream's template, and follow its contribution guide, including the checks it asks for. Write as the user, in a friendly tone: open with a short greeting and say why the change matters, then fill in the template. Link the fork pull request as the review record. Say what changed since that review, such as a resolved conflict or code moved to pass a check. For a breaking change, say who is affected and what they should use instead.
 
-Once the upstream pull request is open, close the fork pull request with a one-line comment that links it. Delete the fork branch too, unless the upstream pull request uses it as its head. Delete it with `gh api -X DELETE repos/<owner>/<repo>/git/refs/heads/<branch>`, because `git push --delete` runs the pre-push hook, which can run the whole test suite.
+Once the upstream pull request is open, close the fork pull request with a one-line comment that links it. Delete the fork branch once nothing uses it: right away, unless it's the upstream pull request's head, and otherwise once upstream merges or closes that. Delete it with `gh api -X DELETE repos/<owner>/<repo>/git/refs/heads/<branch>`, because `git push --delete` runs the pre-push hook, which can run the whole test suite.
+
+Answer the maintainer's reviews until upstream merges or closes the pull request, but don't remind a maintainer who hasn't responded.
