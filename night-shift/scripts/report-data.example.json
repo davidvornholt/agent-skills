@@ -6,6 +6,7 @@
     "start": "2026-11-07T21:10:00Z",
     "end": "2026-11-08T06:30:00Z"
   },
+  "idle": "2026-11-08T02:40:00Z",
   "summary": "Atrium has been down since Saturday evening and needs a restart (item 1). Otherwise 2 pull requests landed, 1 issue was closed, and nothing was reverted.",
   "landed": [
     {
