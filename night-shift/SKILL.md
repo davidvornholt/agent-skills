@@ -13,7 +13,7 @@ The user starts this skill before going to bed, to spend AI subscription usage t
 Ask for whatever the request doesn't already say:
 
 - when the shift ends;
-- what is off limits tonight, such as repositories with an active session or pull requests the user wants to keep. Issues and pull requests labelled `not-for-agents` always are, so the user needn't name them;
+- what is off limits tonight, such as repositories with an active session or pull requests the user wants to keep;
 - any extra tasks, and which Super Productivity tasks the shift may take. Social media work happens only when the user asks for it tonight.
 
 After that, ask nothing.
