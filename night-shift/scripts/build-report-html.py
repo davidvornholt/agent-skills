@@ -24,6 +24,13 @@ KINDS = {
     "found": "Found tonight",
     "update": "Updates",
 }
+# What keeps an issue open after the shift, with the groups the user can act on first.
+BLOCKERS = {
+    "you": "Needs you",
+    "others": "Waiting for someone else",
+    "date": "Waiting for a date",
+    "unreached": "Not reached tonight",
+}
 # Fixed heights let the builder place axis and line labels exactly.
 PLOT = 160
 # Axis steps of 1, 2, 2.5 and 5 times a power of ten, so at most five gridlines cover the largest total.
@@ -127,6 +134,9 @@ footer { margin-top: 32px; font-size: 13px; color: var(--ink-2); }
 .hbar { height: 14px; background: var(--s1); border-radius: 0 4px 4px 0; }
 .hval { font-variant-numeric: tabular-nums; }
 details { margin-top: 8px; font-size: 13px; }
+details.backlog { margin-top: 32px; font-size: inherit; }
+details.backlog summary { cursor: pointer; }
+details.backlog summary h2 { display: inline; margin: 0; }
 table { border-collapse: collapse; margin-top: 6px; font-variant-numeric: tabular-nums; }
 th, td { text-align: right; padding: 2px 10px 2px 0; border-bottom: 1px solid var(--ring); }
 th:first-child, td:first-child { text-align: left; }
@@ -167,8 +177,10 @@ def times(key: str) -> list:
 LANDED = [when(x["at"]) for x in DATA["landed"]]
 FILED, RESOLVED = times("filed"), times("resolved")
 OPEN = DATA.get("open")
-if not isinstance(OPEN, int) or isinstance(OPEN, bool):
-    sys.exit("open is the number of issues still open when the shift ends; see report-data.example.json")
+if not isinstance(OPEN, list):
+    sys.exit("open lists each issue still open when the shift ends; see report-data.example.json")
+if unknown := {x.get("blocker") for x in OPEN} - set(BLOCKERS):
+    sys.exit(f"unknown open blocker {sorted(unknown, key=str)}; use one of {list(BLOCKERS)}")
 
 
 def tiles() -> str:
@@ -179,7 +191,7 @@ def tiles() -> str:
         # Below 1, the shift left more issues open than it started with.
         ("Resolved per filed issue", f"{len(RESOLVED) / len(FILED):.2f}" if FILED else "–"),
         ("Change in open issues", signed(len(FILED) - len(RESOLVED))),
-        ("Issues still open", f"{OPEN:,}"),
+        ("Issues still open", f'<a href="#open">{len(OPEN):,}</a>' if OPEN else "0"),
     ]
     cells = "".join(f'<div class="tile"><div class="label">{e(k)}</div><div class="value">{v}</div></div>' for k, v in stats)
     return f'<div class="tiles">{cells}</div>'
@@ -333,6 +345,17 @@ def plain_section(title: str, items: list) -> str:
     return f'<h2>{e(title)} ({len(items)})</h2><ul class="plain">{lis}</ul>'
 
 
+def open_section() -> str:
+    groups = []
+    for key, title in BLOCKERS.items():
+        lis = "".join(f"<li>{link(x)}{e(x['text'])}</li>" for x in OPEN if x["blocker"] == key)
+        if lis:
+            groups.append(f'<h3>{e(title)}</h3><ul class="plain">{lis}</ul>')
+    # Collapsed, so the backlog never pushes what waits for the user down the page.
+    summary = f"<summary><h2>Issues still open ({len(OPEN)})</h2></summary>"
+    return f'<details class="backlog" id="open">{summary}{"".join(groups)}</details>' if OPEN else ""
+
+
 def numbered(x: dict, body: str) -> str:
     return f'<div class="item" id="n{x["n"]}"><span class="num">{x["n"]}</span><div>{body}</div></div>'
 
@@ -396,6 +419,7 @@ page = f"""<!doctype html>
   {plain_section('Other work', DATA.get('other', []))}
   {f'<h2 id="waiting">Waiting for you ({count})</h2>{waiting_html}' if count else ''}
   {f'<footer>{footer}</footer>' if footer else ''}
+  {open_section()}
 </main>
 </body>
 </html>

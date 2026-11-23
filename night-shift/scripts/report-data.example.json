@@ -35,7 +35,36 @@
   ],
   "resolved": ["2026-11-07T23:30:00Z", "2026-11-08T01:42:00Z"],
   "filed": ["2026-11-07T23:05:00Z", "2026-11-08T02:20:00Z"],
-  "open": 9,
+  "open": [
+    {
+      "repo": "personal-infra",
+      "ref": "#805",
+      "href": "https://github.com/davidvornholt/personal-infra/issues/805",
+      "text": "Keep a backup copy outside Netcup. You chose to set up the second provider yourself.",
+      "blocker": "you"
+    },
+    {
+      "repo": "kontor",
+      "ref": "#7",
+      "href": "https://github.com/davidvornholt/kontor/issues/7",
+      "text": "Let agents propose payments that you approve. Needs bank transfers in lib-fints, whose pull request still waits for the original project.",
+      "blocker": "others"
+    },
+    {
+      "repo": "nix-config",
+      "ref": "#231",
+      "href": "https://github.com/davidvornholt/nix-config/issues/231",
+      "text": "Move both machines to NixOS 26.11, which comes out on 30 November.",
+      "blocker": "date"
+    },
+    {
+      "repo": "wordhold",
+      "ref": "#251",
+      "href": "https://github.com/davidvornholt/wordhold/issues/251",
+      "text": "Practice sessions sometimes repeat a word twice in a row. The shift ended before a worker reached it.",
+      "blocker": "unreached"
+    }
+  ],
   "activity": [
     {
       "lane": "LinkedIn comments",
