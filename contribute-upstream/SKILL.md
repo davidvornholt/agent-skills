@@ -11,7 +11,7 @@ Issues that `review-fix` files from a fork pull request go in the fork, with `gh
 
 ## Sending a pull request
 
-When the user has handed a fork's pull requests over, the open ones that are ready for review wait to be sent, oldest first. Send one for each of the user's upstream pull requests that the maintainer merged or closed since the user's newest one was opened, at most three at a time, so that the user's open pull requests grow no faster than the maintainer gets through them. To hold one back, say in a comment on it why and what it waits for, so that the next session doesn't check it again.
+When the user has handed a fork's pull requests over, send each open one that is ready for review without waiting, starting with those in code that upstream is changing most, because a pull request that waits drifts from upstream and the maintainer may fix the problem their own way first. To hold one back, say in a comment on it why and what it waits for, so that the next session doesn't check it again.
 
 Before sending, check the change against upstream's current default branch. If upstream fixed the problem or reworked the code in the meantime, close the fork pull request with a comment that names the upstream commit, instead of sending it.
 
