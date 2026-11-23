@@ -51,12 +51,13 @@ List open issues for each owner and leave out off-limits repositories:
 
 ```sh
 for owner in davidvornholt prosabridge fes-kirchheim cg-bibi atrium-schule; do
-  gh search issues --owner="$owner" --state=open --limit=200 --json repository,number,title,createdAt,url,author
+  gh search issues --owner="$owner" --state=open --limit=200 --json repository,number,title,createdAt,url,author,labels
 done
 ```
 
 Before starting workers, triage them in one read-only pass against each repository's `origin/main`:
 
+- Labelled `not-for-agents`: leave it, even when it looks fixed.
 - Already fixed, or made obsolete by later work: close it with one comment naming the commit.
 - Not worth the work by the bar in `worker.md`, unless it records the user's own wish or plan: close it as not planned, with one comment saying why.
 - Waits on a decision or a step only the user can take, such as providing a secret only the user holds, granting access, or contacting someone, and the issue doesn't yet record the user's answer: put it in the report.
@@ -74,12 +75,12 @@ Keep the data in `/tmp/night-shift/<date>/report.json`, in the shape of `scripts
 1. A summary of two or three sentences, starting with anything broken in production.
 2. Each pull request that landed, in one line on what changed for its users, each issue closed and why, and the other work the user asked for, such as social media.
 3. What only the user can do, such as authorizing a protected workflow, providing a secret only the user holds, or merging where `land` can't, each with what it unblocks.
-4. Pull requests that are ready but that you didn't land, each with what it fixes and why you held it.
+4. Pull requests that are ready but that you didn't land, other than those labelled `not-for-agents`, each with what it fixes and why you held it.
 5. Questions, one for each decision that waits on the user, whether an open issue waits on it or tonight's work does. When you're sure the user would decide as you do after reading the issue and the code, decide it yourself and note it on the pull request or issue instead of asking. A question stands alone in three sentences or fewer: what's going on, where each option leads, and your recommendation. When the user answers, record the answer on its issue, so that the next shift doesn't ask again.
 6. Each issue still open, grouped by what blocks it.
 
 Number the items in parts 3 to 5 in one sequence. Leave everything else out, such as deferred review findings, bugs you noticed, and engineering choices. File an issue for one that is worth fixing, as `worker.md` defines it, and put other notes on their pull request.
 
-For the page's counts and charts, record as you go each landed pull request's merge time as `at` and its `kind` (`asked` by the user, `issue` open before the shift, `found` for a problem found tonight, or `update`), the time of each issue filed tonight in `filed` and of each issue closed tonight, including by landed pull requests, in `resolved`, and an `activity` entry for each other timed action, such as a comment. When the shift ends, record in `open` each issue the listing under "Resolving issues" still returns, off-limits repositories included, because the list is the whole backlog. Give each one line on what it's about and what it waits for, and its `blocker`: `you` when only the user can move it, `others` when it waits on another project, person or vendor, `date` when it waits for a release or enough real use, and `unreached` when the shift could have worked on it but didn't get to it.
+For the page's counts and charts, record as you go each landed pull request's merge time as `at` and its `kind` (`asked` by the user, `issue` open before the shift, `found` for a problem found tonight, or `update`), the time of each issue filed tonight in `filed` and of each issue closed tonight, including by landed pull requests, in `resolved`, and an `activity` entry for each other timed action, such as a comment. When the shift ends, record in `open` each issue the listing under "Resolving issues" still returns, off-limits repositories included, because the list is the whole backlog. Give each one line on what it's about and what it waits for, and its `blocker`: `you` when only the user can move it, as with every issue labelled `not-for-agents`, `others` when it waits on another project, person or vendor, `date` when it waits for a release or enough real use, and `unreached` when the shift could have worked on it but didn't get to it.
 
 When the shift ends, build the page with `scripts/build-report-html.py <data.json> <out.html> inline` and show it in this thread with `html_preview` and `html_render`. Don't repeat or extend it in your final message. Then, if tonight merged a change to this machine's configuration, switch to it by running nix-config's `bin/rebuild` from a fresh worktree of `origin/main`. Do this last, because a switch can restart T3 Code and the services workers use.
