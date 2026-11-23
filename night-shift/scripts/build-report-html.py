@@ -120,6 +120,7 @@ footer { margin-top: 32px; font-size: 13px; color: var(--ink-2); }
 .plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .plot line { stroke: var(--grid); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .plot line.base { stroke: var(--axis); }
+.plot rect.idle { fill: color-mix(in srgb, var(--ink) 6%, transparent); }
 .plot path { fill: none; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .plot path.halo { stroke: var(--surface); stroke-width: 4; }
 .plot path.line { stroke-width: 2; }
@@ -129,6 +130,7 @@ footer { margin-top: 32px; font-size: 13px; color: var(--ink-2); }
 .xticks { position: relative; height: 22px; font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .xticks span { position: absolute; top: 4px; transform: translateX(-50%); white-space: nowrap; }
 .chart .note { margin: 4px 0 0; font-size: 13.5px; }
+.lead { margin: 0; }
 .hrow { display: grid; grid-template-columns: 9.5em 1fr; gap: 8px; align-items: center; margin: 6px 0; font-size: 13.5px; }
 .htrack { display: flex; align-items: center; gap: 6px; }
 .hbar { height: 14px; background: var(--s1); border-radius: 0 4px 4px 0; }
@@ -214,8 +216,8 @@ def spread(ys: list, gap: float, low: float, high: float) -> list:
     return placed
 
 
-def line_chart(title: str, series: list, start: datetime, end: datetime, note: str = "") -> str:
-    """Running totals over the night as step lines, one per (name, label, times, color slot)."""
+def line_chart(title: str, series: list, start: datetime, end: datetime, idle: datetime | None, note: str = "") -> str:
+    """Running totals over the night as step lines, one per (name, label, times, color slot), shaded from idle on."""
     first = hour_floor(start)
     span = (end - first).total_seconds()
     hours = -(-int(span) // 3600)
@@ -233,6 +235,7 @@ def line_chart(title: str, series: list, start: datetime, end: datetime, note: s
     levels = range(0, ymax + 1, step)
     grid = "".join(f'<line x1="0" x2="1000" y1="{y(v):.1f}" y2="{y(v):.1f}"{' class="base"' if v == 0 else ""}/>' for v in levels)
     yticks = "".join(f'<span class="t" style="top:{y(v):.1f}px">{v:,}</span>' for v in levels)
+    shade = f'<rect class="idle" x="{x(idle):.1f}" y="0" width="{x(end) - x(idle):.1f}" height="{PLOT}"/>' if idle else ""
     paths = ""
     for _, _, ts, slot in series:
         d = f"M0 {PLOT}" + "".join(f" H{x(t):.1f} V{y(i):.1f}" for i, t in enumerate(sorted(ts), 1)) + f" H{x(end):.1f}"
@@ -268,6 +271,8 @@ def line_chart(title: str, series: list, start: datetime, end: datetime, note: s
         )
         legend = f'<ul class="legend">{items}</ul>'
     summary = ", ".join(f"{name} {len(ts):,}" for name, _, ts, _ in series)
+    if idle:
+        summary += f"; nothing left to do from {hour(idle)}"
     head = "".join(f"<th>{e(name)}</th>" for name, _, _, _ in series)
     total = "".join(f"<td>{len(ts):,}</td>" for _, _, ts, _ in series)
     table = (
@@ -279,7 +284,7 @@ def line_chart(title: str, series: list, start: datetime, end: datetime, note: s
         f'<div class="plotgrid" role="img" aria-label="{e(title)}, {hour(first)} to {hour(end)}: {e(summary)}">'
         f'<div class="yaxis" style="height:{PLOT}px">{yticks}<span class="t sizer">{ymax:,}</span></div>'
         f'<div class="plot" style="height:{PLOT}px"><svg viewBox="0 0 1000 {PLOT}" preserveAspectRatio="none" aria-hidden="true">'
-        f'{grid}{paths}</svg><div class="bands">{"".join(bands)}</div></div>'
+        f'{shade}{grid}{paths}</svg><div class="bands">{"".join(bands)}</div></div>'
         f'<div class="ends" style="height:{PLOT}px">{ends}</div>'
         f'<div></div><div class="xticks">{xticks}</div><div></div></div>'
         f'{f"<p class=note>{e(note)}</p>" if note else ""}{table}</figure>'
@@ -297,18 +302,22 @@ def timeline() -> str:
     # Cover the whole shift, and stretch it if something happened outside it, rather than hide that event.
     start = min([when(DATA["shift"]["start"]), *stamps])
     end = max([when(DATA["shift"]["end"]), *stamps])
+    idle = when(DATA["idle"]) if DATA.get("idle") else None
+    if idle and not start <= idle <= end:
+        sys.exit(f"idle {DATA['idle']} lies outside the shift, {start.isoformat()} to {end.isoformat()}")
     net = len(FILED) - len(RESOLVED)
     verb = "is" if abs(net) == 1 else "are"
     change = f"{net:,} more {verb} open than" if net > 0 else f"{-net:,} fewer {verb} open than" if net < 0 else "as many are open as"
     note = f"{plural(len(FILED), 'issue')} filed and {len(RESOLVED):,} resolved, so {change} before the shift."
     work = [("Pull requests landed", "Landed", LANDED, 1), ("Issues filed", "Filed", FILED, 2), ("Issues resolved", "Resolved", RESOLVED, 3)]
-    charts = line_chart("Pull requests and issues, in total", work, start, end, note)
+    charts = line_chart("Pull requests and issues, in total", work, start, end, idle, note)
     if lanes:
         # Other work continues the palette, so no color means two things on the page.
         other = [(name, name, ts, slot) for slot, (name, ts) in enumerate(lanes.items(), 4)]
         title = "Other timed work, in total" if len(other) > 1 else f"{other[0][0]}: {len(other[0][2]):,} in total"
-        charts += line_chart(title, other, start, end)
-    return f"<h2>Through the night</h2>{charts}"
+        charts += line_chart(title, other, start, end, idle)
+    lead = f'<p class="lead">Nothing was left to do from {hour(idle)}, shaded below.</p>' if idle else ""
+    return f"<h2>Through the night</h2>{lead}{charts}"
 
 
 def kinds_chart() -> str:
