@@ -16,7 +16,7 @@ Start workers with `delegate_task` in the shared checkout, because workers make 
 
 Schedule a post to this thread every hour, and delete the schedule when the shift ends. Run `scripts/health.sh` before the first worker and on each post, and log each result. Scheduled posts have failed to arrive before, so when something else wakes you and the last health check is more than an hour old, run it then.
 
-GPT-6.2 Astra hunts bugs, Claude fixes and coordinates, and a cheaper model does mechanical sweeps such as dependency updates.
+Claude fixes and coordinates, and a cheaper model does mechanical sweeps such as dependency updates.
 
 ## Work order
 
@@ -25,7 +25,7 @@ Work through this list while usage lasts:
 1. Do what the user named tonight.
 2. Land what is ready, as `worker.md` describes: open bot pull requests, and pull requests by `davidvornholt` that are marked ready for review, because a draft may still be in progress. Don't land pull requests in forks. Instead, work on the user's fork pull requests and the upstream ones sent from them, and send a fork pull request upstream when that's sensible, as `contribute-upstream` describes.
 3. Resolve issues.
-4. Hunt bugs once a night per repository, in what changed since its last hunt, which earlier shifts' `state.md` files record. Two read-only reviewers follow the `review` skill, one for behavior and one for premise as `review-fix` defines them, and report only bugs worth fixing, as `worker.md` defines them. A Claude worker fixes those it can reproduce and also judges worth fixing. Hold follow-ups from tonight's own work to the same bar.
+4. Hunt bugs once a night per repository, in what changed since its last hunt, which earlier shifts' `state.md` files record. Choose the reviewers as `review-fix` does, including one for each specific risk the changes expose, and have them report only bugs worth fixing, as `worker.md` defines them. A Claude worker fixes those it can reproduce and also judges worth fixing. Hold follow-ups from tonight's own work to the same bar.
 
 ## Super Productivity tasks
 
