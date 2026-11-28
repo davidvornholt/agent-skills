@@ -254,8 +254,10 @@ def line_chart(title: str, series: list, start: datetime, end: datetime, idle: d
     bands, rows = [], []
     for i in range(hours):
         a, b = first + timedelta(hours=i), min(first + timedelta(hours=i + 1), end)
-        counts = [sum(a <= t < b for t in ts) for _, _, ts, _ in series]
-        totals = [sum(t < b for t in ts) for _, _, ts, _ in series]
+        # Each interval excludes its end, except the last: the chart stops there, so no later one would count that event.
+        until = [[t for t in ts if t < b or (i == hours - 1 and t == b)] for _, _, ts, _ in series]
+        counts = [sum(a <= t for t in ts) for ts in until]
+        totals = [len(ts) for ts in until]
         tip = "\n".join([f"{hour(a)}\u2013{hour(b)}"] + [f"{s[0]}: {n} ({t:,} in total)" for s, n, t in zip(series, counts, totals)])
         bands.append(f'<span style="flex-grow:{(b - a).total_seconds() / 3600:.2f}" title="{e(tip)}"></span>')
         rows.append(f"<tr><td>{hour(a)}</td>{''.join(f'<td>{n}</td>' for n in counts)}</tr>")
