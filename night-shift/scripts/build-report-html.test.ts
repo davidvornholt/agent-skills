@@ -11,7 +11,6 @@ afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-// Builds a report whose only events are these, then reads one chart's hourly table rows and hover texts.
 const hourly = async (stamps: string[]) => {
   const data = {
     ...example,
